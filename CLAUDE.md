@@ -1,7 +1,8 @@
 # Trained Eye
 
 Teach your glasses to notice anything. Build spec: SPEC.md (kept outside the repo).
-PROGRESS.md is the source of truth between sessions: read it first.
+Start with HANDOVER.md (state, rules, next steps), then PROGRESS.md, the source of truth
+between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
 
 ## Setup (MacBook)
 

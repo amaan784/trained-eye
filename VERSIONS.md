@@ -1,6 +1,6 @@
 # Version stages
 
-The finished project split into stages v1 to v21, in the order a developer would build
+The finished project split into stages v1 to v22, in the order a developer would build
 it, so it can be reviewed and committed one layer at a time. These folders and this file
 live only on the `build-stages` branch; they are not part of the project itself.
 
@@ -13,9 +13,9 @@ live only on the `build-stages` branch; they are not part of the project itself.
   over the repository and committed.
 - Every folder runs on its own: it has its own README, `pyproject.toml` (requirements and
   tool settings), tests and CI workflow, and nothing in it points into another folder.
-- The last folder, v21, is the finished project: byte for byte the same as the
-  repository root, apart from local-only things (this file, the v folders, caches,
-  `.env`, `data/`).
+- The last folder, v22, is the finished project: byte for byte the same as the
+  repository root, apart from local-only things (this file, the v folders,
+  `stagetools/`, caches, `.env`, `data/`).
 - Folders hold code and docs only: no caches, generated data or secrets.
 
 ## Stages
@@ -43,6 +43,7 @@ live only on the `build-stages` branch; they are not part of the project itself.
 | v19 | M1: Teach flow | The teach flow end to end, with the fallback for training on real data only. | `backend/config.py` (changed), `backend/teach.py`, `tests/test_teach.py`, `README.md` (changed) | `python -m pytest` | 182 passed |
 | v20 | M1: te teach | Te teach, which prints a cost estimate and asks before spending. | `backend/cli.py` (changed), `tests/test_cli.py` (changed), `README.md` (changed) | `ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4` | 185 passed |
 | v21 | M1: Recording protocol and notes | The recording protocol for real clips and the updated project notes. | `CLAUDE.md` (changed), `PROGRESS.md` (changed), `docs/recording-protocol.md`, `README.md` (changed) | `python -m backend.cli spend` | 185 passed |
+| v22 | M1: Handover and setup guide | The handover and the setup guide for the next session. | `CLAUDE.md` (changed), `HANDOVER.md`, `PROGRESS.md` (changed), `SETUP.md`, `README.md` (changed) | `python -m backend.cli spend` | 185 passed |
 
 Every README lists the exact commands and the output they printed when run inside that
 folder.
@@ -66,6 +67,9 @@ building blocks that need no API (keyframes, the dataset writer) come before the
 steps that use them; the paid steps follow the order they run in (SAM, Muse Image, Spark
 labels). The pipeline that chains them comes next, then the command that runs it, and
 the recording protocol and notes last.
+
+v22 comes after M1 and holds no code: the handover for the next session and the setup
+guide, written once M1 was finished so they describe the whole project.
 
 ## How to review a stage
 
@@ -188,6 +192,10 @@ Adds te teach to backend/cli.py: per-step cost estimate, two confirmations (spen
 
 Adds docs/recording-protocol.md and updates PROGRESS.md and CLAUDE.md: M1 is done offline, the first live washer run and the real clips are the next steps, and spend is still $0.00.
 
+**v22.** `Add handover and setup guide`
+
+Adds HANDOVER.md (state, open items with commands, rules, facts from the docs, and the plan for M2 to M5) and SETUP.md (accounts, Mac, cloud session, git), and points CLAUDE.md and PROGRESS.md at them. No code changes.
+
 ## Notes
 
 - **Reconstructed stages.** Each milestone was written as one finished tree, and its
@@ -199,8 +207,10 @@ Adds docs/recording-protocol.md and updates PROGRESS.md and CLAUDE.md: M1 is don
 - **Files from the first commit.** `.gitignore` enters at v2 as the original Python
   template plus Trained Eye's own entries. `LICENSE` (MIT, the original) and
   `.gitattributes` enter unchanged at v10, so the last folder matches the repository.
+- **Branch-only tools.** `stagetools/` holds the scripts that built and checked these
+  folders (see `stagetools/README.md`). Like this file, it lives only on this branch.
 - **Large files.** None. The largest file is `backend/meta/client.py` at about 24 KB;
-  the whole of v21 is about 216 KB.
+  the whole of v22 is about 216 KB.
 - **Untested paths.** The build machine had no API keys, no network access to Meta, and
   no PyPI, so these were not run:
   - live Meta API calls (`te models`, `te api-smoke`); all client tests use
@@ -230,7 +240,7 @@ A script (kept outside the repository) checked every folder after it was built:
 1. v1 has at most 5 files, and each later stage adds or changes at most 5 files compared
    with the one before (README included).
 2. Every folder contains every file of the folder before it.
-3. v21 matches the repository root byte for byte (local-only things excluded).
+3. v22 matches the repository root byte for byte (local-only things excluded).
 4. Every file a README names, in backticks or as a bare file name, exists in that folder.
 5. No folder holds caches, `.env`, `data/`, build output or secrets.
 6. Inside every folder: `ruff check .` and `python -m pytest` pass, and `backend` imports

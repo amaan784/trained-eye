@@ -76,6 +76,8 @@ class Settings:
     global_cap_usd: float = 120.0
     timeout_s: float = 120.0
     max_retries: int = 5
+    # False = SPEC.md's fallback: train on real frames and the user's own labels only.
+    train_on_model_outputs: bool = True
     secrets: Mapping[str, str] = field(default_factory=dict, repr=False)
 
     @property
@@ -168,6 +170,8 @@ def load_settings(
         skill_cap_usd=number("TE_SKILL_CAP_USD", Settings.skill_cap_usd),
         global_cap_usd=number("TE_GLOBAL_CAP_USD", Settings.global_cap_usd),
         max_retries=number("TE_MAX_RETRIES", Settings.max_retries, int),
+        train_on_model_outputs=merged.get("TE_TRAIN_ON_MODEL_OUTPUTS", "1").strip().lower()
+        not in ("0", "false", "no", "off"),
         secrets={name: merged[name] for name in SECRET_NAMES if merged.get(name)},
     )
 

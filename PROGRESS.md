@@ -1,16 +1,22 @@
 # Progress
 
 The source of truth between sessions. Updated at the end of every milestone.
-Last update: 2026-10-29, end of M0.
+Last update: 2026-10-29, end of M1 (code).
 
 ## Status
 
-M0 code is done and tested offline. Three M0 checks need the Mac, the keys or the
-glasses, so they are still open:
+M0 and M1 code are done and tested offline (185 tests, none calls a paid API). What is
+still open needs the Mac, the keys, the glasses or new footage:
 
 1. the glasses check with Meta's sample app (`docs/glasses-check.md`)
 2. the first live Meta calls: `te models` (free), then `te api-smoke` (under $0.01)
 3. the W&B smoke run from Modal: `modal run backend/training/wandb_smoke.py`
+4. the first real washer teach run: `te teach --skill washer_done --clip <10 s clip>
+   --audio <request>`. Its own estimate for the default 150 positives and 150 negatives is
+   $5.26 at most (labels are priced at their full token budget), under the $10 skill cap.
+   Run a small batch first (`--positives 6 --negatives 6`) and check the SAM output and
+   the images by eye.
+5. real clips for all three skills (`docs/recording-protocol.md`)
 
 ## Milestones
 
@@ -27,12 +33,16 @@ glasses, so they are still open:
 
 ### M1, Thu to Fri: teach flow for one skill (washer)
 
-- [ ] voice to skill spec (Voice Transcribe, Wonder), with policy refusals and read-back
-- [ ] SAM region of interest on keyframes
-- [ ] Muse Image synthetic set with prompt manifest
-- [ ] Muse Spark labels and filtering
-- [ ] Axolotl dataset
-- [ ] Ask for real clips for all 3 skills (train/validation and test sessions)
+- [x] voice to skill spec (Voice Transcribe, Wonder), with policy refusals and read-back
+- [x] keyframe selection (sharpness and near-duplicate filtering)
+- [x] SAM region of interest on keyframes (raw output stored; parsing pending, see Open issues)
+- [x] Muse Image synthetic set with prompt manifest
+- [x] Muse Spark labels and filtering, with agreement stats
+- [x] Axolotl dataset in the cookbook's format
+- [x] `te teach` end to end, `te policy`
+- [ ] First live washer run on the Mac
+- [x] Ask for real clips for all 3 skills (`docs/recording-protocol.md`)
+- [ ] Real clips recorded
 
 ### M2, Fri to Sat: training and watching
 
@@ -75,6 +85,35 @@ glasses, so they are still open:
   each version stage small.
 - **Version stages** go on the `build-stages` branch as folders v1 to vN; the author
   commits them to main one at a time.
+- **Policy is checked three times.** A local rule check (`te policy`) refuses clear cases
+  (named or described people, health, covert watching, sensitive places, sports coaching)
+  before any call, at no cost. Muse Wonder can refuse, including through a filled-in
+  refusal reason. Then the local check runs again on the spec the model wrote. Phrases are
+  used instead of bare words where a word also names an object, so walk signs ("green
+  man"), kitchen scales ("weight") and meat thermometers are not refused. Shown in the
+  demo with "Tell me when Sam gets here".
+- **The compiler schema is flat** (no nested objects or unions except one nullable
+  string), the safest shape for strict structured output; code builds the SkillSpec.
+- **Synthetic data are edits of the user's own keyframes** (anchored generation). The plan
+  walks every (condition, keyframe, nuisance) combination once, in a fixed shuffled order,
+  before repeating, so no two requests are identical (11 nuisance variations: light,
+  angle, distance, blur, occlusion). Every prompt asks for no people in view. The plan is
+  deterministic, so a rerun hits the cache and costs nothing.
+- **Output that parses but is unusable is never cached** (for example a spec with an
+  empty target): `structured()` takes a validate hook, so such answers are billed once
+  and asked again on the next run.
+- **Labels:** every image gets a Spark yes/no/unsure label; a generated image is kept only
+  if Spark agrees with the label it was generated for, and "unsure" is dropped. Keyframes
+  from the teaching clip are labelled by Spark unless the user supplies labels.
+- **Dataset format follows Meta's Axolotl recipe**: image part first with an absolute PNG
+  path, then the text; images padded to 512x512. The spec's system turn is kept, with a
+  switch to fold it into the user text if the processor preflight shows a problem.
+- **Fallback switch:** `TE_TRAIN_ON_MODEL_OUTPUTS=0` keeps generating and labelling (for
+  evaluation) but trains only on real frames with the user's own labels. Without those
+  labels it stops after writing the keyframes, before any paid call.
+- **Provenance:** generated images are stored exactly as returned; the padded dataset PNGs
+  are derived copies, and the dataset manifest maps every example back to its source and
+  the SHA-256 of the original image. Only real, approved footage is ever published.
 
 ## Docs vs spec
 
@@ -120,10 +159,17 @@ sources disagree with SPEC.md, the sources win.
 - `meta-sam-parser` (SAM output parsing) could not be installed or read; M1 stores SAM's
   raw output and parses it once a real cached response shows the format.
 - SPEC.md is not in the repository, so a fresh session needs it uploaded again.
+- SAM output parsing: the first live run stores SAM's raw text (cached); write the parser
+  against it, then the boxes feed crops and the outline visual.
+- Image token counts are unknown, so estimates assume 1,500 tokens per image; the real
+  per-image cost comes from the first run's usage.
+- The teach flow takes keyframes from a video file or a folder of frames; the iOS Teach
+  screen (M2) will send the 10 s capture as frames.
 
 ## Spend
 
 | Milestone | Meta API | Modal GPU | Where the number comes from |
 |---|---|---|---|
 | M0 | $0.00 | $0.00 | no paid call or Modal job has run yet (`te spend` shows 0 calls) |
+| M1 | $0.00 | $0.00 | built and tested offline; the first teach run happens on the Mac |
 | Total | $0.00 of $150 credit (cap $120) | $0.00 of about $200 credit | |

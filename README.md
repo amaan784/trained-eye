@@ -11,17 +11,19 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v11 (M0): Project notes
+## Build stage v21 (M1): Recording protocol and notes
 
-CLAUDE.md (short setup, commands and conventions) and PROGRESS.md (milestone
-checklist, decisions, a table of where the reachable docs differ from the spec, open
-issues and spend so far). This is the finished M0.
+The recording protocol for the real clips the experiments need (three skills, training
+and validation sessions apart from the test session, near-misses, people kept out of
+view), and the project notes updated for M1. This is the finished M1.
 
 Files added or changed in this stage:
 
-- `CLAUDE.md` (new): short setup, commands and conventions
-- `PROGRESS.md` (new): milestone checklist, decisions, docs-vs-spec differences, open
-  issues and spend
+- `CLAUDE.md` (changed): short setup, commands and conventions
+- `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
+  open issues and spend
+- `docs/recording-protocol.md` (new): what real clips to record for the three skills,
+  and how to keep training and test sessions apart
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -38,9 +40,10 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 84%]
-    .............                                                            [100%]
-    85 passed in 1.02s
+    ........................................................................ [ 38%]
+    ........................................................................ [ 77%]
+    .........................................                                [100%]
+    185 passed in 4.48s
 
     $ ruff check .
     All checks passed!
@@ -75,17 +78,36 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
+- `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
+  refuses skills about people, health, covert monitoring or sports, and the
+  plain-English read-back.
+- `backend/skills/compiler.py`: the skill compiler: the request and 3 keyframes go to
+  Muse Wonder (structured output), which returns a spec or a refusal.
+- `backend/dataengine/keyframes.py`: the keyframe picker: 20 to 30 sharp, distinct
+  frames from the 10 second teaching clip.
+- `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
+  (image path part, then text; 512x512 padded PNGs).
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
+  raw output is kept and parsing is still to come.
+- `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
+  edits of the keyframes (positives, hard negatives, nuisance variation), saved
+  untouched with a manifest.
+- `backend/dataengine/labels.py`: Muse Spark labels for every image, the filter that
+  keeps generated images only when Spark agrees, and agreement stats.
+- `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
+- `docs/recording-protocol.md`: what real clips to record for the three skills, and
+  how to keep training and test sessions apart.
 - `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
   and spend.
 - `CLAUDE.md`: short setup, commands and conventions.
-- `tests/`: 85 tests, all offline; none calls a paid API.
+- `tests/`: 185 tests, all offline; none calls a paid API.
 
 ## Next
 
-Milestone M1: the teach flow for one skill (spoken request, skill spec, SAM region of
-interest, Muse Image variations, Muse Spark labels and an Axolotl dataset).
+Milestone M2: Modal QLoRA training on the washer skill, export and serving, and the
+watch loop with smoothing, the Spark confirmation and spoken alerts on the glasses.
 
 ## Privacy and policy
 

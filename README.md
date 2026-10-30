@@ -11,20 +11,19 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v6 (M0): Media endpoints
+## Build stage v7 (M0): Key check commands
 
-The rest of MetaClient: Muse Voice Transcribe (file upload, priced per audio second),
-SAM 3.1 on one image (streamed Responses API; a stream that does not complete is
-billed but not cached), and Muse Image edits and generation, with images saved exactly
-as returned and downloads done without the API key. These request shapes come from the
-build spec and still need a live call to confirm.
+Two commands for the first live check with a real key: te models (free) lists the
+models the key can use and names any configured model that is missing, and te
+api-smoke makes one tiny Muse Spark call through the cache and the ledger (under
+$0.01; a second run is a free cache hit). Configuration and API errors now end with a
+one-line message instead of a traceback. Adds .env.example.
 
 Files added or changed in this stage:
 
-- `backend/meta/client.py` (changed): MetaClient, the only way the code calls Meta's
-  API: cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and
-  spend recorded from the reported usage
-- `tests/test_client.py` (changed): tests
+- `.env.example` (new): template for the keys (copy to .env)
+- `backend/cli.py` (changed): the te command line
+- `tests/test_cli.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -33,6 +32,7 @@ Run everything from inside this folder.
 
     python3 -m venv .venv && source .venv/bin/activate
     pip install -e ".[dev]"
+    cp .env.example .env    # then fill in the keys
 
 ## Try it
 
@@ -40,11 +40,20 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ............................................................             [100%]
-    60 passed in 0.41s
+    ................................................................         [100%]
+    64 passed in 0.47s
 
     $ ruff check .
     All checks passed!
+
+    $ python -m backend.cli models
+    te: MODEL_API_KEY is not set. Add it to .env (see .env.example).
+    (exit code 2)
+
+With a real MODEL_API_KEY in .env, te models lists the model IDs the key can use
+(free), and te api-smoke makes one call to muse-spark-1.3 costing at most about
+$0.0024. Neither was run here: the build machine had no key and no network access to
+Meta.
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -61,12 +70,11 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
-- `tests/`: 60 tests, all offline; none calls a paid API.
+- `tests/`: 64 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v7 adds two commands to check a real key (one free, one under $0.01) and the key
-template.
+Stage v8 adds the WebSocket backend that receives camera frames from the phone.
 
 ## Privacy and policy
 

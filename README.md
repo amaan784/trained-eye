@@ -11,19 +11,21 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v7 (M0): Key check commands
+## Build stage v8 (M0): WebSocket frame server
 
-Two commands for the first live check with a real key: te models (free) lists the
-models the key can use and names any configured model that is missing, and te
-api-smoke makes one tiny Muse Spark call through the cache and the ledger (under
-$0.01; a second run is a free cache hit). Configuration and API errors now end with a
-one-line message instead of a traceback. Adds .env.example.
+The backend the iPhone app will stream to: a Starlette app with /health and a
+WebSocket at /ws (protocol 1: a hello, then one JPEG frame per binary message, each
+acknowledged with its size). Bad frames get an error and the session carries on.
+Frames are decoded only to check them, never written to disk, and only their metadata
+is logged. Adds te serve and te ws-selftest.
 
 Files added or changed in this stage:
 
-- `.env.example` (new): template for the keys (copy to .env)
 - `backend/cli.py` (changed): the te command line
-- `tests/test_cli.py` (new): tests
+- `backend/server.py` (new): the backend the iPhone app talks to: JPEG frames arrive
+  over a WebSocket at /ws and each one is acknowledged; frames stay in memory
+- `pyproject.toml` (changed): requirements and tool settings
+- `tests/test_server.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -40,20 +42,30 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ................................................................         [100%]
-    64 passed in 0.47s
+    ........................................................................ [ 86%]
+    ...........                                                              [100%]
+    83 passed in 1.06s
 
     $ ruff check .
     All checks passed!
 
-    $ python -m backend.cli models
-    te: MODEL_API_KEY is not set. Add it to .env (see .env.example).
-    (exit code 2)
+    $ python -m backend.cli ws-selftest
+    connected: session s1, protocol 1
+    frame 1: ack 640x480, 5427 bytes
+    frame 2: ack 640x480, 5426 bytes
+    frame 3: ack 640x480, 5426 bytes
+    sent 3 frames, got 3 acks
 
-With a real MODEL_API_KEY in .env, te models lists the model IDs the key can use
-(free), and te api-smoke makes one call to muse-spark-1.3 costing at most about
-$0.0024. Neither was run here: the build machine had no key and no network access to
-Meta.
+    $ python -m backend.cli serve
+    Trained Eye backend: ws://0.0.0.0:8765/ws  (Ctrl+C to stop)
+
+    $ curl -s http://127.0.0.1:8765/health    # in a second terminal
+    {"ok":true,"protocol":1}
+
+te serve keeps running until you press Ctrl+C; the curl line was run in a second
+terminal while it was up. The WebSocket at /ws needs the websockets package, which pip
+install brings in through uvicorn[standard]. The build machine did not have it, so
+there the WebSocket was exercised in process by te ws-selftest and the tests.
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -70,11 +82,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
-- `tests/`: 64 tests, all offline; none calls a paid API.
+- `backend/server.py`: the backend the iPhone app talks to: JPEG frames arrive over a
+  WebSocket at /ws and each one is acknowledged; frames stay in memory.
+- `tests/`: 83 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v8 adds the WebSocket backend that receives camera frames from the phone.
+Stage v9 adds a Modal app that logs one Weights & Biases run.
 
 ## Privacy and policy
 

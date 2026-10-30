@@ -11,19 +11,24 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v4 (M0): te command: spend
+## Build stage v5 (M0): Meta API client
 
-The te command line with its first subcommand, te spend, which prints the ledger
-report. Also adds a test fixture that removes every TE_* variable and every key from
-the environment before each test, so a developer's own shell settings can't change
-test results.
+MetaClient, the single place that calls the Meta Model API. Every call looks in the
+cache first (a hit makes no network call and costs nothing), checks the caps, sends
+the request and retries 429s, 5xx errors and timeouts with backoff (honouring
+Retry-After), but never a 4xx. Spend is counted conservatively: a retried attempt that
+may have reached the server is charged at its estimate, and so is a reply without
+usable usage. This stage has structured output (Chat Completions with a strict
+json_schema, as in Meta's cookbook) and model listing. The key only goes to the Meta
+base URL and is removed from any error text.
 
 Files added or changed in this stage:
 
-- `backend/cli.py` (new): the te command line
+- `backend/meta/client.py` (new): MetaClient, the only way the code calls Meta's API:
+  cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
+  recorded from the reported usage
 - `pyproject.toml` (changed): requirements and tool settings
-- `tests/conftest.py` (new): tests
-- `tests/test_ledger.py` (changed): tests
+- `tests/test_client.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -39,24 +44,11 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ..........................                                               [100%]
-    26 passed in 0.19s
+    ..................................................                       [100%]
+    50 passed in 0.43s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli spend
-    Meta API spend (ledger: data/ledger.jsonl)
-      calls: 0  errors: 0
-      actual: $0.0000  (estimated before calls: $0.0000)
-      global cap: $120.00  remaining: $120.0000
-      per-skill cap: $10.00
-      by model:
-        (no calls yet)
-      by skill:
-        (no calls yet)
-
-te spend reads data/ledger.jsonl; no paid call has been made yet, so it shows zeros.
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -70,12 +62,14 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
-- `tests/`: 26 tests, all offline; none calls a paid API.
+- `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
+  first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
+  recorded from the reported usage.
+- `tests/`: 50 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v5 adds the Meta API client: structured output, retries with backoff and
-conservative spend accounting.
+Stage v6 adds the media calls: Voice Transcribe, SAM 3.1 and Muse Image.
 
 ## Privacy and policy
 

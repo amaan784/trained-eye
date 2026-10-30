@@ -11,23 +11,19 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v2 (M0): Response cache
+## Build stage v3 (M0): Spend ledger
 
-A content-addressed cache for Meta API calls. The key is a SHA-256 over the model, the
-endpoint and the normalized request: keys are sorted, empty values dropped, and every
-image or audio clip (raw bytes or a base64 data URL) is replaced by its own SHA-256,
-so the same frame always gives the same key. A schema's property order is kept,
-because strict structured output follows it. Generated images are stored byte for
-byte, so Muse Image watermarks and provenance metadata survive. Also adds the Trained
-Eye entries to .gitignore: data/, outputs/ and copies of .env.
+The spend ledger: an append-only JSONL file with one entry per paid call (model,
+endpoint, skill, estimated and actual cost, usage). Before a call, its estimate is
+checked against the per-skill and global caps; after it, the actual cost is recorded.
+Includes the cost helpers for token-priced and unit-priced models and the spend
+report.
 
 Files added or changed in this stage:
 
-- `.gitignore` (new): keeps secrets, local data and outputs out of git
-- `backend/meta/cache.py` (new): content-addressed cache for Meta API responses: the
-  key is a SHA-256 of model, endpoint and normalized request, with media replaced by its
-  own hash
-- `tests/test_cache.py` (new): tests
+- `backend/meta/ledger.py` (new): spend ledger: estimated cost checked against the
+  per-skill ($10) and global ($120) caps before each call, actual cost recorded after
+- `tests/test_ledger.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -43,14 +39,22 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    .....................                                                    [100%]
-    21 passed in 0.18s
+    .........................                                                [100%]
+    25 passed in 0.23s
 
     $ ruff check .
     All checks passed!
 
-    $ python -c "from backend.meta.cache import cache_key; print(cache_key('sam-3.1', '/responses', {'image': b'frame bytes'}))"
-    ffca9d9969bbcdc5a85fd69435c9a8fd1569576c0ee296a79607ad0f2a1d62b3
+    $ python -c "from backend.meta.ledger import Ledger, format_report; print(format_report(Ledger('data/ledger.jsonl', 10, 120)))"
+    Meta API spend (ledger: data/ledger.jsonl)
+      calls: 0  errors: 0
+      actual: $0.0000  (estimated before calls: $0.0000)
+      global cap: $120.00  remaining: $120.0000
+      per-skill cap: $10.00
+      by model:
+        (no calls yet)
+      by skill:
+        (no calls yet)
 
 ## What is in the project so far
 
@@ -59,12 +63,14 @@ set and no network to Meta); the output under each is what they printed.
 - `backend/meta/cache.py`: content-addressed cache for Meta API responses: the key is
   a SHA-256 of model, endpoint and normalized request, with media replaced by its own
   hash.
-- `tests/`: 21 tests, all offline; none calls a paid API.
+- `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
+  ($10) and global ($120) caps before each call, actual cost recorded after.
+- `tests/`: 25 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v3 adds the spend ledger, with per-skill and global caps checked before every
-paid call.
+Stage v4 adds the te command line with a spend report, and test isolation from your
+shell settings.
 
 ## Privacy and policy
 

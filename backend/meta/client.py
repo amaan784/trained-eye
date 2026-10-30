@@ -12,7 +12,9 @@ Spend is counted conservatively: a retried attempt that may have reached the ser
 cannot be priced. Unusable outputs are charged but never cached.
 
 Request shapes are OpenAI-compatible. Structured output uses Chat Completions with a
-json_schema response_format, as in Meta's cookbook recipes.
+json_schema response_format, as in Meta's cookbook recipes. SAM 3.1 uses the Responses
+API and Muse Image / Voice Transcribe use the images and audio endpoints, as described
+in SPEC.md; those three shapes still need confirming with a live call.
 
 The API key is only ever sent to the configured Meta base URL, and secret values are
 removed from any error text.
@@ -22,9 +24,12 @@ from __future__ import annotations
 
 import base64
 import email.utils
+import io
 import json
 import random
+import re
 import time
+import wave
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -33,7 +38,7 @@ import httpx
 
 from backend.config import SECRET_NAMES, Settings, check_model_allowed
 from backend.meta.cache import Cache, cache_key
-from backend.meta.ledger import NO_SKILL, Entry, Ledger, token_cost
+from backend.meta.ledger import NO_SKILL, Entry, Ledger, token_cost, unit_cost
 
 RETRY_STATUSES = frozenset({408, 429})
 # Statuses after which the server may already have done (and billed) the work.
@@ -149,6 +154,68 @@ def _parse_json_text(text: str) -> Any:
     return json.loads(stripped)
 
 
+# -- media endpoints (Voice Transcribe, SAM 3.1, Muse Image) -------------------
+
+EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+
+
+def wav_duration_s(audio: bytes) -> float | None:
+    try:
+        with wave.open(io.BytesIO(audio)) as w:
+            return w.getnframes() / float(w.getframerate())
+    except (wave.Error, EOFError, ZeroDivisionError):
+        return None
+
+
+def parse_sse(body: str) -> list[dict]:
+    """Parse a server-sent-events body into its JSON data payloads.
+
+    Lines end in CRLF, CR or LF (as the SSE format allows); an empty line ends an event.
+    """
+    events, data = [], []
+    for line in re.split(r"\r\n|\r|\n", body):
+        if not line:
+            if data:
+                events.append("\n".join(data))
+                data = []
+        elif line.startswith("data:"):
+            data.append(line[5:].removeprefix(" "))
+    if data:
+        events.append("\n".join(data))
+    return [json.loads(e) for e in events if e.strip() and e.strip() != "[DONE]"]
+
+
+def responses_text(response: dict) -> str:
+    """Concatenate output_text parts from a (non-streamed) Responses API object."""
+    texts = []
+    for item in response.get("output", []):
+        for part in item.get("content", []) or []:
+            if part.get("type") == "output_text":
+                texts.append(part.get("text", ""))
+    return "".join(texts)
+
+
+@dataclass
+class Transcript:
+    text: str
+    segments: list[dict]
+    duration_s: float
+    info: CallInfo
+
+
+@dataclass
+class SamResult:
+    text: str  # raw special-token output; parsed by the data engine
+    info: CallInfo
+
+
+@dataclass
+class ImageResult:
+    images: list[bytes]  # exactly as returned, provenance metadata intact
+    info: CallInfo
+    revised_prompts: list[str] = field(default_factory=list)
+
+
 class MetaClient:
     def __init__(
         self,
@@ -167,6 +234,11 @@ class MetaClient:
         self._sleep = sleep
         self._http = httpx.Client(
             base_url=settings.base_url, timeout=settings.timeout_s, transport=transport
+        )
+        # For downloading generated images by URL: never carries the API key, so it may
+        # follow CDN redirects.
+        self._plain = httpx.Client(
+            timeout=settings.timeout_s, transport=transport, follow_redirects=True
         )
 
     # -- transport ---------------------------------------------------------
@@ -371,3 +443,169 @@ class MetaClient:
         body = self._json(self._send("GET", "/models"))
         return sorted(m.get("id", "") for m in body.get("data", []) if isinstance(m, dict))
 
+    # -- media endpoints -----------------------------------------------------
+
+    def transcribe(
+        self,
+        audio: bytes,
+        *,
+        filename: str = "request.wav",
+        skill: str | None = None,
+        duration_s: float | None = None,
+    ) -> Transcript:
+        """Speech to text with Muse Voice Transcribe (file endpoint)."""
+        endpoint = "/audio/transcriptions"
+        model = self.settings.model("transcribe")
+        duration = duration_s if duration_s is not None else wav_duration_s(audio)
+        if duration is None:
+            raise ValueError("pass duration_s for non-WAV audio so the cost can be estimated")
+        price = self.settings.price(model)
+        estimate = unit_cost(price, audio_s=duration)
+
+        def send(tally):
+            files = {"file": (filename, audio, sniff_mime(audio))}
+            resp = self._send("POST", endpoint, tally, data={"model": model}, files=files)
+            return _with_usage((self._json(resp), {}), {"audio_s": duration})
+
+        def cost(r):
+            return unit_cost(price, audio_s=float(r.get("duration") or duration))
+
+        response, _, info, _ = self._call(
+            endpoint=endpoint, model=model, key_request={"file": audio}, skill=skill,
+            estimate_usd=estimate, send=send, cost=cost, check=lambda r: None,
+        )
+        try:
+            seconds = float(response.get("duration") or duration)
+        except (TypeError, ValueError):
+            seconds = duration
+        return Transcript(
+            text=response.get("text", ""),
+            segments=response.get("segments") or [],
+            duration_s=seconds,
+            info=info,
+        )
+
+    def sam_image(self, prompt: str, image: bytes, *, skill: str | None = None) -> SamResult:
+        """SAM 3.1 on one image with one noun-phrase concept (Responses API, streamed)."""
+        endpoint = "/responses"
+        model = self.settings.model("sam")
+        payload = {
+            "model": model,
+            "input": [{
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": prompt},
+                    {"type": "input_image", "image_url": data_url(image)},
+                ],
+            }],
+            "stream": True,
+        }
+        price = self.settings.price(model)
+
+        def send(tally):
+            resp = self._send("POST", endpoint, tally, json=payload)
+            if resp.headers.get("content-type", "").startswith("text/event-stream"):
+                try:
+                    events = parse_sse(resp.text)
+                except json.JSONDecodeError:
+                    raise OutputError("SAM stream is not readable") from None
+                text, final, last = [], None, None
+                for event in events:
+                    last = event.get("type")
+                    if last == "response.output_text.delta":
+                        text.append(event.get("delta", ""))
+                    elif last == "response.completed":
+                        final = event.get("response") or {}
+                if final is None:
+                    raise OutputError(f"SAM stream did not complete (last event: {last})")
+                out = "".join(text) or responses_text(final)
+                body = {"text": out, "usage": final.get("usage") or {}}
+            else:
+                raw = self._json(resp)
+                if raw.get("status") not in (None, "completed"):
+                    raise OutputError(f"SAM response status {raw.get('status')}")
+                body = {"text": responses_text(raw), "usage": raw.get("usage") or {}}
+            return _with_usage((body, {}), {"images": 1})
+
+        def check(r):
+            if not r["text"].strip():
+                raise OutputError("SAM returned no output")
+            return r["text"]
+
+        _, _, info, text = self._call(
+            endpoint=endpoint, model=model, key_request=payload, skill=skill,
+            estimate_usd=unit_cost(price, images=1), send=send,
+            cost=lambda r: unit_cost(price, images=1), check=check,
+        )
+        return SamResult(text, info)
+
+    def image_edit(
+        self, image: bytes, prompt: str, *, skill: str | None = None, n: int = 1,
+        size: str | None = None,
+    ) -> ImageResult:
+        """Muse Image edit of a real keyframe."""
+        return self._images("/images/edits", prompt, [image], skill=skill, n=n, size=size)
+
+    def image_generate(
+        self, prompt: str, refs: list[bytes] = (), *, skill: str | None = None, n: int = 1,
+        size: str | None = None,
+    ) -> ImageResult:
+        """Muse Image generation. Reference images, if any, go through the edits endpoint."""
+        endpoint = "/images/edits" if refs else "/images/generations"
+        return self._images(endpoint, prompt, list(refs), skill=skill, n=n, size=size)
+
+    def _images(self, endpoint: str, prompt: str, images: list[bytes], *, skill: str | None,
+                n: int, size: str | None) -> ImageResult:
+        model = self.settings.model("image")
+        price = self.settings.price(model)
+        fields = {"model": model, "prompt": prompt, "n": n, "size": size}
+        fields = {k: v for k, v in fields.items() if v is not None}
+
+        def send(tally):
+            if images:
+                name = "image" if len(images) == 1 else "image[]"
+                files = [(name, (f"ref{i}.{EXTENSIONS.get(sniff_mime(img), 'bin')}", img,
+                                 sniff_mime(img))) for i, img in enumerate(images)]
+                resp = self._send("POST", endpoint, tally, files=files,
+                                  data={k: str(v) for k, v in fields.items()})
+            else:
+                resp = self._send("POST", endpoint, tally, json=fields)
+            body = self._json(resp)
+            blobs: dict[str, bytes] = {}
+            kept = []
+            for i, item in enumerate(body.get("data") or []):
+                if item.get("b64_json"):
+                    raw = base64.b64decode(item["b64_json"])
+                elif item.get("url"):
+                    download = self._plain.get(item["url"])
+                    download.raise_for_status()
+                    raw = download.content
+                else:
+                    continue
+                blob = f"{i}.{EXTENSIONS.get(sniff_mime(raw), 'bin')}"
+                blobs[blob] = raw
+                kept.append({k: v for k, v in item.items() if k != "b64_json"} | {"blob": blob})
+            body = {**body, "data": kept}
+            return _with_usage((body, blobs), {"images": len(blobs)})
+
+        def check(r):
+            if not r.get("data"):
+                raise OutputError("no images returned")
+            return r["data"]
+
+        _, blobs, info, items = self._call(
+            endpoint=endpoint, model=model, key_request={**fields, "images": images},
+            skill=skill, estimate_usd=unit_cost(price, images=n), send=send,
+            cost=lambda r: unit_cost(price, images=len(r.get("data") or [])), check=check,
+        )
+        ordered = [blobs[item["blob"]] for item in items]
+        prompts = [item.get("revised_prompt", "") for item in items]
+        return ImageResult(ordered, info, [p for p in prompts if p])
+
+
+def _with_usage(result: tuple[dict, dict], fallback: dict) -> tuple[dict, dict]:
+    """Unit-priced endpoints may not report usage; fill in what we billed for."""
+    response, blobs = result
+    if not response.get("usage"):
+        response = {**response, "usage": fallback}
+    return response, blobs

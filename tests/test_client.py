@@ -2,7 +2,9 @@
 network and nothing is billed."""
 
 import base64
+import io
 import json
+import wave
 
 import httpx
 import pytest
@@ -282,3 +284,137 @@ def test_list_models(tmp_path):
     assert rec.requests[0].method == "GET" and rec.requests[0].url.path == "/v1/models"
     assert client.ledger.entries() == []
 
+
+# -- media endpoints ---------------------------------------------------------------
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"generated-with-provenance-metadata"
+
+
+def wav_bytes(seconds=2.0, rate=16000):
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"\0\0" * int(seconds * rate))
+    return buf.getvalue()
+
+
+def test_transcribe(tmp_path):
+    rec = Recorder({"text": "let me know when the washer says done", "duration": 2.0,
+                    "segments": [{"start": 0.0, "end": 2.0, "text": "let me know..."}]})
+    client, _ = make_client(tmp_path, rec)
+    t = client.transcribe(wav_bytes(), skill="washer_done")
+    assert t.text.startswith("let me know") and t.duration_s == 2.0 and len(t.segments) == 1
+    assert t.info.cost_usd == pytest.approx(0.18 * 2 / 3600)
+    [entry] = client.ledger.entries()
+    assert entry["skill"] == "washer_done" and entry["actual_usd"] == t.info.cost_usd
+    request = rec.requests[0]
+    assert request.url.path == "/v1/audio/transcriptions"
+    assert b'name="model"' in request.content and b"muse-voice-transcribe-1.0" in request.content
+    assert client.transcribe(wav_bytes(), skill="washer_done").info.cached
+    assert len(client.ledger.entries()) == 1
+    with pytest.raises(ValueError, match="duration_s"):
+        client.transcribe(b"not a wav")
+
+
+def sse(*events):
+    body = "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events)
+    return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
+
+
+def test_sam_streamed(tmp_path):
+    rec = Recorder(sse(
+        {"type": "response.output_text.delta", "delta": "<obj>washing machine display"},
+        {"type": "response.output_text.delta", "delta": "<box>10 20 300 200</box></obj>"},
+        {"type": "response.completed", "response": {"usage": {"input_tokens": 900}}},
+    ))
+    client, _ = make_client(tmp_path, rec)
+    result = client.sam_image("washing machine display", JPEG, skill="washer_done")
+    assert result.text == "<obj>washing machine display<box>10 20 300 200</box></obj>"
+    assert result.info.cost_usd == pytest.approx(0.0025)
+    body = json.loads(rec.requests[0].content)
+    assert body["model"] == "sam-3.1" and body["stream"] is True
+    assert [p["type"] for p in body["input"][0]["content"]] == ["input_text", "input_image"]
+    assert client.sam_image("washing machine display", JPEG, skill="washer_done").info.cached
+    [entry] = client.ledger.entries()
+    assert entry["model"] == "sam-3.1" and entry["actual_usd"] == pytest.approx(0.0025)
+
+
+def test_sam_stream_with_crlf_and_line_separator(tmp_path):
+    events = [
+        {"type": "response.output_text.delta", "delta": "<obj>pot\u2028lid"},
+        {"type": "response.completed", "response": {"usage": {}}},
+    ]
+    body = "".join(f"event: {e['type']}\r\ndata: {json.dumps(e, ensure_ascii=False)}\r\n\r\n"
+                   for e in events)
+    rec = Recorder(httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body))
+    client, _ = make_client(tmp_path, rec)
+    assert client.sam_image("pot", JPEG).text == "<obj>pot\u2028lid"
+
+
+@pytest.mark.parametrize("last", [
+    {"type": "response.incomplete", "response": {"status": "incomplete"}},
+    {"type": "response.failed", "response": {"status": "failed"}},
+    {"type": "error", "message": "boom"},
+])
+def test_sam_unfinished_stream_is_billed_not_cached(tmp_path, last):
+    delta = {"type": "response.output_text.delta", "delta": "<obj>pot<box>10 2"}
+    rec = Recorder(sse(delta, last), sse(delta, last))
+    client, _ = make_client(tmp_path, rec)
+    for _ in range(2):
+        with pytest.raises(OutputError, match="did not complete"):
+            client.sam_image("pot", JPEG)
+    assert len(rec.requests) == 2
+    assert all(e["status"] == "output_error" and e["actual_usd"] == 0.0025
+               for e in client.ledger.entries())
+
+
+def test_sam_non_streamed_and_empty(tmp_path):
+    rec = Recorder({"output": [{"content": [{"type": "output_text", "text": "<none/>"}]}]},
+                   {"output": []})
+    client, _ = make_client(tmp_path, rec)
+    assert client.sam_image("pot", JPEG).text == "<none/>"
+    with pytest.raises(OutputError):
+        client.sam_image("lid", JPEG)
+
+
+def test_image_edit_keeps_bytes_exactly(tmp_path):
+    rec = Recorder({"data": [{"b64_json": base64.b64encode(PNG).decode(),
+                              "revised_prompt": "washer display showing End"}]})
+    client, _ = make_client(tmp_path, rec)
+    result = client.image_edit(JPEG, "make the display show End", skill="washer_done")
+    assert result.images == [PNG] and result.revised_prompts == ["washer display showing End"]
+    assert result.info.cost_usd == pytest.approx(0.01)
+    request = rec.requests[0]
+    assert request.url.path == "/v1/images/edits"
+    assert b'name="image"' in request.content and b'name="prompt"' in request.content
+    cached = client.image_edit(JPEG, "make the display show End", skill="washer_done")
+    assert cached.info.cached and cached.images == [PNG]
+    [entry] = client.ledger.entries()
+    assert entry["skill"] == "washer_done" and entry["actual_usd"] == pytest.approx(0.01)
+    assert b"b64_json" not in (tmp_path / "cache").joinpath(
+        result.info.cache_key[:2], f"{result.info.cache_key}.json").read_bytes()
+
+
+def test_image_url_download_never_sends_the_key(tmp_path):
+    rec = Recorder({"data": [{"url": "https://cdn.example.test/img/1.png"}]},
+                   httpx.Response(302, headers={"location": "https://store.example.test/1.png"}),
+                   httpx.Response(200, content=PNG))
+    client, _ = make_client(tmp_path, rec)
+    assert client.image_generate("a washer display showing End").images == [PNG]
+    generate, download, redirected = rec.requests
+    assert generate.url.path == "/v1/images/generations"
+    assert json.loads(generate.content)["model"] == "muse-image-1.0"
+    assert download.url.host == "cdn.example.test" and "authorization" not in download.headers
+    assert redirected.url.host == "store.example.test"
+    assert "authorization" not in redirected.headers
+
+
+def test_image_generate_with_refs_uses_edits(tmp_path):
+    rec = Recorder({"data": [{"b64_json": base64.b64encode(PNG).decode()}] * 2})
+    client, _ = make_client(tmp_path, rec)
+    result = client.image_generate("same washer, dim light", refs=[JPEG, JPEG + b"2"], n=2)
+    assert len(result.images) == 2 and result.info.cost_usd == pytest.approx(0.02)
+    assert rec.requests[0].url.path == "/v1/images/edits"
+    assert rec.requests[0].content.count(b'name="image[]"') == 2

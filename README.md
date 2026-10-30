@@ -11,24 +11,20 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v5 (M0): Meta API client
+## Build stage v6 (M0): Media endpoints
 
-MetaClient, the single place that calls the Meta Model API. Every call looks in the
-cache first (a hit makes no network call and costs nothing), checks the caps, sends
-the request and retries 429s, 5xx errors and timeouts with backoff (honouring
-Retry-After), but never a 4xx. Spend is counted conservatively: a retried attempt that
-may have reached the server is charged at its estimate, and so is a reply without
-usable usage. This stage has structured output (Chat Completions with a strict
-json_schema, as in Meta's cookbook) and model listing. The key only goes to the Meta
-base URL and is removed from any error text.
+The rest of MetaClient: Muse Voice Transcribe (file upload, priced per audio second),
+SAM 3.1 on one image (streamed Responses API; a stream that does not complete is
+billed but not cached), and Muse Image edits and generation, with images saved exactly
+as returned and downloads done without the API key. These request shapes come from the
+build spec and still need a live call to confirm.
 
 Files added or changed in this stage:
 
-- `backend/meta/client.py` (new): MetaClient, the only way the code calls Meta's API:
-  cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
-  recorded from the reported usage
-- `pyproject.toml` (changed): requirements and tool settings
-- `tests/test_client.py` (new): tests
+- `backend/meta/client.py` (changed): MetaClient, the only way the code calls Meta's
+  API: cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and
+  spend recorded from the reported usage
+- `tests/test_client.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -44,8 +40,8 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ..................................................                       [100%]
-    50 passed in 0.43s
+    ............................................................             [100%]
+    60 passed in 0.41s
 
     $ ruff check .
     All checks passed!
@@ -65,11 +61,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
-- `tests/`: 50 tests, all offline; none calls a paid API.
+- `tests/`: 60 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v6 adds the media calls: Voice Transcribe, SAM 3.1 and Muse Image.
+Stage v7 adds two commands to check a real key (one free, one under $0.01) and the key
+template.
 
 ## Privacy and policy
 

@@ -179,3 +179,21 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Trained Eye: copies of the secrets file
+.env.*
+!.env.example
+.envrc
+
+# Trained Eye: local data and outputs, never committed
+# (footage, caches, the spend ledger, generated images, model weights)
+data/
+outputs/
+wandb/
+*.safetensors
+.DS_Store
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate

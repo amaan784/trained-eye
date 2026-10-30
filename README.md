@@ -11,23 +11,24 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v1 (M0): Settings
+## Build stage v2 (M0): Response cache
 
-The project skeleton and the settings module every later layer reads: one model ID per
-job (never a '-contributor' variant), Meta's prices, the spend caps, the data folder,
-and the three keys, read from the environment or a local .env file. Keys are never
-printed, only whether each one is set. pyproject.toml holds the requirements and the
-pytest and ruff settings, and the CI workflow runs ruff and pytest on every push.
+A content-addressed cache for Meta API calls. The key is a SHA-256 over the model, the
+endpoint and the normalized request: keys are sorted, empty values dropped, and every
+image or audio clip (raw bytes or a base64 data URL) is replaced by its own SHA-256,
+so the same frame always gives the same key. A schema's property order is kept,
+because strict structured output follows it. Generated images are stored byte for
+byte, so Muse Image watermarks and provenance metadata survive. Also adds the Trained
+Eye entries to .gitignore: data/, outputs/ and copies of .env.
 
 Files added or changed in this stage:
 
-- `.github/workflows/ci.yml` (new): CI: ruff and pytest on every push
-- `backend/config.py` (new): settings: model IDs for every job, prices, spend caps and
-  data paths; secrets come from the environment or a local .env file and are never
-  printed
-- `pyproject.toml` (new): requirements and tool settings
-- `tests/test_config.py` (new): tests
-- `README.md` (new): this file: what the stage adds and how to try it
+- `.gitignore` (new): keeps secrets, local data and outputs out of git
+- `backend/meta/cache.py` (new): content-addressed cache for Meta API responses: the
+  key is a SHA-256 of model, endpoint and normalized request, with media replaced by its
+  own hash
+- `tests/test_cache.py` (new): tests
+- `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
 
@@ -42,41 +43,28 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    .............                                                            [100%]
-    13 passed in 0.17s
+    .....................                                                    [100%]
+    21 passed in 0.18s
 
     $ ruff check .
     All checks passed!
 
-    $ python -m backend.config
-    Trained Eye settings
-      base_url: https://api.meta.ai/v1
-      data_dir: data
-      spend caps: $10.00 per skill, $120.00 global
-      models:
-        transcribe    muse-voice-transcribe-1.0
-        compiler      muse-wonder-1.0
-        sam           sam-3.1
-        image         muse-image-1.0
-        labeler       muse-spark-1.3
-        confirm       muse-spark-1.3
-        student_base  meta-models/Muse-Glimmer-30B
-                      (student_base revision a4e59da52a7b)
-      secrets:
-        MODEL_API_KEY  missing
-        HF_TOKEN       missing
-        WANDB_API_KEY  missing
+    $ python -c "from backend.meta.cache import cache_key; print(cache_key('sam-3.1', '/responses', {'image': b'frame bytes'}))"
+    ffca9d9969bbcdc5a85fd69435c9a8fd1569576c0ee296a79607ad0f2a1d62b3
 
 ## What is in the project so far
 
 - `backend/config.py`: settings: model IDs for every job, prices, spend caps and data
   paths; secrets come from the environment or a local .env file and are never printed.
-- `tests/`: 13 tests, all offline; none calls a paid API.
+- `backend/meta/cache.py`: content-addressed cache for Meta API responses: the key is
+  a SHA-256 of model, endpoint and normalized request, with media replaced by its own
+  hash.
+- `tests/`: 21 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v2 adds the response cache: identical Meta API requests are answered from disk
-for free.
+Stage v3 adds the spend ledger, with per-skill and global caps checked before every
+paid call.
 
 ## Privacy and policy
 

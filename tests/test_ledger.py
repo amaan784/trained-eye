@@ -1,5 +1,6 @@
 import pytest
 
+from backend.cli import main
 from backend.config import Price
 from backend.meta.ledger import (
     BudgetExceeded,
@@ -53,3 +54,12 @@ def test_report(tmp_path):
     report = format_report(ledger)
     assert "calls: 1" in report and "washer_done" in report and "$0.0015" in report
 
+
+def test_spend_command(tmp_path, monkeypatch, capsys):
+    ledger = Ledger(tmp_path / "ledger.jsonl", skill_cap_usd=10, global_cap_usd=120)
+    ledger.record(Entry("muse-spark-1.3", "/responses", 0.002, 0.0015, skill="washer_done"))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TE_DATA_DIR", str(tmp_path))
+    assert main(["spend"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("Meta API spend") and "remaining: $119.9985" in out

@@ -11,19 +11,19 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v3 (M0): Spend ledger
+## Build stage v4 (M0): te command: spend
 
-The spend ledger: an append-only JSONL file with one entry per paid call (model,
-endpoint, skill, estimated and actual cost, usage). Before a call, its estimate is
-checked against the per-skill and global caps; after it, the actual cost is recorded.
-Includes the cost helpers for token-priced and unit-priced models and the spend
-report.
+The te command line with its first subcommand, te spend, which prints the ledger
+report. Also adds a test fixture that removes every TE_* variable and every key from
+the environment before each test, so a developer's own shell settings can't change
+test results.
 
 Files added or changed in this stage:
 
-- `backend/meta/ledger.py` (new): spend ledger: estimated cost checked against the
-  per-skill ($10) and global ($120) caps before each call, actual cost recorded after
-- `tests/test_ledger.py` (new): tests
+- `backend/cli.py` (new): the te command line
+- `pyproject.toml` (changed): requirements and tool settings
+- `tests/conftest.py` (new): tests
+- `tests/test_ledger.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -39,13 +39,13 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    .........................                                                [100%]
-    25 passed in 0.23s
+    ..........................                                               [100%]
+    26 passed in 0.19s
 
     $ ruff check .
     All checks passed!
 
-    $ python -c "from backend.meta.ledger import Ledger, format_report; print(format_report(Ledger('data/ledger.jsonl', 10, 120)))"
+    $ python -m backend.cli spend
     Meta API spend (ledger: data/ledger.jsonl)
       calls: 0  errors: 0
       actual: $0.0000  (estimated before calls: $0.0000)
@@ -56,6 +56,10 @@ set and no network to Meta); the output under each is what they printed.
       by skill:
         (no calls yet)
 
+te spend reads data/ledger.jsonl; no paid call has been made yet, so it shows zeros.
+
+After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
+
 ## What is in the project so far
 
 - `backend/config.py`: settings: model IDs for every job, prices, spend caps and data
@@ -65,12 +69,13 @@ set and no network to Meta); the output under each is what they printed.
   hash.
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
-- `tests/`: 25 tests, all offline; none calls a paid API.
+- `backend/cli.py`: the te command line.
+- `tests/`: 26 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v4 adds the te command line with a spend report, and test isolation from your
-shell settings.
+Stage v5 adds the Meta API client: structured output, retries with backoff and
+conservative spend accounting.
 
 ## Privacy and policy
 

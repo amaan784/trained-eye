@@ -11,6 +11,7 @@ import pytest
 
 from backend.config import ConfigError, MissingSecret, load_settings
 from backend.meta.client import (
+    CacheMiss,
     MetaAPIError,
     MetaClient,
     OutputError,
@@ -50,7 +51,7 @@ class Recorder:
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
         reply = self.replies.pop(0)
-        if isinstance(reply, Exception):
+        if isinstance(reply, BaseException):
             raise reply
         if isinstance(reply, httpx.Response):
             return reply
@@ -296,6 +297,65 @@ def test_odd_200_replies_are_always_recorded(tmp_path, body):
     assert entry["actual_usd"] > 0  # served, so counted against the caps either way
 
 
+def test_ctrl_c_during_a_call_is_charged(tmp_path):
+    rec = Recorder(KeyboardInterrupt(), chat_reply('{"label": "yes"}'))
+    client, _ = make_client(tmp_path, rec)
+    with pytest.raises(KeyboardInterrupt):
+        client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done")
+    [entry] = client.ledger.entries()
+    assert entry["status"] == "error" and entry["actual_usd"] > 0
+    assert client.ledger.spent("washer_done") == entry["actual_usd"]
+
+
+def test_failed_calls_carry_their_charge(tmp_path):
+    rec = Recorder(chat_reply("not json"), httpx.Response(400, text="bad image"))
+    client, _ = make_client(tmp_path, rec)
+    with pytest.raises(OutputError) as unusable:
+        client.structured("muse-spark-1.3", "x", SCHEMA)
+    with pytest.raises(MetaAPIError) as rejected:
+        client.structured("muse-spark-1.3", "y", SCHEMA)
+    billed, free = client.ledger.entries()
+    assert unusable.value.cost_usd == billed["actual_usd"] > 0
+    assert rejected.value.cost_usd == free["actual_usd"] == 0
+
+
+@pytest.mark.parametrize("reply", [
+    chat_reply("", finish_reason="length"),
+    chat_reply('{"label": "ye', finish_reason="length"),  # cut off mid-answer
+])
+def test_a_reply_cut_off_for_length_says_so(tmp_path, reply):
+    client, _ = make_client(tmp_path, Recorder(reply))
+    with pytest.raises(OutputError, match="finish_reason=length") as err:
+        client.structured("muse-spark-1.3", "x", SCHEMA)
+    assert err.value.finish_reason == "length"
+
+
+def test_cache_only_never_sends(tmp_path):
+    rec = Recorder(chat_reply('{"label": "no"}'))
+    client, _ = make_client(tmp_path, rec)
+    with pytest.raises(CacheMiss):
+        client.structured("muse-spark-1.3", "x", SCHEMA, cache_only=True)
+    assert rec.requests == [] and client.ledger.entries() == []
+    client.structured("muse-spark-1.3", "x", SCHEMA)
+    hit = client.structured("muse-spark-1.3", "x", SCHEMA, cache_only=True)
+    assert hit.info.cached and hit.data == {"label": "no"}
+
+
+def test_a_cached_reply_that_no_longer_passes_is_fetched_again(tmp_path):
+    rec = Recorder(chat_reply('{"label": "maybe"}'), chat_reply('{"label": "yes"}'))
+    client, _ = make_client(tmp_path, rec)
+    client.structured("muse-spark-1.3", "x", SCHEMA)  # cached under looser checks
+
+    def strict(data):
+        if data["label"] not in ("yes", "no"):
+            raise OutputError("label must be yes or no")
+
+    fresh = client.structured("muse-spark-1.3", "x", SCHEMA, validate=strict)
+    assert fresh.data == {"label": "yes"} and not fresh.info.cached
+    again = client.structured("muse-spark-1.3", "x", SCHEMA, validate=strict)
+    assert again.info.cached and len(rec.requests) == 2
+
+
 def test_fenced_json_and_missing_usage(tmp_path):
     rec = Recorder(chat_reply('```json\n{"label": "unsure"}\n```', usage=False))
     client, _ = make_client(tmp_path, rec)
@@ -346,6 +406,16 @@ def test_transcribe(tmp_path):
     assert len(client.ledger.entries()) == 1
     with pytest.raises(ValueError, match="duration_s"):
         client.transcribe(b"not a wav")
+
+
+@pytest.mark.parametrize("reply", [{"text": ""}, {"text": "  "}, {}, {"text": None}])
+def test_an_empty_transcript_is_billed_but_not_cached(tmp_path, reply):
+    rec = Recorder(reply, {"text": "tell me when the pot boils"})
+    client, _ = make_client(tmp_path, rec)
+    with pytest.raises(OutputError, match="no words.*--request"):
+        client.transcribe(wav_bytes(), skill="pot_boils")
+    assert client.transcribe(wav_bytes(), skill="pot_boils").text == "tell me when the pot boils"
+    assert [e["status"] for e in client.ledger.entries()] == ["output_error", "ok"]
 
 
 def sse(*events):
@@ -439,6 +509,28 @@ def test_image_url_download_never_sends_the_key(tmp_path):
     assert download.url.host == "cdn.example.test" and "authorization" not in download.headers
     assert redirected.url.host == "store.example.test"
     assert "authorization" not in redirected.headers
+
+
+def test_a_failed_image_download_is_a_billed_output_error(tmp_path):
+    rec = Recorder({"data": [{"url": "https://cdn.example.test/img/1.png"}]},
+                   httpx.Response(503), httpx.ReadTimeout("slow cdn"))
+    client, sleeps = make_client(tmp_path, rec)
+    with pytest.raises(OutputError, match="image download failed: ReadTimeout") as err:
+        client.image_edit(JPEG, "make the display show End", skill="washer_done")
+    assert len(rec.requests) == 3 and sleeps == [1.0]  # the download is tried twice
+    [entry] = client.ledger.entries()
+    assert entry["status"] == "output_error" and entry["actual_usd"] == pytest.approx(0.01)
+    assert err.value.cost_usd == pytest.approx(0.01)
+
+
+def test_an_image_reply_without_images_is_charged_for_what_was_asked(tmp_path):
+    rec = Recorder({"data": [{"image": "in a field the client does not know"}],
+                    "usage": {"images": 2}})
+    client, _ = make_client(tmp_path, rec)
+    with pytest.raises(OutputError, match="no images"):
+        client.image_generate("a washer display showing End", n=2)
+    [entry] = client.ledger.entries()
+    assert entry["status"] == "output_error" and entry["actual_usd"] == pytest.approx(0.02)
 
 
 def test_image_generate_with_refs_uses_edits(tmp_path):

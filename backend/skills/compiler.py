@@ -12,7 +12,19 @@ import re
 from pydantic import ValidationError
 
 from backend.meta.client import MetaClient, OutputError, image_part, text_part
-from backend.skills.spec import REFUSALS, SkillSpec, Target, policy_check, slugify
+from backend.skills.spec import (
+    REFUSALS,
+    SENSITIVE_WORDS,
+    SkillSpec,
+    Target,
+    _has_word,
+    condition_clause,
+    distinct,
+    normalise,
+    policy_check,
+    slugify,
+    topic_check,
+)
 
 # Placeholders a model may write in refusal_reason for an accepted skill, compared after
 # lower-casing and turning punctuation into spaces ("N/A." -> "n a", "None." -> "none").
@@ -20,6 +32,14 @@ NO_REASON = frozenset({"", "none", "null", "nil", "na", "n a", "no", "nothing",
                        "not applicable", "no refusal", "not refused", "none needed"})
 NO_REASON_GIVEN = "The model refused it without giving a reason."
 TEXT_FIELDS = ("sam_prompt", "target_description", "positive", "alert")
+MAX_REQUEST = 500  # SkillSpec.request
+# Rooms at home may come up in a description ("the bathroom light"); other sensitive
+# places may not.
+PLACES = tuple(w for w in SENSITIVE_WORDS if w not in ("bathroom", "restroom", "toilet"))
+# What a correction rules out ("not the bathroom light, the one on the lid") is not
+# what it asks for, so it is left out of the correction's policy check.
+NEGATED = re.compile(r"\b(?:not|isn't|isnt|instead of|rather than)\s+[^,;.]*?"
+                     r"(?=[,;.]|\s+but\b|\s+and\b|$)", re.IGNORECASE)
 
 COMPILE_SCHEMA = {
     "type": "object",
@@ -50,7 +70,7 @@ Fill every field:
   model (e.g. "washing machine display").
 - target_description: that thing in plain words, as seen in the frames.
 - positive: the visible condition that should trigger the alert, concrete enough to
-  judge from a single frame.
+  judge from a single frame, worded to follow "tell you when" (no "when" of its own).
 - negatives: 2 to 5 visible near-misses that must NOT trigger it (other states of the
   same thing, similar things nearby).
 - alert: what the glasses should say, under 10 words, friendly.
@@ -76,11 +96,22 @@ def compile_skill(
     """Compile a request. `name`, if given, overrides the model's choice and keys spend.
 
     `correction` is the user's fix for a wrong read-back ("the light on the lid"); it is
-    policy-checked like the request and sent with it, so the compile runs again.
+    policy-checked like the request (except what it rules out with "not") and sent with
+    it, so the compile runs again. A request over 500 characters is a ValueError, before
+    any call.
     """
+    request = " ".join(request.split())
+    if len(request) > MAX_REQUEST:
+        raise ValueError(f"the request is {len(request)} characters, over the "
+                         f"{MAX_REQUEST} allowed: say it in one sentence")
     skill_name = name or slugify(request)
     correction = " ".join((correction or "").split())[:300] or None
-    refusal = policy_check(request) or (policy_check(correction) if correction else None)
+    refusal = policy_check(request)
+    if not refusal and correction:
+        refusal = policy_check(NEGATED.sub(" ", normalise(correction)))
+        if refusal:
+            refusal = (f"{refusal} That came from your correction: reword it (te policy "
+                       "checks a wording for free).")
     if refusal:
         return SkillSpec(name=skill_name, request=request, refused=True, refusal_reason=refusal)
 
@@ -103,8 +134,8 @@ def compile_skill(
                 request=request,
                 target=Target(sam_prompt=_clip(data["sam_prompt"], 80),
                               description=_clip(data["target_description"], 200)),
-                positive=_clip(data["positive"], 300),
-                negatives=[_clip(n, 300) for n in data["negatives"] if n.strip()][:8],
+                positive=_clip(condition_clause(data["positive"]), 300),
+                negatives=distinct([_clip(n, 300) for n in data["negatives"] if n.strip()])[:8],
                 alert=_clip(data["alert"], 120),
                 cooldown_s=min(max(int(data["cooldown_s"]), 0), 86_400),
                 confirm_with_cloud=bool(data["confirm_with_cloud"]),
@@ -112,11 +143,16 @@ def compile_skill(
         except (KeyError, OverflowError, TypeError, ValueError, ValidationError) as err:
             raise OutputError(f"compiler output is not a valid skill spec: {err}") from None
         # What is watched and what fires the alert get the request's local check too. The
-        # description gets the person check only, and near-misses and the alert none: they
-        # mention people and rooms in passing ("someone opens the door mid-cycle").
-        refusal = policy_check(f"{spec.target.sam_prompt}. {spec.positive}")
-        if not refusal and policy_check(spec.target.description) == REFUSALS["person"]:
+        # rest may mention people and rooms at home in passing ("someone opens the door
+        # mid-cycle"), so it gets the covert, health and sports rules, and the description
+        # also the person and sensitive-place rules.
+        description = spec.target.description
+        refusal = (policy_check(f"{spec.target.sam_prompt}. {spec.positive}")
+                   or topic_check(". ".join([description, *spec.negatives, spec.alert])))
+        if not refusal and policy_check(description) == REFUSALS["person"]:
             refusal = REFUSALS["person"]
+        if not refusal and _has_word(normalise(description), PLACES):
+            refusal = REFUSALS["sensitive"]
         if refusal:
             return SkillSpec(name=skill_name, request=request, refused=True,
                              refusal_reason=refusal)

@@ -22,8 +22,9 @@ from pathlib import Path
 
 from PIL import Image
 
+from backend.dataengine.synth import TooManyFailures, skippable, too_many_failures
 from backend.meta.cache import sha256_hex
-from backend.meta.client import MetaClient, OutputError
+from backend.meta.client import MetaAPIError, MetaClient
 from backend.skills.spec import SkillSpec
 
 MIN_SCORE = 0.5
@@ -68,18 +69,28 @@ def best_detection(detections: list[Detection], min_score: float = MIN_SCORE) ->
 
 def locate(client: MetaClient, spec: SkillSpec, keyframes: list[bytes],
            progress: Callable[[bool, float], None] | None = None) -> list[FrameRoi]:
-    """SAM on each keyframe. `progress(cached, cost_usd)` is called after each one."""
-    results = []
+    """SAM on each keyframe. `progress(cached, cost_usd)` is called after each one.
+
+    A frame SAM rejects or answers unreadably gets no box (as in synth and labels, a few
+    such failures are skipped; more stop the run with TooManyFailures)."""
+    results, failed = [], 0
     for image in keyframes:
         with Image.open(io.BytesIO(image)) as img:
             width, height = img.size
         try:
             sam = client.sam_image(spec.target.sam_prompt, image, skill=spec.name)
-        except OutputError as err:  # billed but unreadable: no box for this frame
+        except MetaAPIError as err:
+            if not skippable(err):
+                raise
+            # rejected, or billed but unreadable: no box for this frame
             results.append(FrameRoi(sha256_hex(image), width, height, "", [], None,
                                     f"error: {str(err)[:200]}"))
+            failed += 1
+            if too_many_failures(failed, len(keyframes)):
+                raise TooManyFailures(f"{failed} of {len(keyframes)} SAM calls failed so "
+                                      f"far; last: {str(err)[:300]}") from None
             if progress:
-                progress(False, 0.0)
+                progress(False, err.cost_usd)
             continue
         if progress:
             progress(sam.info.cached, sam.info.cost_usd)

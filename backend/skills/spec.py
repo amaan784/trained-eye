@@ -67,14 +67,29 @@ def check_name(name: str) -> str:
 
 
 def lower_first(text: str) -> str:
-    """Lower-case the first letter so a phrase can sit mid-sentence; keep acronyms."""
-    text = text.strip().rstrip(". ")
+    """Lower-case the first letter so a phrase can sit mid-sentence. Acronyms ("LED"),
+    names with inner capitals ("McKenzie's") and two-word names ("Instant Pot") keep
+    theirs. A final full stop, ! or ? goes."""
+    text = text.strip().rstrip(".!? ")
     if not text:
         return text
-    first = text.split()[0]
-    if len(first) > 1 and first.isupper():
+    words = text.split()
+    first = words[0]
+    if (len(first) > 1 and first.isupper()) or any(c.isupper() for c in first[1:]):
+        return text
+    if first[0].isupper() and len(words) > 1 and words[1][:1].isupper():
+        return text
+    if first.strip("'\"") in DISPLAY_LABELS:
         return text
     return text[0].lower() + text[1:]
+
+
+LEADING_WHEN = re.compile(r"^\s*(?:when|whenever|if|once|as soon as)\s+", re.IGNORECASE)
+
+
+def condition_clause(text: str) -> str:
+    """A condition that reads after "tell you when": no leading "when" of its own."""
+    return LEADING_WHEN.sub("", text.strip())
 
 
 def read_back(spec: SkillSpec) -> str:
@@ -83,15 +98,31 @@ def read_back(spec: SkillSpec) -> str:
         return f"I can't learn that one. {spec.refusal_reason}"
     return (
         f"I'll watch {_with_article(spec.target.description)} and tell you when "
-        f"{lower_first(spec.positive)}. I'll say: \"{spec.alert}\""
+        f"{lower_first(condition_clause(spec.positive))}. I'll say: \"{spec.alert}\""
     )
+
+
+DETERMINERS = ("the ", "a ", "an ", "my ", "your ", "our ", "their ", "its ", "this ",
+               "that ", "these ", "those ", "both ", "each ", "every ")
 
 
 def _with_article(phrase: str) -> str:
     phrase = lower_first(phrase)
-    if phrase.lower().startswith(("the ", "a ", "an ", "my ", "your ", "this ", "that ")):
+    if phrase.lower().startswith(DETERMINERS):
         return phrase
     return f"the {phrase}"
+
+
+def distinct(conditions: list[str]) -> list[str]:
+    """Conditions that differ in more than case or a final full stop ("Display off" and
+    "display off." would give the same image prompt, so the same image twice)."""
+    seen, out = set(), []
+    for condition in conditions:
+        key = lower_first(condition).lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(condition)
+    return out
 
 
 # -- local policy pre-check --------------------------------------------------------
@@ -107,8 +138,15 @@ PERSON_WORDS = (
     "mum", "dad", "mother", "father", "brother", "sister", "grandma", "grandpa", "friend",
     "roommate", "flatmate", "neighbor", "neighbour", "landlord", "landlady", "tenant",
     "boss", "coworker", "colleague", "employee", "stranger", "visitor", "guest", "nanny",
-    "babysitter", "mailman", "postman", "ex", "who", "whoever",
+    "babysitter", "mailman", "postman", "ex", "who", "whoever", "men", "babies", "aunt",
+    "uncle", "cousin", "niece", "nephew", "grandmother", "grandfather", "grandparent",
+    "parent", "spouse", "fiance", "fianc\u00e9", "fianc\u00e9e", "teen", "teenager",
+    "teacher", "nurse",
 )
+# Words that are not nouns get no plural: "his" must not match "hiss" (a kettle).
+NO_PLURAL = frozenset({"he", "she", "him", "her", "his", "hers", "who", "whoever", "ex",
+                       "a man", "the man", "a guy", "the guy", "men", "people", "children",
+                       "babies", "kids"})
 IDENTIFY = re.compile(r"\b(?:recogni[sz]e|identify|track|follow)\s+(?:him|her|them|people|"
                       r"faces?|who|the person|someone|anyone)\b", re.IGNORECASE)
 HEALTH_WORDS = (
@@ -116,24 +154,43 @@ HEALTH_WORDS = (
     "inhaler", "glucose", "blood", "symptom*", "fever", "rash", "wound", "injury",
     "pregnan*", "calorie*", "diet", "drunk", "heart rate", "sick", "illness", "my weight",
     "her weight", "his weight", "lose weight", "weigh myself", "my skin", "her skin",
-    "his skin",
+    "his skin", "kcal", "nutrition*", "pillbox", "oximeter", "cgm", "vitamin*",
 )
 COVERT_WORDS = ("secretly", "without them knowing", "without her knowing",
                 "without him knowing", "without their knowledge", "behind her back",
                 "behind his back", "spy", "spying", "covert*", "hidden camera", "stalking",
-                "stalker")
+                "stalker", "nobody notices", "no one notices", "without them noticing",
+                "without anyone noticing", "without anyone knowing", "discreet*",
+                "undercover", "snoop*", "eavesdrop*")
+# The glasses' capture light always shows when the camera is on (a fixed rule, not a skill).
+CAPTURE_LIGHT = re.compile(
+    r"\b(?:hide|hiding|cover|covering|tape over|taping over|turn off|turning off|switch off|"
+    r"disable|disabling|block|blocking|dim|dimming|black out)\s+(?:the\s+|my\s+|its\s+)?"
+    r"(?:glasses'?\s+)?(?:capture|recording|camera|privacy)\s+(?:light|indicator|led)\b"
+    r"|\b(?:keep|with)\s+(?:the\s+)?(?:led|capture light|recording light)\s+off\b",
+    re.IGNORECASE)
 SENSITIVE_WORDS = ("clinic", "hospital", "locker room", "changing room", "bathroom",
                    "restroom", "toilet", "church", "mosque", "synagogue", "temple",
                    "shelter", "polling", "courthouse", "police station")
-SPORTS_WORDS = ("workout", "coach me", "coaching", "sports")
+SPORTS_WORDS = ("workout", "coach me", "coach my", "coaching", "sports", "squat depth",
+                "yoga pose")
 # "my shot" and "my form" count bare or after a sport word, so "my espresso shot" and
-# "my tax form" pass.
+# "my tax form" pass. Counting exercises counts with or without "my".
+SPORT = (r"golf|tennis|basketball|baseball|softball|football|soccer|hockey|volleyball|"
+         r"cricket|rugby|lacrosse|badminton|squash|pickleball|bowling|archery|boxing|yoga|"
+         r"pilates|jump|running|swimming|swim|rowing|climbing|skating|skiing|squat|lifting|"
+         r"deadlift|bench|throwing|batting|shooting|pitching|putting|kicking|passing|"
+         r"free[ -]throw|three[ -]point|penalty|tee")
+EXERCISES = (r"reps|sets|push[- ]?ups|pull[- ]?ups|chin[- ]?ups|sit[- ]?ups|squats|lunges|"
+             r"jumps|burpees|jacks|crunches|curls|presses|dips|planks|kicks|punches|swings|"
+             r"strokes")
 SPORTS_FORM = re.compile(
-    r"\bmy\s+(?:\w+\s+)?(?:swing|serve|stroke|technique|posture|reps|stance)\b"
-    r"|\bmy\s+(?:(?:golf|tennis|basketball|jump|running|squat|lifting|deadlift|bench|"
-    r"throwing|batting|shooting|free[ -]throw)\s+)?(?:shot|form)\b"
-    r"|\bcount\s+my\s+(?:reps|sets|laps|steps|push[- ]?ups|pull[- ]?ups|sit[- ]?ups|squats|"
-    r"lunges|jumps)\b", re.IGNORECASE)
+    r"\bmy\s+(?:\w+\s+)?(?:swing|serve|stroke|technique|posture|reps|stance|backhand|"
+    r"forehand|putt|putts|pitch|throw|kick|dive|lift|lifts|squat|squats)s?\b"
+    rf"|\bmy\s+(?:(?:{SPORT})\s+)?(?:shot|form)\b"
+    rf"|\bcount\s+(?:my\s+|the\s+)?(?:[\w-]+\s+)?(?:{EXERCISES})\b"
+    r"|\bcount\s+my\s+(?:[\w-]+\s+)?(?:laps|steps|miles|rounds|shots|throws|lifts)\b",
+    re.IGNORECASE)
 # Object names that contain a person word; removed before the word lists are checked.
 # "child lock" stays a phrase only before a word break, so "the child locks the door" counts.
 OBJECT_PHRASES = re.compile(r"\b(?:child[ -]?lock|child[ -]?proof|baby (?:bottle|food|"
@@ -141,22 +198,30 @@ OBJECT_PHRASES = re.compile(r"\b(?:child[ -]?lock|child[ -]?proof|baby (?:bottle
 
 # A capitalized word after "when" counts as a name only if an arrival or presence verb
 # follows, so devices and display labels ("when Roomba is stuck", "until End lights up")
-# are not mistaken for people. "gets" and "comes" do not count before a device state
-# ("Roomba gets stuck", "Instant Pot comes to pressure", "Ready comes on").
-NAMED_ARRIVAL = re.compile(
-    r"\b(?i:when|if|once|until|whenever|as soon as)\s+(?:(?i:dr|mr|mrs|ms|mx|miss)\.?\s+)?"
-    r"([^\W\d_][\w'-]*?)(?:'s)?\s+"
-    r"(?i:(?:\w+\s+){0,2}(?:(?:gets?|comes?)(?!\s+(?:(?:stuck|jammed|clogged|full|empty|hot|"
-    r"cold|warm|low|ready|done)\b|to\s+(?:\d|pressure|temp)|up\s+on\b|o(?:n|ff)\W*$))|"
-    r"arrives?|leaves?|pulls?|walks?|drives?|enters?|"
-    r"shows up|is (?:here|home|back|at|in|out|outside|leaving|coming)|home|here|back))\b"
+# are not mistaken for people. With a possessive ("when Jake's car gets stuck") any such
+# verb counts. Without one, "gets" and "comes" do not count before a device state
+# ("Roomba gets stuck", "Instant Pot comes to pressure", "Nest gets to 70").
+_LEAD = (r"\b(?i:when|if|once|until|whenever|as soon as)\s+"
+         r"(?:(?i:dr|mr|mrs|ms|mx|miss)\.?\s+)?")
+_ARRIVAL = (r"arrives?|leaves?|pulls?|walks?|drives?|enters?|shows up|"
+            r"is (?:here|home|back|at|in|out|outside|leaving|coming)|home|here|back")
+NAMED_ARRIVAL = (
+    re.compile(_LEAD + r"([^\W\d_][\w'-]*?)'s\s+"
+               rf"(?i:(?:\w+\s+){{0,2}}(?:gets?|comes?|{_ARRIVAL}))\b"),
+    re.compile(_LEAD + r"([^\W\d_][\w'-]*?)(?:'s)?\s+"
+               r"(?i:(?:\w+\s+)?(?:(?:gets?|comes?)(?!\s+(?:(?:stuck|jammed|clogged|full|"
+               r"empty|hot|cold|warm|low)\b|to\s+(?:\d+\W*$|pressure|temp)|up\s+on\b|"
+               rf"on\W*$))|{_ARRIVAL}))\b"),
 )
-NOT_NAMES = frozenset({"The", "This", "That", "It", "My", "Our", "Your", "There", "Its",
+# Words a display shows; they keep their capital in a read-back ("when End shows").
+DISPLAY_LABELS = frozenset({"End", "Done", "Ready", "Off", "On", "Error", "Hot", "Low", "Full",
+                            "Empty", "Open", "Closed", "Start", "Stop", "Pause", "Boil", "Warm"})
+NOT_NAMES = DISPLAY_LABELS | frozenset({"The", "This", "That", "It", "My", "Our", "Your", "There", "Its",
                        "Amazon", "UPS", "FedEx", "Uber", "Lyft", "Tesla", "DHL", "USPS",
                        "DoorDash", "UberEats", "Grubhub", "GrubHub", "Instacart",
-                       # display labels
-                       "End", "Done", "Ready", "Off", "On", "Error", "Hot", "Low", "Full",
-                       "Empty", "Open", "Closed", "Start", "Stop", "Pause", "Boil", "Warm",
+                       # devices
+                       "Roomba", "Nest", "Bosch", "Kindle", "Whirlpool", "Dyson", "Keurig",
+                       "Nespresso", "Breville", "Samsung", "Instant",
                        # days ("when Sunday's paper arrives")
                        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
                        "Sunday"})
@@ -171,14 +236,18 @@ REFUSALS = {
     "sensitive": "I can't watch sensitive places such as clinics, places of worship or "
                  "changing rooms.",
     "sports": "I can't do sports analysis or coaching.",
+    "capture_light": "I can't hide or turn off the glasses' capture light: it is on "
+                     "whenever the camera is.",
 }
 
 
-def _has_word(text: str, words: tuple[str, ...]) -> bool:
+def _has_word(text: str, words: tuple[str, ...], plurals: bool = False) -> bool:
     lowered = text.lower()
     for word in words:
         if word.endswith("*"):
             pattern = rf"\b{re.escape(word[:-1])}"
+        elif plurals and word not in NO_PLURAL:
+            pattern = rf"\b{re.escape(word)}(?:s|es)?\b"
         else:
             pattern = rf"\b{re.escape(word)}\b"
         if re.search(pattern, lowered):
@@ -195,20 +264,29 @@ def normalise(text: str) -> str:
 def policy_check(request: str) -> str | None:
     """Return a one-sentence refusal if the request clearly breaks policy, else None."""
     request = normalise(request)
-    for named in NAMED_ARRIVAL.finditer(request):
-        word = named.group(1)
-        if word[0].isupper() and not word.isupper() and word not in NOT_NAMES:
-            return REFUSALS["person"]
+    for pattern in NAMED_ARRIVAL:
+        for named in pattern.finditer(request):
+            word = named.group(1)
+            if word[0].isupper() and not word.isupper() and word not in NOT_NAMES:
+                return REFUSALS["person"]
     request = OBJECT_PHRASES.sub(" ", request)
-    if IDENTIFY.search(request) or _has_word(request, PERSON_WORDS):
+    if IDENTIFY.search(request) or _has_word(request, PERSON_WORDS, plurals=True):
         return REFUSALS["person"]
-    if _has_word(request, COVERT_WORDS):
+    if CAPTURE_LIGHT.search(request):
+        return REFUSALS["capture_light"]
+    return topic_check(request) or (REFUSALS["sensitive"]
+                                    if _has_word(request, SENSITIVE_WORDS) else None)
+
+
+def topic_check(text: str) -> str | None:
+    """The covert, health and sports rules alone. They also apply to every word the
+    compiler writes, where people and rooms may come up in passing."""
+    text = OBJECT_PHRASES.sub(" ", normalise(text))
+    if _has_word(text, COVERT_WORDS):
         return REFUSALS["covert"]
-    if _has_word(request, HEALTH_WORDS):
+    if _has_word(text, HEALTH_WORDS):
         return REFUSALS["health"]
-    if _has_word(request, SENSITIVE_WORDS):
-        return REFUSALS["sensitive"]
-    if SPORTS_FORM.search(request) or _has_word(request, SPORTS_WORDS):
+    if SPORTS_FORM.search(text) or _has_word(text, SPORTS_WORDS):
         return REFUSALS["sports"]
     return None
 

@@ -1,6 +1,6 @@
 # Version stages
 
-The finished project split into stages v1 to v30, in the order a developer would build
+The finished project split into stages v1 to v38, in the order a developer would build
 it, so it can be reviewed and committed one layer at a time. These folders and this file
 live only on the `build-stages` branch; they are not part of the project itself.
 
@@ -13,7 +13,7 @@ live only on the `build-stages` branch; they are not part of the project itself.
   over the repository and committed.
 - Every folder runs on its own: it has its own README, `pyproject.toml` (requirements and
   tool settings), tests and CI workflow, and nothing in it points into another folder.
-- The last folder, v30, is the finished project: byte for byte the same as the
+- The last folder, v38, is the finished project: byte for byte the same as the
   repository root, apart from local-only things (this file, the v folders,
   `stagetools/`, caches, `.env`, `data/`).
 - Folders hold code and docs only: no caches, generated data or secrets.
@@ -52,6 +52,14 @@ live only on the `build-stages` branch; they are not part of the project itself.
 | v28 | M1 review: Fix: teach flow | The teach flow fixes: checked labels, keyframe names tied to their content, corrections and progress lines. | `backend/teach.py` (changed), `tests/test_teach.py` (changed), `README.md` (changed) | `python -m pytest` | 283 passed |
 | v29 | M1 review: Fix: te teach | The te teach fixes: labels checked before the estimate, a cap warning, --correct, and clear stops. | `.env.example` (changed), `backend/cli.py` (changed), `tests/test_cli.py` (changed), `README.md` (changed) | `ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4` | 297 passed |
 | v30 | M1 review: Fix: docs and notes | The docs for these fixes: the glasses reachability check and the visual design rules. | `CLAUDE.md` (changed), `HANDOVER.md` (changed), `PROGRESS.md` (changed), `docs/glasses-check.md` (changed), `README.md` (changed) | `python -m backend.cli spend` | 297 passed |
+| v31 | M1 review: Fix: API client, second round | The client fixes: Ctrl+C and failed downloads are charged, empty transcripts are not cached, stale cache entries are fetched again, and every failed call says what it cost. | `backend/meta/client.py` (changed), `tests/test_client.py` (changed), `README.md` (changed) | `python -m backend.cli spend` | 309 passed |
+| v32 | M1 review: Fix: settings and spend report | The settings and spend report fixes: ~ in TE_DATA_DIR, and a spend table that lines up for long skill names. | `backend/config.py` (changed), `backend/meta/ledger.py` (changed), `tests/test_config.py` (changed), `tests/test_ledger.py` (changed), `README.md` (changed) | `python -m backend.config` | 310 passed |
+| v33 | M1 review: Fix: policy check and compiler, second round | The policy and compiler fixes: named people and coaching that the first fixes let through, corrections that rule something out, and the read-back wording. | `backend/skills/compiler.py` (changed), `backend/skills/spec.py` (changed), `tests/test_compiler.py` (changed), `tests/test_skills.py` (changed), `README.md` (changed) | `python -m backend.cli policy "Tell me when Jake gets ready"` | 361 passed |
+| v34 | M1 review: Fix: keyframes and generated images | The keyframe and image fixes: hidden macOS files, WebP and HEIC folders, EXIF turns, and a manifest that is written even when generation stops. | `backend/dataengine/keyframes.py` (changed), `backend/dataengine/synth.py` (changed), `tests/test_keyframes.py` (changed), `tests/test_synth.py` (changed), `README.md` (changed) | `python -m pytest` | 372 passed |
+| v35 | M1 review: Fix: labels and region of interest | The label and SAM fixes: a label that needed the larger budget is free on a rerun, and SAM skips a rejected frame like the other steps. | `backend/dataengine/labels.py` (changed), `backend/dataengine/roi.py` (changed), `tests/test_labels.py` (changed), `tests/test_roi.py` (changed), `README.md` (changed) | `python -m pytest` | 377 passed |
+| v36 | M1 review: Fix: teach flow and te teach | The teach flow and te teach fixes: inputs checked before the estimate, a worst-case figure, and datasets that must hold both answers. | `backend/cli.py` (changed), `backend/teach.py` (changed), `tests/test_cli.py` (changed), `tests/test_teach.py` (changed), `README.md` (changed) | `ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4` | 400 passed |
+| v37 | M1 review: Fix: CI and setup | CI and setup: ffmpeg in CI, Python 3.12 and ffmpeg in the Mac setup, and the W&B team note. | `.env.example` (changed), `.github/workflows/ci.yml` (changed), `CLAUDE.md` (changed), `README.md` (changed) | `python -m pytest` | 400 passed |
+| v38 | M1 review: Fix: docs and notes, second round | The docs for these fixes: the estimator figures for a real clip, the recording protocol and the notes. | `HANDOVER.md` (changed), `PROGRESS.md` (changed), `docs/recording-protocol.md` (changed), `README.md` (changed) | `python -m backend.cli spend` | 400 passed |
 
 Every README lists the exact commands and the output they printed when run inside that
 folder.
@@ -86,6 +94,11 @@ engine, the teach flow, te teach, then the docs. Each changes only files the ear
 stages already have, so `git diff --no-index` against the stage before shows exactly
 one fix.
 
+v31 to v38 hold the second half of that review (F30 to F62) and the faults a second
+check found in the v23 to v30 fixes themselves, in the same order: the API client,
+settings and the spend report, the policy check and compiler, keyframes and generated
+images, labels and SAM, the teach flow with te teach, CI and setup, then the docs.
+
 ## How to review a stage
 
 Clone the branch next to your repository, then compare any two neighbouring folders:
@@ -117,7 +130,7 @@ description below:
     git commit -m "<summary>" -m "<description>"
 
 Then the same for v2, v3 and so on. Earlier stages never change when later ones are
-added, so carry on from the first stage you have not committed yet (v23 if v1 to v22
+added, so carry on from the first stage you have not committed yet (v31 if v1 to v30
 are already on `main`). `git status` before each commit should show only the files
 listed for that stage. LICENSE and .gitattributes already exist in the repository
 from its first commit, and the stage copies are identical, so v10 changes only its own
@@ -244,6 +257,38 @@ Checks --labels before the estimate, shows the training mode, warns about the ca
 
 Rewrites step 7 of docs/glasses-check.md to test reachability during streaming, adds the visual design rules to HANDOVER.md, and records the review and fixes in PROGRESS.md and CLAUDE.md.
 
+**v31.** `Fix client: charge interrupts, refetch stale cache`
+
+Charges a call interrupted with Ctrl+C, stops caching empty transcripts, fetches again a cached reply that no longer passes its check, turns a failed image download into a skippable output error, and charges an image reply without images for what was asked. Failed calls carry their charge, cut-off replies their finish reason, and structured() gains a cache-only lookup. Tests cover each case.
+
+**v32.** `Fix settings home folder and spend table width`
+
+Expands ~ in TE_DATA_DIR, since .env files are not read by a shell, and sizes the spend report's name column to the longest skill name. Tests cover both.
+
+**v33.** `Fix policy gaps, corrections and read-back wording`
+
+Splits the named-person rule so possessives always count and 'gets ready' is no device state, widens the sports, covert, health and person lists, adds a capture-light rule, leaves negated phrases out of a correction's check, limits requests to 500 characters, checks all of the model's wording against the topic rules, and tidies the read-back. Tests cover every new refusal and every request that must still pass.
+
+**v34.** `Fix frame folders and keep the image manifest current`
+
+Skips hidden files in frame folders, reads WebP, names HEIC and unreadable frames in the error, turns EXIF-tagged frames without rewriting EXIF, writes manifest.jsonl in a finally block, adds TooManyFailures, and plans duplicate near-misses once. Tests cover every EXIF orientation and each folder case.
+
+**v35.** `Fix label reruns and SAM failure handling`
+
+Looks up the larger-budget label in the cache before sending the small one, retries labels cut off mid-answer, adds failed attempts to each label's cost, and makes roi.locate skip rejected frames with the same failure cap as synth and labels. Tests cover the rerun, the cut-off reply and both SAM cases.
+
+**v36.** `Fix teach input checks, class balance and te serve`
+
+Moves every input check of te teach before the estimate, adds the worst case to the estimate, stops one-answer datasets, requires both answers among fallback labels, removes a stale dataset, guards the keyframes folder, refuses contradicting labels, saves labels on a stop, adds the failures hint, and makes te serve print the phone address with the server's logs. Tests cover each stop and message.
+
+**v37.** `Install ffmpeg in CI and fix the Mac setup`
+
+Adds an ffmpeg install step to the CI workflow, switches the Mac setup in CLAUDE.md to python3.12 with ffmpeg, and replaces the unused WANDB_ENTITY line in .env.example with a note on passing the team to Modal.
+
+**v38.** `Update notes, handover and recording protocol`
+
+Updates the cost figures, records the second review round, its open questions and the M2 and M4 notes in HANDOVER.md and PROGRESS.md, and extends the teaching-clip section of docs/recording-protocol.md.
+
 ## Notes
 
 - **Reconstructed stages.** Each milestone was written as one finished tree, and its
@@ -251,7 +296,7 @@ Rewrites step 7 of docs/glasses-check.md to test reachability during streaming, 
   exact blocks such as the media part of the client), working backwards. No code outside
   a layer was rewritten. M1's stages were peeled from the finished M1 tree, and peeling
   v12 once more gives v11 byte for byte (README aside), so M1 sits exactly on M0; the
-  same holds for v22 on v21 and v23 on v22. Each folder was then tested as its own
+  same holds for v22 on v21, v23 on v22 and v31 on v30. Each folder was then tested as its own
   project. The READMEs were written per stage, from commands run inside each folder.
 - **Files from the first commit.** `.gitignore` enters at v2 as the original Python
   template plus Trained Eye's own entries. `LICENSE` (MIT, the original) and
@@ -259,7 +304,7 @@ Rewrites step 7 of docs/glasses-check.md to test reachability during streaming, 
 - **Branch-only tools.** `stagetools/` holds the scripts that built and checked these
   folders (see `stagetools/README.md`). Like this file, it lives only on this branch.
 - **Large files.** None. The largest file is `backend/meta/client.py` at
-  about 25 KB; the whole of v30 is about 284 KB.
+  about 27 KB; the whole of v38 is about 336 KB.
 - **Untested paths.** The build machine had no API keys, no network access to Meta, and
   no PyPI, so these were not run:
   - live Meta API calls (`te models`, `te api-smoke`); all client tests use
@@ -273,7 +318,9 @@ Rewrites step 7 of docs/glasses-check.md to test reachability during streaming, 
     every package with `AttributeError: install_layout`. The `te` entry point was checked
     instead by calling `backend.cli:main` from each stage's `[project.scripts]`.
   - the GitHub Actions workflow itself; the same `ruff check .` and `pytest` were run in
-    every folder.
+    every folder (GitHub ran it on the branch root after each push).
+  - `te serve` on a real network: its phone address and log setup were tested with
+    uvicorn's run replaced.
   - Python 3.11 and 3.12, and macOS: everything ran on Python 3.13 on Linux. For the
     review after M1 the code was also compiled with Python 3.11 and 3.12 and type-checked
     against the 3.11 standard library, but not run there.
@@ -291,7 +338,7 @@ A script (kept outside the repository) checked every folder after it was built:
 1. v1 has at most 5 files, and each later stage adds or changes at most 5 files compared
    with the one before (README included).
 2. Every folder contains every file of the folder before it.
-3. v30 matches the repository root byte for byte (local-only things excluded).
+3. v38 matches the repository root byte for byte (local-only things excluded).
 4. Every file a README names, in backticks or as a bare file name, exists in that folder.
 5. No folder holds caches, `.env`, `data/`, build output or secrets.
 6. Inside every folder: `ruff check .` and `python -m pytest` pass, and `backend` imports
@@ -300,5 +347,5 @@ A script (kept outside the repository) checked every folder after it was built:
    environment; the outputs in the READMEs are pasted from those runs.
 8. From v4 on, the `te` entry point in `pyproject.toml` was called inside each folder.
    For each later milestone, peeling its first stage once more was checked to give the
-   stage before it exactly (v12 to v11, v22 to v21, v23 to v22).
+   stage before it exactly (v12 to v11, v22 to v21, v23 to v22, v31 to v30).
 9. The READMEs and this file contain no emoji or em dashes.

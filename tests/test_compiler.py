@@ -200,3 +200,63 @@ def test_correction_is_policy_checked_and_sent(tmp_path, monkeypatch):
     refused = compile_skill(client, "let me know when the washer says done", [JPEG],
                             correction="when my wife takes it out")
     assert refused.refused and len(requests) == 2
+
+
+@pytest.mark.parametrize("correction", [
+    "not the bathroom light, the one on the lid",
+    "not a person, the delivery van",
+    "the red light, not the kid's toy",
+    "the lid light instead of the one by the shower in the bathroom",
+])
+def test_what_a_correction_rules_out_is_not_policy_checked(tmp_path, monkeypatch, correction):
+    monkeypatch.chdir(tmp_path)
+    requests = []
+    spec = compile_skill(client_with(ACCEPTED, requests), "let me know when the washer says done",
+                         [JPEG], correction=correction)
+    assert not spec.refused and len(requests) == 1
+
+
+@pytest.mark.parametrize("correction", [
+    "not the van but the person at the door", "not the car, when Sam gets here",
+    "the pill organizer, not the box", "not the stove, secretly watch the hallway",
+])
+def test_a_refused_correction_says_it_was_the_correction(tmp_path, monkeypatch, correction):
+    monkeypatch.chdir(tmp_path)
+    requests = []
+    spec = compile_skill(client_with(ACCEPTED, requests), "let me know when the washer says done",
+                         [JPEG], correction=correction)
+    assert spec.refused and "your correction" in spec.refusal_reason and requests == []
+
+
+def test_requests_over_500_characters_stop_before_any_call(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    requests = []
+    with pytest.raises(ValueError, match="over the 500 allowed"):
+        compile_skill(client_with(ACCEPTED, requests), "tell me when the pot boils " * 20, [JPEG])
+    with pytest.raises(ValueError, match="over the 500"):  # refused locally, still too long
+        compile_skill(client_with(ACCEPTED, requests), "tell me when Sam gets home " * 20, [JPEG])
+    assert requests == []
+
+
+def test_model_wording_is_tidied_for_the_read_back_and_the_prompts(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    reply = {**ACCEPTED, "positive": "When the display shows End",
+             "negatives": ["Display off", "display off.", "display shows time remaining"]}
+    spec = compile_skill(client_with(reply, []), "let me know when the washer says done", [JPEG])
+    assert spec.positive == "the display shows End"
+    assert spec.negatives == ["Display off", "display shows time remaining"]
+
+
+@pytest.mark.parametrize("field, value", [
+    ("negatives", ["the pill bottle next to the washer", "display off"]),
+    ("negatives", ["display off", "you secretly check the hallway"]),
+    ("alert", "Time for your vitamins!"),
+    ("target_description", "the washer display, watched without anyone noticing"),
+    ("target_description", "the sign at the clinic entrance"),
+    ("negatives", ["display off", "count my push-ups instead"]),
+])
+def test_the_rest_of_the_model_wording_gets_the_topic_rules(tmp_path, monkeypatch, field, value):
+    monkeypatch.chdir(tmp_path)
+    spec = compile_skill(client_with({**ACCEPTED, field: value}, []),
+                         "let me know when the washer says done", [JPEG])
+    assert spec.refused

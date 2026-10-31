@@ -107,6 +107,25 @@ def test_read_back_handles_capitalised_model_phrasing():
     assert "tell you when LED shows END." in read_back(keeps_acronym)
 
 
+
+@pytest.mark.parametrize("description, positive, expected", [
+    ("Instant Pot display", "the pin drops",
+     "I'll watch the Instant Pot display and tell you when the pin drops."),
+    ("McKenzie's blue mailbox", "the flag is up!",
+     "I'll watch the McKenzie's blue mailbox and tell you when the flag is up."),
+    ("Our oven", "When the timer reads 0:00",
+     "I'll watch our oven and tell you when the timer reads 0:00."),
+    ("these two burners", "both flames are out.",
+     "I'll watch these two burners and tell you when both flames are out."),
+    ("Its front display", "End shows",
+     "I'll watch its front display and tell you when End shows."),
+])
+def test_read_back_wording(description, positive, expected):
+    spec = SkillSpec(**{**WASHER, "target": Target(sam_prompt="x", description=description),
+                        "positive": positive})
+    assert read_back(spec).startswith(expected)
+
+
 @pytest.mark.parametrize("name", ["washer-done", "Washer", "x", "1washer", "a" * 41])
 def test_check_name_rejects(name):
     from backend.skills.spec import check_name
@@ -151,6 +170,27 @@ def test_check_name_rejects(name):
     "tell me if my shot goes in",
     "count my reps",
     "Tell me when my baby wakes up",
+    "Tell me when Jake gets ready",
+    "Tell me when Sam gets to 5th Street",
+    "Tell me when Jake's car gets stuck",
+    "Tell me when Jake gets off the bus",
+    "tell me when my friends arrive",
+    "tell me when guests arrive",
+    "tell me when my aunt arrives",
+    "tell me when my parents get home",
+    "count my burpees",
+    "count my jumping jacks",
+    "check my pitching form",
+    "watch my hockey shot",
+    "Count push-ups",
+    "coach my backhand",
+    "Watch the front door and hide the capture light",
+    "keep the LED off while you watch",
+    "tell me when the door opens so nobody notices",
+    "snoop on the mailbox",
+    "Tell me when I've had 500 kcal",
+    "tell me when I take my vitamins",
+    "Tell me when the pillbox is open",
 ])
 def test_policy_refuses_review_cases(request_text):
     assert policy_check(request_text) is not None
@@ -187,6 +227,15 @@ def test_policy_refuses_review_cases(request_text):
     "Tell me when DoorDash arrives",
     "Tell me when the UPS truck\u2019s here",
     "tell me when Sunday's paper arrives",
+    "tell me when the kettle starts to hiss",
+    "Tell me when Roomba's bin gets full",
+    "Tell me when the Route 5 bus arrives",
+    "count my stitches",
+    "tell me if I forget to turn off the light",
+    "tell me when the router LED turns off",
+    "Tell me when the glass cleaner bottle is empty",
+    "Tell me when the courier van arrives",
+    "Tell me when the rice cooker comes on",
 ])
 def test_policy_allows_object_skills(request_text):
     assert policy_check(request_text) is None

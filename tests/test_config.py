@@ -150,6 +150,8 @@ def test_paths_follow_the_project_not_the_current_folder(tmp_path, monkeypatch):
         assert s.has_secret("MODEL_API_KEY") and s.skill_cap_usd == 3
     assert load_settings(env={"TE_DATA_DIR": "alt"}).data_dir == project / "alt"
     assert load_settings(env={"TE_DATA_DIR": "/abs/te"}).data_dir == Path("/abs/te")
+    home = load_settings(env={"TE_DATA_DIR": "~/te-data"}).data_dir
+    assert home == Path("~/te-data").expanduser() and "~" not in str(home)
     assert config._ROOT == ROOT and (ROOT / "pyproject.toml").is_file()
 
 

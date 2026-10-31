@@ -1,14 +1,15 @@
 # Progress
 
 The source of truth between sessions. Updated at the end of every milestone.
-Last update: 2026-10-31, fixes from the review after M1 (stages v23 to v30).
+Last update: 2026-10-31, fixes from the review after M1 (stages v23 to v38).
 
 ## Status
 
-M0 and M1 code are done and tested offline (297 tests, none calls a paid API). A full
+M0 and M1 code are done and tested offline (400 tests, none calls a paid API). A full
 review after M1 (bugs, version compatibility, functionality against SPEC.md, the UI)
-found 27 confirmed problems in F1 to F29; their fixes are stages v23 to v30 (see "Review
-after M1" below). Findings F30 to F62 were still being verified when this was written.
+found 27 confirmed problems in F1 to F29, fixed in stages v23 to v30. The rest, F30 to
+F62, and a second check of those fixes are fixed in stages v31 to v38 (see "Review after
+M1" below). M2 comes next.
 HANDOVER.md explains how to pick the project up; SETUP.md covers setup. What is still
 open needs the Mac, the keys, the glasses or new footage:
 
@@ -16,10 +17,11 @@ open needs the Mac, the keys, the glasses or new footage:
 2. the first live Meta calls: `te models` (free), then `te api-smoke` (under $0.01)
 3. the W&B smoke run from Modal: `modal run backend/training/wandb_smoke.py`
 4. the first real washer teach run: `te teach --skill washer_done --clip <10 s clip>
-   --audio <request>`. Its own estimate for the default 150 positives and 150 negatives is
-   $5.26 at most (labels are priced at their full token budget), under the $10 skill cap.
-   Run a small batch first (`--positives 6 --negatives 6`) and check the SAM output and
-   the images by eye.
+   --audio <request>`. For a 10 s clip (20 to 30 keyframes) and the default 150 positives
+   and 150 negatives the estimator prints about $5.25 to $5.34, and at most $11.52 to
+   $11.80 if every label has to be asked again with the larger budget (over the $10 skill
+   cap, which would then stop the run partway). Run a small batch first
+   (`--positives 6 --negatives 6`) and check the SAM output and the images by eye.
 5. real clips for all three skills (`docs/recording-protocol.md`)
 
 ## Milestones
@@ -68,7 +70,31 @@ open needs the Mac, the keys, the glasses or new footage:
   exclusive; `te api-smoke` never caches a failed check
 - [x] Docs: the glasses check tests reachability while streaming; HANDOVER has SPEC.md's
   visual design rules
-- [ ] F30 to F62: verdicts pending
+- [x] Client (v31): Ctrl+C during a call is charged; an empty transcript is billed, not
+  cached; a cached reply that today's checks reject is fetched again; a failed image
+  download is a skippable output error; every failed call carries its charge; a label cut
+  off mid-answer is asked again; a cache-only lookup
+- [x] Settings and spend report (v32): `~` in `TE_DATA_DIR`; long skill names line up
+- [x] Policy and compiler (v33): plurals and more relatives; hiding the capture light,
+  covert, nutrition and more sports phrasings; named people with "gets ready" or a
+  possessive refused again (a v25 regression); corrections that rule something out
+  ("not the bathroom light") are allowed, and a refused one says so; requests over 500
+  characters stop before the call; read-back wording; duplicate near-misses; the topic
+  rules over all of the model's wording
+- [x] Keyframes and images (v34): macOS `._` files skipped, WebP read, clear errors for
+  HEIC and unreadable frames, EXIF turns without rewriting EXIF; the image manifest is
+  written even when generation stops
+- [x] Labels and SAM (v35): a label that needed the larger budget is free on a rerun; SAM
+  skips a rejected frame like the other steps; progress counts failed attempts' cost
+- [x] Teach and CLI (v36): the estimate gives a worst case; a one-answer dataset stops
+  the run; fallback labels need both answers; a new spec removes the old dataset; the
+  clip folder is never the output folder; contradicting labels; labels saved when a run
+  stops; inputs and the key checked before the spend question; the failures hint; closed
+  stdin; `te serve` prints the phone address and keeps the server's log lines
+- [x] CI and setup (v37): CI installs ffmpeg, so the video tests run there; Mac setup
+  with python3.12 and ffmpeg; the `.env.example` W&B note
+- [x] Docs (v38): estimator figures for a real clip, the recording protocol (both states
+  in the teaching clip), M2 and M4 notes, open questions
 
 ### M2, Fri to Sat: training and watching
 
@@ -136,7 +162,17 @@ open needs the Mac, the keys, the glasses or new footage:
   switch to fold it into the user text if the processor preflight shows a problem.
 - **Fallback switch:** `TE_TRAIN_ON_MODEL_OUTPUTS=0` keeps generating and labelling (for
   evaluation) but trains only on real frames with the user's own labels. Without those
-  labels it stops after writing the keyframes, before any paid call.
+  labels, or with labels that are all one answer, it stops after writing the keyframes,
+  before any paid call.
+- **A dataset needs both answers.** If the examples would all be yes or all be no (for
+  example when Spark rejects every positive edit), teach stops instead of writing a
+  dataset that cannot train a yes/no check, and warns when one answer is under 10 percent.
+- **Failed calls carry their charge** (`MetaAPIError.cost_usd`), so progress lines count
+  them; after a stop for too many failures, the hint says a rerun pays for them again.
+- **The model's wording is checked in two parts.** The target and the trigger get the
+  request's full local check; everything else it wrote (description, near-misses, alert)
+  gets the covert, health and sports rules, and the description also the person and
+  sensitive-place rules except rooms at home.
 - **Project folder:** `.env`, `data/` (ledger, cache, skills) and a relative `TE_DATA_DIR`
   are taken inside the checkout `backend/` is imported from, so `te` sees the same spend
   and caps from any folder. Tests point this at a temporary folder (tests/conftest.py).
@@ -194,9 +230,13 @@ sources disagree with SPEC.md, the sources win.
 - `meta-sam-parser` (SAM output parsing) could not be installed or read; M1 stores SAM's
   raw output and parses it once a real cached response shows the format.
 - SPEC.md is not in the repository, so a fresh session needs it uploaded again.
-- Review findings F30 to F62 (client, CLI, policy wording, dataset paths, dependency
-  bounds, tests, docs) were not verified yet when stages v23 to v30 were cut; the
-  confirmed ones become the next stages, before M2.
+- From the review, for the author: whether to add `httpx2` (Starlette 1.2 and later warn
+  without it in `TestClient`) or cap `starlette<1.2`, and whether the project's own
+  dependencies count as approved downloads (HANDOVER.md, "Not done yet", item 9).
+- In fallback mode the condition text in every example is still Muse Wonder's (ask the
+  organizers with the training question).
+- The dataset JSONL holds absolute image paths (the recipe's format); M2 writes it again
+  under the Modal volume mount.
 - SAM output parsing: the first live run stores SAM's raw text (cached); write the parser
   against it, then the boxes feed crops and the outline visual.
 - Image token counts are unknown, so estimates assume 1,500 tokens per image; the real

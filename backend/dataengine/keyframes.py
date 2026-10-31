@@ -1,7 +1,8 @@
 """Pick 20-30 sharp, diverse keyframes from a ~10 second teaching clip.
 
-The clip is either a video file (decoded with ffmpeg) or a folder of JPEG frames as
-the iPhone app streams them. Blurry frames are dropped by the variance of the
+The clip is either a video file (decoded with ffmpeg) or a folder of JPEG, PNG or WebP
+frames as the iPhone app streams them (HEIC photos need converting first; hidden files
+such as the "._" copies macOS leaves on external drives are ignored). Blurry frames are dropped by the variance of the
 Laplacian; near-duplicates by the Hamming distance between difference hashes.
 """
 
@@ -15,10 +16,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, UnidentifiedImageError
 
-IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
+IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
+UNSUPPORTED_SUFFIXES = (".heic", ".heif")
 EXIF_ORIENTATION = 0x0112
+TURNS = {2: Image.Transpose.FLIP_LEFT_RIGHT, 3: Image.Transpose.ROTATE_180,
+         4: Image.Transpose.FLIP_TOP_BOTTOM, 5: Image.Transpose.TRANSPOSE,
+         6: Image.Transpose.ROTATE_270, 7: Image.Transpose.TRANSVERSE,
+         8: Image.Transpose.ROTATE_90}
 
 
 @dataclass
@@ -43,9 +49,11 @@ def upright(data: bytes) -> bytes:
     them. Untagged images come back byte for byte, so their cache keys stay the same.
     """
     with Image.open(io.BytesIO(data)) as img:
-        if img.getexif().get(EXIF_ORIENTATION, 1) not in range(2, 9):
+        turn = TURNS.get(img.getexif().get(EXIF_ORIENTATION, 1))
+        if turn is None:
             return data
-        turned = ImageOps.exif_transpose(img).convert("RGB")
+        # Turned by the tag alone: the rest of the EXIF is not rewritten (or kept).
+        turned = img.convert("RGB").transpose(turn)
     buf = io.BytesIO()
     turned.save(buf, format="JPEG", quality=95)
     return buf.getvalue()
@@ -54,9 +62,19 @@ def upright(data: bytes) -> bytes:
 def load_frames(source: Path | str, fps: float = 3.0) -> list[Frame]:
     source = Path(source)
     if source.is_dir():
-        paths = sorted(p for p in source.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES)
-        datas = [upright(p.read_bytes()) for p in paths]
-        return [Frame(i, i / fps, d, _gray(d)) for i, d in enumerate(datas)]
+        files = sorted(p for p in source.iterdir() if p.is_file() and not p.name.startswith("."))
+        paths = [p for p in files if p.suffix.lower() in IMAGE_SUFFIXES]
+        if not paths and any(p.suffix.lower() in UNSUPPORTED_SUFFIXES for p in files):
+            raise ValueError(f"{source} holds HEIC photos, which cannot be read: export "
+                             "them as JPEG (or record a video)")
+        frames = []
+        for i, path in enumerate(paths):
+            try:
+                data = upright(path.read_bytes())
+                frames.append(Frame(i, i / fps, data, _gray(data)))
+            except (UnidentifiedImageError, OSError, SyntaxError) as err:
+                raise ValueError(f"{path} is not a readable image ({err})") from None
+        return frames
     if shutil.which("ffmpeg") is None:
         raise RuntimeError("ffmpeg is needed to read video files (brew install ffmpeg)")
     with tempfile.TemporaryDirectory() as tmp:

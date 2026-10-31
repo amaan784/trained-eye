@@ -11,32 +11,31 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v30 (M1 review): Fix: docs and notes
+## Build stage v38 (M1 review): Fix: docs and notes, second round
 
-The glasses check now tests that the phone reaches the Mac while CameraAccess is
-streaming (ping from the Mac during a one-minute preview); before, it switched to
-Safari, which ends the stream, so it could not tell. HANDOVER.md gains the build
-spec's visual design rules (dark and minimal, one accent colour, Inter, no gradients,
-the four signature visuals) for the iOS app and the playground, and the notes record
-the review and these fixes.
+HANDOVER.md and PROGRESS.md give the estimator's figures for a real 10 s clip, with
+the worst case, record this round of fixes and the questions it leaves for the author
+and the organizers, and add notes for M2 (dataset paths on the Modal volume) and M4
+(shipping what regenerates the generated images). The recording protocol asks for
+movement during the teaching look and, with training on model outputs off, for a look
+in which the condition becomes true.
 
 Files added or changed in this stage:
 
-- `CLAUDE.md` (changed): short setup, commands and conventions
 - `HANDOVER.md` (changed): how to pick the project up in a new session: state, the
   author's rules, open items with exact commands, and the plan for M2 to M5 with the
   facts from the docs
 - `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
   open issues and spend
-- `docs/glasses-check.md` (changed): how to check, with Meta's own sample app, that
-  the glasses stream camera frames, deliver the mic and play audio
+- `docs/recording-protocol.md` (changed): what real clips to record for the three
+  skills, and how to keep training and test sessions apart
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
 
 Run everything from inside this folder.
 
-    python3 -m venv .venv && source .venv/bin/activate
+    python3.12 -m venv .venv && source .venv/bin/activate   # Mac: brew install python@3.12
     pip install -e ".[dev,train]"
     cp .env.example .env    # then fill in the keys
 
@@ -46,12 +45,13 @@ These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 24%]
-    ........................................................................ [ 48%]
+    ........................................................................ [ 18%]
+    ........................................................................ [ 36%]
+    ........................................................................ [ 54%]
     ........................................................................ [ 72%]
-    ........................................................................ [ 96%]
-    .........                                                                [100%]
-    297 passed in 5.11s
+    ........................................................................ [ 90%]
+    ........................................                                 [100%]
+    400 passed in 7.09s
 
     $ ruff check .
     All checks passed!
@@ -115,13 +115,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 297 tests, all offline; none calls a paid API.
+- `tests/`: 400 tests, all offline; none calls a paid API.
 
 ## Next
 
-The confirmed findings from the second half of the review (F30 to F62), then milestone
-M2: Modal QLoRA training on the washer skill, export and serving, and the watch loop
-with smoothing, the Spark confirmation and spoken alerts on the glasses.
+Milestone M2: Modal QLoRA training on the washer skill, export and serving, and the
+watch loop with smoothing, the Spark confirmation and spoken alerts on the glasses.
 
 ## Privacy and policy
 

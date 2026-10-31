@@ -126,6 +126,8 @@ def format_report(ledger: Ledger) -> str:
         rows = sorted(t[key].items())
         if not rows:
             lines.append("    (no calls yet)")
+        width = max([28, *(len(name) for name, _ in rows)])  # skill names run to 40
         for name, row in rows:
-            lines.append(f"    {name:<28} {row['calls']:>5} calls  ${row['usd']:.4f}")
+            calls = f"{row['calls']:>5} call{'' if row['calls'] == 1 else 's'}"
+            lines.append(f"    {name:<{width}} {calls:<12} ${row['usd']:.4f}")
     return "\n".join(lines)

@@ -39,3 +39,30 @@ def test_no_two_requests_are_identical():
     assert len({v.prompt for v in one}) == 30  # 11 nuisances, then "Variation N." repeats
     assert sum(v.prompt.endswith("Variation 2.") for v in one) == 11
     assert sum(v.prompt.endswith("Variation 3.") for v in one) == 8
+
+
+def test_negatives_that_differ_only_in_case_or_a_period_are_planned_once():
+    spec = SPEC.model_copy(update={"negatives": ["Display off", "display off.", "display off",
+                                                 "display shows time remaining"]})
+    plan = plan_variations(spec, ["a" * 64], positives=0, negatives=40)
+    assert {v.condition for v in plan} == {"Display off", "display shows time remaining"}
+    assert len({v.prompt for v in plan}) == 40
+
+
+def test_the_manifest_records_this_run_even_when_it_stops(tmp_path):
+    import json
+
+    from backend.dataengine.synth import TooManyFailures, generate
+    from backend.meta.client import OutputError
+
+    class Rejects:
+        def image_edit(self, image, prompt, skill=None):
+            raise OutputError("no images returned")
+
+    (tmp_path / "manifest.jsonl").write_text('{"id": "from an older plan"}\n')
+    plan = plan_variations(SPEC, ["a" * 64], positives=4, negatives=3)
+    with pytest.raises(TooManyFailures, match="6 of 7 image edits failed"):
+        generate(Rejects(), plan, {"a" * 64: b"jpeg"}, tmp_path)
+    rows = [json.loads(line) for line in (tmp_path / "manifest.jsonl").read_text().splitlines()]
+    assert len(rows) == 6 and all(r["file"] is None and r["error"] for r in rows)
+    assert [r["id"] for r in rows] == [v.id for v in plan[:6]]

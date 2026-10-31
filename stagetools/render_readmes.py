@@ -135,7 +135,8 @@ def render(k: int, n: int, folder: Path, changed: list[tuple[str, bool]],
                              f"{describe_change(rel, added)}"))
     out += ["", "## Setup", "", "Run everything from inside this folder.", ""]
     extra = '".[dev,train]"' if "backend/training/wandb_smoke.py" in present else '".[dev]"'
-    setup = ["python3 -m venv .venv && source .venv/bin/activate", f"pip install -e {extra}"]
+    venv = getattr(S, "VENV", "python3 -m venv .venv && source .venv/bin/activate")
+    setup = [venv, f"pip install -e {extra}"]
     if ".env.example" in present:
         setup.append("cp .env.example .env    # then fill in the keys")
     out += [block(setup), ""]

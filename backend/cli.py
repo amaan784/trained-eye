@@ -12,9 +12,11 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import io
 import json
 import shutil
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -77,11 +79,38 @@ def cmd_api_smoke(args) -> int:
     return 0
 
 
+def lan_address() -> str | None:
+    """This machine's address on the local network, as the phone would reach it. No
+    packet is sent: connecting a UDP socket only picks the outgoing interface."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))
+            address = s.getsockname()[0]
+    except OSError:
+        return None
+    return None if address.startswith("127.") or address == "0.0.0.0" else address
+
+
+def server_log_config() -> dict:
+    """uvicorn's logging, plus the server's own lines (session opened, frames, closed)."""
+    import uvicorn.config
+
+    config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
+    config["loggers"]["trained_eye"] = {"handlers": ["default"], "level": "INFO",
+                                        "propagate": False}
+    return config
+
+
 def cmd_serve(args) -> int:
     import uvicorn
 
-    print(f"Trained Eye backend: ws://{args.host}:{args.port}/ws  (Ctrl+C to stop)")
-    uvicorn.run("backend.server:app", host=args.host, port=args.port, log_level="info")
+    host = args.host
+    if host in ("0.0.0.0", "::"):
+        host = lan_address() or "<this Mac's Wi-Fi IP>"
+    print(f"Trained Eye backend: ws://{host}:{args.port}/ws  (check: "
+          f"http://{host}:{args.port}/health; Ctrl+C to stop)")
+    uvicorn.run("backend.server:app", host=args.host, port=args.port, log_level="info",
+                log_config=server_log_config())
     return 0
 
 
@@ -146,7 +175,7 @@ def audio_duration_s(path: Path) -> float | None:
 def ask(question: str) -> bool:
     try:
         answer = input(f"{question} [y/N] ")
-    except EOFError:  # stdin closed or empty: treat as "no"
+    except (EOFError, RuntimeError, OSError):  # stdin empty, closed or not readable: "no"
         print()
         return False
     return answer.strip().lower() in ("y", "yes")
@@ -154,37 +183,104 @@ def ask(question: str) -> bool:
 
 RESUME_HINT = ("finished calls are cached, so running the same command again continues "
                "without paying for them twice")
+FAILURES_HINT = ("failed calls are not cached and are paid for again on a rerun: look at "
+                 "the reasons above (and in the skill folder) before running it again")
 
 
-def cmd_teach(args) -> int:
+class Stopped(ValueError):
+    """te teach cannot go on with these inputs; found before anything is spent."""
+
+
+class Refused(Stopped):
+    """The local policy check refused the request text."""
+
+
+def _unique_keys(pairs: list[tuple]) -> dict:
+    keys = [k for k, _ in pairs]
+    repeated = sorted({k for k in keys if keys.count(k) > 1})
+    if repeated:
+        raise ValueError(f"--labels names {', '.join(map(repr, repeated))} more than once")
+    return dict(pairs)
+
+
+def teach_inputs(args, settings) -> tuple[list, dict[str, str], float]:
+    """Check everything te teach needs before any money is mentioned: (keyframes, your
+    labels, audio seconds). Raises ValueError with a message for the user."""
     from backend.dataengine.keyframes import load_frames, select_keyframes
-    from backend.skills.spec import check_name
-    from backend.teach import TeachOptions, estimate, keyframe_name, normalise_labels, run_teach
+    from backend.skills.compiler import MAX_REQUEST
+    from backend.skills.spec import check_name, policy_check
+    from backend.teach import (
+        check_clip,
+        keyframe_name,
+        labels_problem,
+        normalise_labels,
+        save_keyframes,
+    )
 
-    try:
-        check_name(args.skill)
-    except ValueError as err:
-        print(f"te: {err}", file=sys.stderr)
-        return 2
-    settings = load_settings()
-    client = make_client(settings)
+    check_name(args.skill)
     if not (args.audio or args.request):
-        print("te: pass --audio or --request", file=sys.stderr)
-        return 2
-    audio_s = (audio_duration_s(Path(args.audio)) or 10.0) if args.audio else 0.0
-    frames = select_keyframes(load_frames(args.clip))
+        raise ValueError("pass --audio or --request")
+    request = " ".join((args.request or "").split())
+    if args.request and len(request) > MAX_REQUEST:
+        raise ValueError(f"--request is {len(request)} characters, over the {MAX_REQUEST} "
+                         "allowed: say it in one sentence")
+    if args.request and policy_check(request):
+        raise Refused(policy_check(request))
+    if args.audio and not Path(args.audio).is_file():
+        raise ValueError(f"no audio file at {args.audio}")
+    clip = Path(args.clip)
+    if not clip.exists():
+        raise ValueError(f"no clip at {clip}")
+    skill_root = settings.data_dir / "skills" / args.skill
+    check_clip(clip, skill_root)
+    try:
+        frames = select_keyframes(load_frames(clip))
+    except (RuntimeError, subprocess.CalledProcessError) as err:
+        raise ValueError(f"cannot read the clip {clip}: {err}") from None
+    if not frames:
+        raise ValueError(f"no usable frames in {clip} (a video, or a folder of .jpg, .png or "
+                         ".webp frames)")
+    names = [keyframe_name(i, f.data) for i, f in enumerate(frames)]
     labels = {}
     if args.labels:  # checked before the estimate, so a typo never costs anything
         try:
-            labels = normalise_labels(json.loads(Path(args.labels).read_text()),
-                                      [keyframe_name(i, f.data) for i, f in enumerate(frames)])
-        except (OSError, TypeError, ValueError) as err:
-            print(f"te: {err}", file=sys.stderr)
-            return 2
+            raw = json.loads(Path(args.labels).read_text(), object_pairs_hook=_unique_keys)
+            labels = normalise_labels(raw, names)
+        except (OSError, TypeError) as err:
+            raise ValueError(str(err)) from None
+    problem = labels_problem(settings.train_on_model_outputs, labels, skill_root / "keyframes")
+    if problem:
+        save_keyframes(skill_root / "keyframes", frames)  # so they can be labelled, for free
+        raise Stopped(problem)
+    audio_s = (audio_duration_s(Path(args.audio)) or 10.0) if args.audio else 0.0
+    return frames, labels, audio_s
+
+
+def cmd_teach(args) -> int:
+    from backend.dataengine.synth import TooManyFailures
+    from backend.teach import TeachOptions, estimate, run_teach
+
+    settings = load_settings()
+    try:
+        frames, labels, audio_s = teach_inputs(args, settings)
+    except Refused as err:
+        print(f"I can't learn that one. {err}")
+        print('stopped: refused (nothing was spent). te policy "<request>" checks a wording '
+              "for free.")
+        return 1
+    except Stopped as err:
+        print(f"stopped: {err} (nothing was spent)")
+        return 1
+    except ValueError as err:
+        print(f"te: {err}", file=sys.stderr)
+        return 2
+    client = make_client(settings)
     parts = estimate(client, audio_s=audio_s, keyframes=len(frames),
                      positives=args.positives, negatives=args.negatives)
+    at_most = parts.pop("at_most")
     print(f"estimate for {args.skill} (before cache hits): " + ", ".join(
         f"{k} ${v:.2f}" for k, v in parts.items()))
+    print(f"  at most ${at_most:.2f} if every label has to be asked again with a larger budget")
     print("train on model outputs: " + ("yes" if settings.train_on_model_outputs else
                                         "no (the dataset uses real frames with your own labels)"))
     ledger = make_ledger(settings)
@@ -195,9 +291,15 @@ def cmd_teach(args) -> int:
               f"{args.skill}. Cached steps are free, but uncached calls past that stop the "
               "run partway, before the dataset. Raise TE_SKILL_CAP_USD or TE_GLOBAL_CAP_USD, "
               "or lower --positives and --negatives.", file=sys.stderr)
+    elif at_most > room:
+        print(f"te: note: ${max(room, 0):.2f} is left under the spend caps for {args.skill}. "
+              "If many labels need the larger budget the run could pass that, and the cap "
+              "would stop it partway (a rerun with a higher cap continues).", file=sys.stderr)
     if args.estimate_only:
         return 0
-    if not args.yes and not ask(f"Spend up to about ${parts['total']:.2f}?"):
+    settings.secret("MODEL_API_KEY")  # a missing key stops here, before the question
+    if not args.yes and not ask(f"Spend up to about ${parts['total']:.2f} "
+                                f"(at most ${at_most:.2f})?"):
         return 1
     opts = TeachOptions(skill=args.skill, clip=Path(args.clip),
                         audio=Path(args.audio) if args.audio else None, request=args.request,
@@ -209,14 +311,22 @@ def cmd_teach(args) -> int:
     except KeyboardInterrupt:
         print(f"\nte: stopped; {RESUME_HINT}", file=sys.stderr)
         return 130
+    except TooManyFailures:
+        print(f"te: teach stopped; {FAILURES_HINT}", file=sys.stderr)
+        raise
     except MetaAPIError:
         print(f"te: teach stopped; {RESUME_HINT}", file=sys.stderr)
         raise
+    except ValueError as err:  # e.g. a spoken request over 500 characters
+        print(f"te: {err}", file=sys.stderr)
+        return 2
     if report.get("stopped"):
         print(f"stopped: {report['stopped']}")
         if report["stopped"] == "not confirmed":
             print('To fix the read-back, run the same command with --correct "what is wrong" '
                   "(or a reworded --request); the clip and transcript are reused for free.")
+        elif report["stopped"] == "refused":
+            print('To try another wording first, te policy "<request>" checks it for free.')
         return 1
     print(format_report(make_ledger(settings)))
     return 0

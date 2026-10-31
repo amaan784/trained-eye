@@ -189,7 +189,8 @@ def load_settings(
 
     return Settings(
         base_url=(merged.get("TE_BASE_URL") or Settings.base_url).rstrip("/"),
-        data_dir=PROJECT_ROOT / (merged.get("TE_DATA_DIR") or Settings.data_dir),
+        # ~ is expanded here: .env files are not read by a shell
+        data_dir=PROJECT_ROOT / Path(merged.get("TE_DATA_DIR") or Settings.data_dir).expanduser(),
         models=models,
         skill_cap_usd=number("TE_SKILL_CAP_USD", Settings.skill_cap_usd),
         global_cap_usd=number("TE_GLOBAL_CAP_USD", Settings.global_cap_usd),

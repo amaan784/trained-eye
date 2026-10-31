@@ -55,6 +55,16 @@ def test_report(tmp_path):
     assert "calls: 1" in report and "washer_done" in report and "$0.0015" in report
 
 
+def test_report_columns_line_up_for_long_skill_names(tmp_path):
+    ledger = Ledger(tmp_path / "ledger.jsonl", skill_cap_usd=10, global_cap_usd=120)
+    long_name = "dishwasher_cycle_finished_light_on_front"  # 40 characters, the longest
+    for skill in (long_name, "washer_done", "washer_done"):
+        ledger.record(Entry("muse-spark-1.3", "/chat/completions", 0.002, 0.0015, skill=skill))
+    rows = format_report(ledger).split("by skill:\n")[1].splitlines()
+    assert len({row.index("$") for row in rows}) == 1
+    assert "    1 call " in rows[0] and "    2 calls " in rows[1]
+
+
 def test_spend_command(tmp_path, monkeypatch, capsys):
     ledger = Ledger(tmp_path / "ledger.jsonl", skill_cap_usd=10, global_cap_usd=120)
     ledger.record(Entry("muse-spark-1.3", "/responses", 0.002, 0.0015, skill="washer_done"))

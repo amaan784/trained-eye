@@ -11,19 +11,20 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v9 (M0): W&B smoke run on Modal
+## Build stage v10 (M0): Glasses check
 
-A Modal app that logs one Weights & Biases run (20 steps of a synthetic loss) to the
-trained-eye project, tagged with the git commit. The W&B key comes only from a Modal
-Secret named wandb; the tests parse the script to make sure it never reads, prints or
-hard-codes a key. Adds the train extra (modal, wandb).
+The step-by-step guide for checking the glasses with Meta's own CameraAccess sample
+before any Trained Eye iOS code exists: camera stream, glasses mic, speakers, whether
+the phone still reaches the Mac while streaming, and the Mock Device Kit. Also brings
+LICENSE and .gitattributes from the initial commit into the folder, so the last stage
+matches the repository.
 
 Files added or changed in this stage:
 
-- `backend/training/wandb_smoke.py` (new): a Modal app that logs one Weights & Biases
-  run, with the key coming only from a Modal Secret
-- `pyproject.toml` (changed): requirements and tool settings
-- `tests/test_wandb_smoke.py` (new): tests
+- `.gitattributes` (new): from the initial commit, unchanged
+- `LICENSE` (new): from the initial commit, unchanged
+- `docs/glasses-check.md` (new): how to check, with Meta's own sample app, that the
+  glasses stream camera frames, deliver the mic and play audio
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -42,14 +43,10 @@ set and no network to Meta); the output under each is what they printed.
     $ python -m pytest
     ........................................................................ [ 84%]
     .............                                                            [100%]
-    85 passed in 1.01s
+    85 passed in 1.23s
 
     $ ruff check .
     All checks passed!
-
-    $ modal run backend/training/wandb_smoke.py
-
-Not run here: it needs your Modal token (`modal token set`) and a Modal Secret named wandb holding WANDB_API_KEY. It prints the URL of the logged run.
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -70,11 +67,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
+- `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
+  stream camera frames, deliver the mic and play audio.
 - `tests/`: 85 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v10 adds the guide for checking the glasses with Meta's sample app.
+Stage v11 adds the project notes: setup and conventions, and the progress log.
 
 ## Privacy and policy
 

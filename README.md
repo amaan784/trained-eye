@@ -11,22 +11,20 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v14 (M1): Keyframe picker
+## Build stage v15 (M1): Dataset writer
 
-Keyframe selection for the teaching clip, from a video file (decoded with ffmpeg at 3
-frames a second) or a folder of frames as the phone sends them. The blurriest quarter
-is dropped by the variance of the Laplacian, then the sharpest frames are taken
-greedily while their difference hashes stay apart, giving 20 to 30 keyframes in time
-order; two frames with the same hash are never both kept. Decoding is bit-exact, so
-the same clip always gives the same bytes and the cache keeps working after an ffmpeg
-upgrade.
+The Axolotl dataset writer, following Meta's cookbook recipe: OpenAI-style messages,
+user content with the image part first (an absolute path to a PNG) and the text
+second, the assistant answering a plain yes or no. Images are padded to 512x512 with
+black bars, the recipe's default. The prompt template is the build spec's; its system
+turn can be folded into the user text. A manifest records counts and SHA-256 digests,
+and maps every example back to its source and the original image's hash.
 
 Files added or changed in this stage:
 
-- `backend/dataengine/keyframes.py` (new): the keyframe picker: 20 to 30 sharp,
-  distinct frames from the 10 second teaching clip
-- `pyproject.toml` (changed): requirements and tool settings
-- `tests/test_keyframes.py` (new): tests
+- `backend/dataengine/dataset.py` (new): the Axolotl dataset writer, in Meta's recipe
+  format (image path part, then text; 512x512 padded PNGs)
+- `tests/test_dataset.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -43,21 +41,13 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 43%]
-    ........................................................................ [ 86%]
-    .......................                                                  [100%]
-    167 passed in 2.40s
+    ........................................................................ [ 41%]
+    ........................................................................ [ 83%]
+    ............................                                             [100%]
+    172 passed in 2.45s
 
     $ ruff check .
     All checks passed!
-
-    $ ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4
-
-    $ python -c "from backend.dataengine.keyframes import load_frames, select_keyframes; f = load_frames('/tmp/te-demo.mp4'); print(len(f), 'frames,', len(select_keyframes(f)), 'keyframes')"
-    30 frames, 13 keyframes
-
-Video clips are decoded with ffmpeg (on the Mac: brew install ffmpeg). The demo clip
-is ffmpeg's built-in test pattern, written to /tmp, outside the folder.
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -85,16 +75,18 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   Muse Wonder (structured output), which returns a spec or a refusal.
 - `backend/dataengine/keyframes.py`: the keyframe picker: 20 to 30 sharp, distinct
   frames from the 10 second teaching clip.
+- `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
+  (image path part, then text; 512x512 padded PNGs).
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
   and spend.
 - `CLAUDE.md`: short setup, commands and conventions.
-- `tests/`: 167 tests, all offline; none calls a paid API.
+- `tests/`: 172 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v15 adds the dataset writer in Meta's Axolotl recipe format.
+Stage v16 adds the SAM 3.1 region-of-interest step.
 
 ## Privacy and policy
 

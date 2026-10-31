@@ -11,20 +11,17 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v10 (M0): Glasses check
+## Build stage v11 (M0): Project notes
 
-The step-by-step guide for checking the glasses with Meta's own CameraAccess sample
-before any Trained Eye iOS code exists: camera stream, glasses mic, speakers, whether
-the phone still reaches the Mac while streaming, and the Mock Device Kit. Also brings
-LICENSE and .gitattributes from the initial commit into the folder, so the last stage
-matches the repository.
+CLAUDE.md (short setup, commands and conventions) and PROGRESS.md (milestone
+checklist, decisions, a table of where the reachable docs differ from the spec, open
+issues and spend so far). This is the finished M0.
 
 Files added or changed in this stage:
 
-- `.gitattributes` (new): from the initial commit, unchanged
-- `LICENSE` (new): from the initial commit, unchanged
-- `docs/glasses-check.md` (new): how to check, with Meta's own sample app, that the
-  glasses stream camera frames, deliver the mic and play audio
+- `CLAUDE.md` (new): short setup, commands and conventions
+- `PROGRESS.md` (new): milestone checklist, decisions, docs-vs-spec differences, open
+  issues and spend
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -43,10 +40,21 @@ set and no network to Meta); the output under each is what they printed.
     $ python -m pytest
     ........................................................................ [ 84%]
     .............                                                            [100%]
-    85 passed in 1.23s
+    85 passed in 1.02s
 
     $ ruff check .
     All checks passed!
+
+    $ python -m backend.cli spend
+    Meta API spend (ledger: data/ledger.jsonl)
+      calls: 0  errors: 0
+      actual: $0.0000  (estimated before calls: $0.0000)
+      global cap: $120.00  remaining: $120.0000
+      per-skill cap: $10.00
+      by model:
+        (no calls yet)
+      by skill:
+        (no calls yet)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -69,11 +77,15 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   with the key coming only from a Modal Secret.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
+- `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
+  and spend.
+- `CLAUDE.md`: short setup, commands and conventions.
 - `tests/`: 85 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v11 adds the project notes: setup and conventions, and the progress log.
+Milestone M1: the teach flow for one skill (spoken request, skill spec, SAM region of
+interest, Muse Image variations, Muse Spark labels and an Axolotl dataset).
 
 ## Privacy and policy
 

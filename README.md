@@ -11,24 +11,22 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v13 (M1): Skill compiler
+## Build stage v14 (M1): Keyframe picker
 
-The skill compiler. The local policy check runs first; otherwise the request and 3
-keyframes go to Muse Wonder with a flat strict JSON schema and a system prompt that
-spells out the refusal rules. A model refusal is kept as is (also a filled-in refusal
-reason, or a native refusal), and the spec the model wrote goes through the local
-check again. Fields are clamped to the spec's limits. MetaClient.structured gains a
-validate hook, so an answer that parses but cannot become a spec is billed once and
-never cached.
+Keyframe selection for the teaching clip, from a video file (decoded with ffmpeg at 3
+frames a second) or a folder of frames as the phone sends them. The blurriest quarter
+is dropped by the variance of the Laplacian, then the sharpest frames are taken
+greedily while their difference hashes stay apart, giving 20 to 30 keyframes in time
+order; two frames with the same hash are never both kept. Decoding is bit-exact, so
+the same clip always gives the same bytes and the cache keeps working after an ffmpeg
+upgrade.
 
 Files added or changed in this stage:
 
-- `backend/meta/client.py` (changed): MetaClient, the only way the code calls Meta's
-  API: cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and
-  spend recorded from the reported usage
-- `backend/skills/compiler.py` (new): the skill compiler: the request and 3 keyframes
-  go to Muse Wonder (structured output), which returns a spec or a refusal
-- `tests/test_compiler.py` (new): tests
+- `backend/dataengine/keyframes.py` (new): the keyframe picker: 20 to 30 sharp,
+  distinct frames from the 10 second teaching clip
+- `pyproject.toml` (changed): requirements and tool settings
+- `tests/test_keyframes.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -45,13 +43,21 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 44%]
-    ........................................................................ [ 89%]
-    .................                                                        [100%]
-    161 passed in 1.55s
+    ........................................................................ [ 43%]
+    ........................................................................ [ 86%]
+    .......................                                                  [100%]
+    167 passed in 2.40s
 
     $ ruff check .
     All checks passed!
+
+    $ ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4
+
+    $ python -c "from backend.dataengine.keyframes import load_frames, select_keyframes; f = load_frames('/tmp/te-demo.mp4'); print(len(f), 'frames,', len(select_keyframes(f)), 'keyframes')"
+    30 frames, 13 keyframes
+
+Video clips are decoded with ffmpeg (on the Mac: brew install ffmpeg). The demo clip
+is ffmpeg's built-in test pattern, written to /tmp, outside the folder.
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -77,16 +83,18 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   plain-English read-back.
 - `backend/skills/compiler.py`: the skill compiler: the request and 3 keyframes go to
   Muse Wonder (structured output), which returns a spec or a refusal.
+- `backend/dataengine/keyframes.py`: the keyframe picker: 20 to 30 sharp, distinct
+  frames from the 10 second teaching clip.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
   and spend.
 - `CLAUDE.md`: short setup, commands and conventions.
-- `tests/`: 161 tests, all offline; none calls a paid API.
+- `tests/`: 167 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v14 adds the keyframe picker for the 10 second teaching clip.
+Stage v15 adds the dataset writer in Meta's Axolotl recipe format.
 
 ## Privacy and policy
 

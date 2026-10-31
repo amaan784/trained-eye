@@ -5,6 +5,7 @@
   te api-smoke      one tiny paid Muse Spark call through the cache and ledger
   te serve          run the backend (WebSocket at /ws)
   te ws-selftest    stream synthetic frames through the WebSocket, in process
+  te policy         check a request against the local policy rules (free, offline)
 """
 
 from __future__ import annotations
@@ -107,6 +108,17 @@ def cmd_ws_selftest(args) -> int:
     return 0 if acks == args.frames else 1
 
 
+def cmd_policy(args) -> int:
+    from backend.skills.spec import policy_check
+
+    refusal = policy_check(args.request)
+    if refusal:
+        print(f"refused: {refusal}")
+        return 1
+    print("ok: no local policy objection (the skill compiler checks again)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="te", description="Trained Eye")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -126,6 +138,10 @@ def build_parser() -> argparse.ArgumentParser:
     selftest = sub.add_parser("ws-selftest", help="send synthetic frames over the WebSocket")
     selftest.add_argument("--frames", type=int, default=3)
     selftest.set_defaults(func=cmd_ws_selftest)
+
+    policy = sub.add_parser("policy", help="check a request against the local policy rules")
+    policy.add_argument("request")
+    policy.set_defaults(func=cmd_policy)
     return parser
 
 

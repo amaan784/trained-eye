@@ -11,17 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v11 (M0): Project notes
+## Build stage v12 (M1): Skill spec and policy check
 
-CLAUDE.md (short setup, commands and conventions) and PROGRESS.md (milestone
-checklist, decisions, a table of where the reachable docs differ from the spec, open
-issues and spend so far). This is the finished M0.
+The skill spec as a versioned pydantic model (target with its SAM prompt, the positive
+condition, near-miss negatives, the alert, cooldown, cloud check, refusal), the
+plain-English read-back the user confirms, and a local policy check. The check
+refuses, before any API call and at no cost, requests that would identify or track a
+person (by name, pronoun or role), concern bodies, health or medication, monitor
+someone covertly, watch a sensitive place, or coach sports. Words that also name
+objects only count inside phrases, so walk signs, kitchen scales and meat thermometers
+pass. te policy runs it on any sentence.
 
 Files added or changed in this stage:
 
-- `CLAUDE.md` (new): short setup, commands and conventions
-- `PROGRESS.md` (new): milestone checklist, decisions, docs-vs-spec differences, open
-  issues and spend
+- `backend/cli.py` (changed): the te command line
+- `backend/skills/spec.py` (new): the skill spec (version 1), the local policy check
+  that refuses skills about people, health, covert monitoring or sports, and the
+  plain-English read-back
+- `pyproject.toml` (changed): requirements and tool settings
+- `tests/test_skills.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -38,23 +46,20 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 84%]
-    .............                                                            [100%]
-    85 passed in 1.02s
+    ........................................................................ [ 47%]
+    ........................................................................ [ 95%]
+    .......                                                                  [100%]
+    151 passed in 1.41s
 
     $ ruff check .
     All checks passed!
 
-    $ python -m backend.cli spend
-    Meta API spend (ledger: data/ledger.jsonl)
-      calls: 0  errors: 0
-      actual: $0.0000  (estimated before calls: $0.0000)
-      global cap: $120.00  remaining: $120.0000
-      per-skill cap: $10.00
-      by model:
-        (no calls yet)
-      by skill:
-        (no calls yet)
+    $ python -m backend.cli policy "Tell me when Sam gets here"
+    refused: I can't watch for or recognize specific people. Skills can cover objects, states, text, displays, signs and vehicles.
+    (exit code 1)
+
+    $ python -m backend.cli policy "let me know when the washer says done"
+    ok: no local policy objection (the skill compiler checks again)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -75,17 +80,20 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
+- `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
+  refuses skills about people, health, covert monitoring or sports, and the
+  plain-English read-back.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
   and spend.
 - `CLAUDE.md`: short setup, commands and conventions.
-- `tests/`: 85 tests, all offline; none calls a paid API.
+- `tests/`: 151 tests, all offline; none calls a paid API.
 
 ## Next
 
-Milestone M1: the teach flow for one skill (spoken request, skill spec, SAM region of
-interest, Muse Image variations, Muse Spark labels and an Axolotl dataset).
+Stage v13 adds the skill compiler, which turns a request and 3 keyframes into a spec
+with Muse Wonder.
 
 ## Privacy and policy
 

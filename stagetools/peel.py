@@ -21,23 +21,43 @@ from __future__ import annotations
 
 import filecmp
 import importlib.util
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-LOCAL_ONLY = {".git", ".claude", ".env", "data", "outputs", "VERSIONS.md", ".venv",
-              "stagetools", "__pycache__", ".pytest_cache", ".ruff_cache"}
-CACHES = {"__pycache__", ".pytest_cache", ".ruff_cache"}
+# Committed on build-stages but never part of a stage. Everything gitignored (.env, data/,
+# caches, .DS_Store, wandb/, ...) is left out by asking git, see project_files.
+LOCAL_ONLY = {".claude", "VERSIONS.md", "stagetools"}
+STAGE_RE = re.compile(r"^v\d+$")
+
+
+def project_files(root: Path, sub: str = "") -> list[str]:
+    """Files under root/sub that git tracks or would add (not ignored), relative to root/sub.
+    At the root itself, the stage folders and LOCAL_ONLY are left out."""
+    out = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--cached", "--others",
+                          "--exclude-standard", "--", sub or "."],
+                         check=True, capture_output=True).stdout.decode("utf-8")
+    prefix = f"{sub}/" if sub else ""
+    rels = set()
+    for rel in filter(None, out.split("\0")):
+        if not rel.startswith(prefix):
+            continue
+        rel = rel[len(prefix):]
+        top = rel.split("/", 1)[0]
+        if not sub and (top in LOCAL_ONLY or STAGE_RE.match(top)):
+            continue
+        if (root / prefix / rel).is_file():  # --cached also lists files deleted on disk
+            rels.add(rel)
+    return sorted(rels)
 
 
 def copy_root(src: Path, dst: Path) -> None:
-    def ignore(dirpath, names):
-        skip = {n for n in names if n in CACHES}
-        if Path(dirpath) == src:
-            skip |= {n for n in names if n in LOCAL_ONLY or (n[:1] == "v" and n[1:].isdigit())}
-        return skip
-    shutil.copytree(src, dst, ignore=ignore)
+    for rel in project_files(src):
+        (dst / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src / rel, dst / rel)
 
 
 def apply(text: str, old: str, new: str, where: str) -> str:
@@ -79,9 +99,9 @@ def peel(root: Path, base: int, cur: Path, prev: Path, step: dict) -> None:
         path.write_text(text, encoding="utf-8")
 
 
-def same_tree(a: Path, b: Path) -> list[str]:
+def same_tree(a: Path, b: Path, fb: set[str]) -> list[str]:
+    """Differences between folder a (all files) and folder b (only the files in fb)."""
     fa = {p.relative_to(a).as_posix() for p in a.rglob("*") if p.is_file()}
-    fb = {p.relative_to(b).as_posix() for p in b.rglob("*") if p.is_file()}
     return sorted(fa ^ fb) + sorted(r for r in fa & fb if not filecmp.cmp(a / r, b / r, False))
 
 
@@ -103,7 +123,8 @@ def main() -> None:
             probe = Path(tmp) / "probe"
             peel(root, S.BASE, root / f"v{S.FIRST}", probe, S.PEEL[S.FIRST])
             shutil.copyfile(root / f"v{S.BASE}" / "README.md", probe / "README.md")
-            diff = same_tree(probe, root / f"v{S.BASE}")
+            diff = same_tree(probe, root / f"v{S.BASE}",
+                             set(project_files(root, f"v{S.BASE}")))
         if diff:
             raise SystemExit(f"peeling v{S.FIRST} does not give v{S.BASE}: {diff}")
         print(f"peeling v{S.FIRST} once more gives v{S.BASE} exactly")

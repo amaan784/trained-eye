@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import io
 import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from PIL import Image
 
 from backend.meta.cache import sha256_hex
-from backend.meta.client import MetaClient
+from backend.meta.client import MetaClient, OutputError
 from backend.skills.spec import SkillSpec
 
 MIN_SCORE = 0.5
@@ -65,12 +66,23 @@ def best_detection(detections: list[Detection], min_score: float = MIN_SCORE) ->
     return max(confident, key=lambda d: d.area) if confident else None
 
 
-def locate(client: MetaClient, spec: SkillSpec, keyframes: list[bytes]) -> list[FrameRoi]:
+def locate(client: MetaClient, spec: SkillSpec, keyframes: list[bytes],
+           progress: Callable[[bool, float], None] | None = None) -> list[FrameRoi]:
+    """SAM on each keyframe. `progress(cached, cost_usd)` is called after each one."""
     results = []
     for image in keyframes:
         with Image.open(io.BytesIO(image)) as img:
             width, height = img.size
-        sam = client.sam_image(spec.target.sam_prompt, image, skill=spec.name)
+        try:
+            sam = client.sam_image(spec.target.sam_prompt, image, skill=spec.name)
+        except OutputError as err:  # billed but unreadable: no box for this frame
+            results.append(FrameRoi(sha256_hex(image), width, height, "", [], None,
+                                    f"error: {str(err)[:200]}"))
+            if progress:
+                progress(False, 0.0)
+            continue
+        if progress:
+            progress(sam.info.cached, sam.info.cost_usd)
         detections, parser = parse_sam_output(sam.text)
         results.append(FrameRoi(sha256_hex(image), width, height, sam.text, detections,
                                 best_detection(detections), parser))

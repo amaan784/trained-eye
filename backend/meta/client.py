@@ -9,7 +9,8 @@ Each call runs the same steps:
 
 Spend is counted conservatively: a retried attempt that may have reached the server
 (a read timeout, a 500/502/504) is charged at the estimate, and so is a reply that
-cannot be priced. Unusable outputs are charged but never cached.
+cannot be priced. The caps are checked again before each such retry. Unusable outputs
+are charged but never cached.
 
 Request shapes are OpenAI-compatible. Structured output uses Chat Completions with a
 json_schema response_format, as in Meta's cookbook recipes. SAM 3.1 uses the Responses
@@ -38,7 +39,7 @@ import httpx
 
 from backend.config import SECRET_NAMES, Settings, check_model_allowed
 from backend.meta.cache import Cache, cache_key
-from backend.meta.ledger import NO_SKILL, Entry, Ledger, token_cost, unit_cost
+from backend.meta.ledger import NO_SKILL, BudgetExceeded, Entry, Ledger, token_cost, unit_cost
 
 RETRY_STATUSES = frozenset({408, 429})
 # Statuses after which the server may already have done (and billed) the work.
@@ -91,8 +92,9 @@ class CallInfo:
     model: str
     cache_key: str
     cached: bool
-    cost_usd: float
+    cost_usd: float  # spent by this call: 0.0 on a cache hit
     usage: dict = field(default_factory=dict)
+    billed_usd: float | None = None  # what the response cost when it was made
 
 
 @dataclass
@@ -107,6 +109,7 @@ class _Tally:
     """Attempts of one call that may have been processed (and billed) by the server."""
 
     maybe_billed: int = 0
+    guard: Callable[[], None] | None = None  # re-checks the spend caps before a retry
 
 
 def _messages(input: Any, system: str | None) -> list[dict]:
@@ -277,6 +280,8 @@ class MetaClient:
                 if attempt == retries:
                     raise MetaAPIError(None, f"network error after {attempt + 1} tries: "
                                        f"{type(err).__name__}") from None
+                if tally.maybe_billed and tally.guard:
+                    tally.guard()
                 self._sleep(self._backoff(attempt, None))
                 continue
             except httpx.TransportError as err:
@@ -289,6 +294,8 @@ class MetaClient:
                 if attempt == retries:
                     raise MetaAPIError(status, f"gave up after {attempt + 1} tries: "
                                        f"{self._redact(resp.text)[:300]}")
+                if tally.maybe_billed and tally.guard:
+                    tally.guard()
                 self._sleep(self._backoff(attempt, resp.headers.get("retry-after")))
                 continue
             if not resp.is_success:
@@ -328,13 +335,14 @@ class MetaClient:
         hit = self.cache.get(key)
         if hit is not None:
             blobs = {name: self.cache.blob(key, name) for name in hit.get("blobs", [])}
-            info = CallInfo(model, key, True, 0.0, hit.get("usage", {}))
+            info = CallInfo(model, key, True, 0.0, hit.get("usage", {}), hit.get("cost_usd"))
             return hit["response"], blobs, info, check(hit["response"])
 
         self.settings.secret("MODEL_API_KEY")  # fail before touching the ledger
         self.ledger.check(estimate_usd, skill)
         entry = Entry(model, endpoint, estimate_usd, 0.0, skill=skill or NO_SKILL, cache_key=key)
         tally = _Tally()
+        tally.guard = lambda: self.ledger.check(estimate_usd * (1 + tally.maybe_billed), skill)
         try:
             response, blobs = send(tally)
         except OutputError:
@@ -343,7 +351,7 @@ class MetaClient:
             entry.actual_usd = estimate_usd * (1 + tally.maybe_billed)
             self.ledger.record(entry)
             raise
-        except MetaAPIError:
+        except (MetaAPIError, BudgetExceeded):
             entry.status = "error"
             entry.actual_usd = estimate_usd * tally.maybe_billed
             self.ledger.record(entry)
@@ -356,9 +364,11 @@ class MetaClient:
             raise
 
         usage = response.get("usage") or {}
+        if not isinstance(usage, dict):
+            usage = {"unreadable": repr(usage)[:100]}
         try:
             entry.actual_usd = cost(response) if usage else estimate_usd
-        except (TypeError, ValueError, KeyError):
+        except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
             entry.actual_usd = estimate_usd
             usage = {**usage, "unpriced": True}
         if not usage:
@@ -368,16 +378,16 @@ class MetaClient:
         if tally.maybe_billed:
             usage = {**usage, "maybe_billed_retries": tally.maybe_billed}
         entry.usage = usage
-        info = CallInfo(model, key, False, entry.actual_usd, usage)
+        info = CallInfo(model, key, False, entry.actual_usd, usage, entry.actual_usd)
         try:
             parsed = check(response)
-        except OutputError:
+        except Exception:  # served and billed, whatever went wrong reading it
             entry.status = "output_error"
             self.ledger.record(entry)
             raise
         self.ledger.record(entry)
         self.cache.put(key, {"model": model, "endpoint": endpoint, "response": response,
-                             "usage": usage}, blobs)
+                             "usage": usage, "cost_usd": entry.actual_usd}, blobs)
         return response, blobs, info, parsed
 
     # -- typed methods -----------------------------------------------------
@@ -423,11 +433,16 @@ class MetaClient:
             return token_cost(price, *token_counts(r["usage"]))
 
         def check(r):
-            choice = (r.get("choices") or [{}])[0]
-            message = choice.get("message") or {}
+            choices = r.get("choices")
+            choice = choices[0] if isinstance(choices, list) and choices else {}
+            choice = choice if isinstance(choice, dict) else {}
+            message = choice.get("message")
+            message = message if isinstance(message, dict) else {}
             content = message.get("content") or ""
             if message.get("refusal"):
                 raise OutputError(f"model refused: {message['refusal']}")
+            if not isinstance(content, str):
+                raise OutputError(f"output content is not text ({type(content).__name__})")
             if not content.strip():
                 reason = choice.get("finish_reason")
                 hint = " (raise max_tokens: reasoning used the budget)" if reason == "length" else ""
@@ -443,8 +458,9 @@ class MetaClient:
         _, _, info, data = self._call(endpoint=endpoint, model=model, key_request=payload,
                                       skill=skill, estimate_usd=estimate, send=send, cost=cost,
                                       check=check)
-        details = info.usage.get("completion_tokens_details") or {}
-        return StructuredResult(data, info, details.get("reasoning_tokens"))
+        details = info.usage.get("completion_tokens_details")
+        reasoning = details.get("reasoning_tokens") if isinstance(details, dict) else None
+        return StructuredResult(data, info, reasoning)
 
     def list_models(self) -> list[str]:
         """Model IDs the key can use. Free; not cached or recorded."""

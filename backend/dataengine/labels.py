@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from backend.dataengine.dataset import user_prompt
-from backend.meta.client import MetaClient, image_part, text_part
+from backend.meta.client import MetaAPIError, MetaClient, OutputError, image_part, text_part
 from backend.skills.spec import SkillSpec
 
 LABELS = ("yes", "no", "unsure")
@@ -29,6 +29,10 @@ SYSTEM = (
     "clearly visible, the image looks unrealistic, or it could go either way. Give a "
     "one-sentence reason."
 )
+# Spark reasons before answering and shares max_tokens with the reasoning; only a reply
+# cut off for length is asked again with the larger budget.
+MAX_TOKENS = (1024, 4096)
+SKIPPABLE_STATUSES = frozenset({400, 422})
 
 
 @dataclass
@@ -37,27 +41,48 @@ class Label:
     reason: str
     cost_usd: float
     cached: bool
+    error: bool = False  # no usable label: the call failed or the reply was unusable
 
 
 def label_image(client: MetaClient, spec: SkillSpec, image: bytes) -> Label:
+    """Spark's label for one image. A failure for this image alone (a refusal, an
+    unusable or rejected reply) gives an "unsure" Label with error=True instead of
+    stopping the whole run; the failed call is billed but not cached."""
     prompt = user_prompt(spec.positive, spec.negatives)
-    result = client.structured(
-        client.settings.model("labeler"), [image_part(image), text_part(prompt)], LABEL_SCHEMA,
-        name="frame_label", system=SYSTEM, skill=spec.name, max_tokens=1024,
-    )
-    label = result.data.get("label")
+    for max_tokens in MAX_TOKENS:
+        try:
+            result = client.structured(
+                client.settings.model("labeler"), [image_part(image), text_part(prompt)],
+                LABEL_SCHEMA, name="frame_label", system=SYSTEM, skill=spec.name,
+                max_tokens=max_tokens,
+            )
+            break
+        except MetaAPIError as err:
+            if not (isinstance(err, OutputError) or err.status in SKIPPABLE_STATUSES):
+                raise
+            if "finish_reason=length" in str(err) and max_tokens != MAX_TOKENS[-1]:
+                continue
+            return Label("unsure", f"no label: {err}"[:300], 0.0, False, error=True)
+    data = result.data if isinstance(result.data, dict) else {}
+    label = data.get("label")
     if label not in LABELS:
         label = "unsure"
-    return Label(label, str(result.data.get("reason", ""))[:300], result.info.cost_usd,
+    return Label(label, str(data.get("reason", ""))[:300], result.info.cost_usd,
                  result.info.cached)
 
 
 def filter_generated(rows: list[dict]) -> tuple[list[dict], dict]:
     """Keep rows whose `spark_label` equals the intended `label`. Returns (kept, stats).
 
-    Each row needs `label` (intended), `spark_label` and `kind`.
+    Each row needs `label` (intended), `spark_label` and `kind`. Rows whose labelling
+    failed (`label_error`) are dropped and counted apart, so the agreement rates cover only
+    images Spark actually judged.
     """
+    errors = [row for row in rows if row.get("label_error")]
+    rows = [row for row in rows if not row.get("label_error")]
     stats = {"total": len(rows), "kept": 0, "unsure": 0, "disagree": 0, "by_kind": {}}
+    if errors:
+        stats["label_errors"] = len(errors)
     kept = []
     for row in rows:
         kind = stats["by_kind"].setdefault(row["kind"], {"total": 0, "agree": 0, "unsure": 0})

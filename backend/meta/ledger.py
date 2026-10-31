@@ -15,7 +15,7 @@ from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from backend.config import Price
+from backend.config import Price, shown_path
 
 NO_SKILL = "(none)"
 
@@ -66,7 +66,11 @@ class Ledger:
         )
 
     def check(self, estimate_usd: float, skill: str | None = None) -> None:
-        """Raise BudgetExceeded if this call could push spend past a cap."""
+        """Raise BudgetExceeded if this call could push spend past a cap.
+
+        The client calls this before each call, and again before retrying an attempt that
+        may have been billed, with the estimate grown by those attempts.
+        """
         total = self.spent()
         if total + estimate_usd > self.global_cap_usd:
             raise BudgetExceeded(
@@ -111,7 +115,7 @@ def format_report(ledger: Ledger) -> str:
     t = ledger.totals()
     remaining = ledger.global_cap_usd - t["actual_usd"]
     lines = [
-        f"Meta API spend (ledger: {ledger.path})",
+        f"Meta API spend (ledger: {shown_path(ledger.path)})",
         f"  calls: {t['calls']}  errors: {t['errors']}",
         f"  actual: ${t['actual_usd']:.4f}  (estimated before calls: ${t['estimate_usd']:.4f})",
         f"  global cap: ${ledger.global_cap_usd:.2f}  remaining: ${remaining:.4f}",

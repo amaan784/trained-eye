@@ -829,5 +829,320 @@
    ]
   ],
   "tests": "185 tests"
+ },
+ "v23": {
+  "layer": "Fix: settings",
+  "changed": [
+   [
+    "backend/config.py",
+    false
+   ],
+   [
+    "backend/meta/ledger.py",
+    false
+   ],
+   [
+    "tests/conftest.py",
+    false
+   ],
+   [
+    "tests/test_config.py",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 34%]\n........................................................................ [ 69%]\n..............................................................           [100%]\n206 passed in 3.35s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ],
+   [
+    "python -m backend.config",
+    "Trained Eye settings\n  base_url: https://api.meta.ai/v1\n  data_dir: data\n  spend caps: $10.00 per skill, $120.00 global\n  train on model outputs: yes\n  models:\n    transcribe    muse-voice-transcribe-1.0\n    compiler      muse-wonder-1.0\n    sam           sam-3.1\n    image         muse-image-1.0\n    labeler       muse-spark-1.3\n    confirm       muse-spark-1.3\n    student_base  meta-models/Muse-Glimmer-30B\n                  (student_base revision a4e59da52a7b)\n  secrets:\n    MODEL_API_KEY  missing\n    HF_TOKEN       missing\n    WANDB_API_KEY  missing",
+    0
+   ]
+  ],
+  "tests": "206 tests"
+ },
+ "v24": {
+  "layer": "Fix: API client",
+  "changed": [
+   [
+    "backend/meta/client.py",
+    false
+   ],
+   [
+    "backend/meta/ledger.py",
+    false
+   ],
+   [
+    "tests/test_client.py",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 33%]\n........................................................................ [ 67%]\n....................................................................     [100%]\n212 passed in 3.98s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ],
+   [
+    "python -m backend.cli spend",
+    "Meta API spend (ledger: data/ledger.jsonl)\n  calls: 0  errors: 0\n  actual: $0.0000  (estimated before calls: $0.0000)\n  global cap: $120.00  remaining: $120.0000\n  per-skill cap: $10.00\n  by model:\n    (no calls yet)\n  by skill:\n    (no calls yet)",
+    0
+   ]
+  ],
+  "tests": "212 tests"
+ },
+ "v25": {
+  "layer": "Fix: policy check and compiler",
+  "changed": [
+   [
+    "backend/skills/compiler.py",
+    false
+   ],
+   [
+    "backend/skills/spec.py",
+    false
+   ],
+   [
+    "tests/test_compiler.py",
+    false
+   ],
+   [
+    "tests/test_skills.py",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 27%]\n........................................................................ [ 54%]\n........................................................................ [ 81%]\n..................................................                       [100%]\n266 passed in 3.87s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ],
+   [
+    "python -m backend.cli policy \"Tell me when Jos\u00e9 gets home\"",
+    "refused: I can't watch for or recognize specific people. Skills can cover objects, states, text, displays, signs and vehicles.",
+    1
+   ],
+   [
+    "python -m backend.cli policy \"Tell me when the child lock light turns off\"",
+    "ok: no local policy objection (the skill compiler checks again)",
+    0
+   ]
+  ],
+  "tests": "266 tests"
+ },
+ "v26": {
+  "layer": "Fix: keyframes",
+  "changed": [
+   [
+    "backend/dataengine/keyframes.py",
+    false
+   ],
+   [
+    "tests/test_keyframes.py",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 26%]\n........................................................................ [ 53%]\n........................................................................ [ 80%]\n....................................................                     [100%]\n268 passed in 3.37s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "268 tests"
+ },
+ "v27": {
+  "layer": "Fix: data engine failures",
+  "changed": [
+   [
+    "backend/dataengine/labels.py",
+    false
+   ],
+   [
+    "backend/dataengine/roi.py",
+    false
+   ],
+   [
+    "backend/dataengine/synth.py",
+    false
+   ],
+   [
+    "tests/test_labels.py",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 26%]\n........................................................................ [ 52%]\n........................................................................ [ 78%]\n..........................................................               [100%]\n274 passed in 4.17s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "274 tests"
+ },
+ "v28": {
+  "layer": "Fix: teach flow",
+  "changed": [
+   [
+    "backend/teach.py",
+    false
+   ],
+   [
+    "tests/test_teach.py",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 25%]\n........................................................................ [ 50%]\n........................................................................ [ 76%]\n...................................................................      [100%]\n283 passed in 5.73s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "283 tests"
+ },
+ "v29": {
+  "layer": "Fix: te teach",
+  "changed": [
+   [
+    ".env.example",
+    false
+   ],
+   [
+    "backend/cli.py",
+    false
+   ],
+   [
+    "tests/test_cli.py",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 24%]\n........................................................................ [ 48%]\n........................................................................ [ 72%]\n........................................................................ [ 96%]\n.........                                                                [100%]\n297 passed in 5.62s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ],
+   [
+    "ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4",
+    "",
+    0
+   ],
+   [
+    "python -m backend.cli teach --skill washer_done --clip /tmp/te-demo.mp4 --request \"let me know when the washer says done\" --estimate-only",
+    "estimate for washer_done (before cache hits): transcribe $0.00, compile $0.10, sam $0.03, images $3.00, labels $2.05, total $5.18\ntrain on model outputs: yes",
+    0
+   ]
+  ],
+  "tests": "297 tests"
+ },
+ "v30": {
+  "layer": "Fix: docs and notes",
+  "changed": [
+   [
+    "CLAUDE.md",
+    false
+   ],
+   [
+    "HANDOVER.md",
+    false
+   ],
+   [
+    "PROGRESS.md",
+    false
+   ],
+   [
+    "docs/glasses-check.md",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 24%]\n........................................................................ [ 48%]\n........................................................................ [ 72%]\n........................................................................ [ 96%]\n.........                                                                [100%]\n297 passed in 5.11s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ],
+   [
+    "python -m backend.cli spend",
+    "Meta API spend (ledger: data/ledger.jsonl)\n  calls: 0  errors: 0\n  actual: $0.0000  (estimated before calls: $0.0000)\n  global cap: $120.00  remaining: $120.0000\n  per-skill cap: $10.00\n  by model:\n    (no calls yet)\n  by skill:\n    (no calls yet)",
+    0
+   ]
+  ],
+  "tests": "297 tests"
  }
 }

@@ -21,6 +21,10 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_stages import isolation_problem  # noqa: E402
+from peel import project_files  # noqa: E402
+
 ROOT = Path(sys.argv[1]).resolve()
 spec = importlib.util.spec_from_file_location("stages", sys.argv[2])
 S = importlib.util.module_from_spec(spec)
@@ -42,12 +46,8 @@ def clean_env() -> dict:
 
 
 def files_of(folder: Path) -> dict[str, Path]:
-    out = {}
-    for path in sorted(folder.rglob("*")):
-        rel = path.relative_to(folder)
-        if path.is_file() and not set(rel.parts) & set(CACHES):
-            out[rel.as_posix()] = path
-    return out
+    """The stage's project files: what git tracks or would add there (nothing ignored)."""
+    return {rel: folder / rel for rel in project_files(ROOT, folder.name)}
 
 
 def scrub(folder: Path) -> None:
@@ -85,6 +85,9 @@ def serve_and_curl(cwd: Path) -> list[tuple[str, str, int]]:
 
 
 def measure(folder: Path, commands: list[str]) -> list[tuple[str, str, int]]:
+    problem = isolation_problem(folder, sys.executable, clean_env())
+    if problem:
+        sys.exit(problem)
     results = []
     for cmd in commands:
         if cmd == "SERVE_AND_CURL":
@@ -124,7 +127,7 @@ def render(k: int, n: int, folder: Path, changed: list[tuple[str, bool]],
            results: list, tests_count: str) -> str:
     st = S.STAGES[k]
     present = files_of(folder)
-    out = [f"# Trained Eye", "", "Teach your glasses to notice anything.", "", S.INTRO, ""]
+    out = ["# Trained Eye", "", "Teach your glasses to notice anything.", "", S.INTRO, ""]
     out += [f"## Build stage v{k} ({MILESTONE}): {st['layer']}", "", wrap(st["adds"]), ""]
     out += ["Files added or changed in this stage:", ""]
     for rel, added in changed:
@@ -137,9 +140,9 @@ def render(k: int, n: int, folder: Path, changed: list[tuple[str, bool]],
         setup.append("cp .env.example .env    # then fill in the keys")
     out += [block(setup), ""]
     out += ["## Try it", "",
-            wrap("These commands were run inside this folder on 2026-10-29 (Python 3.13, "
-                 "Linux, no keys set and no network to Meta); the output under each is what "
-                 "they printed."), ""]
+            wrap(f"These commands were run inside this folder on {st.get('date', '2026-10-29')} "
+                 "(Python 3.13, Linux, no keys set and no network to Meta); the output under "
+                 "each is what they printed."), ""]
     for cmd, text, code in results:
         if text is None:
             out += [block([f"$ {cmd}"]), "",
@@ -162,7 +165,7 @@ def render(k: int, n: int, folder: Path, changed: list[tuple[str, bool]],
             out.append(wrap_item(f"- `{path}`: {text}."))
     out.append(f"- `tests/`: {tests_count}, all offline; none calls a paid API.")
     out += ["", "## Next", ""]
-    if k < n:
+    if k + 1 in S.STAGES:  # the last stage of a module gets the module's closing text
         nxt = S.STAGES[k + 1]
         out.append(wrap(f"Stage v{k + 1} adds {nxt['next']}"))
     else:

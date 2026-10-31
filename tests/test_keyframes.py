@@ -1,4 +1,5 @@
 import io
+import os
 import shutil
 import subprocess
 
@@ -90,3 +91,41 @@ def test_decoded_frames_carry_no_encoder_version(tmp_path):
                    check=True)
     loaded = load_frames(video, fps=3)
     assert loaded and all(b"Lavc" not in f.data for f in loaded)
+
+
+def test_folder_frames_with_exif_orientation_are_turned_upright(tmp_path):
+    upright = Image.new("RGB", (48, 64), (255, 0, 0))
+    upright.paste((0, 0, 255), (0, 32, 48, 64))  # red top, blue bottom
+    exif = Image.Exif()
+    exif[0x0112] = 6  # stored turned, as phones and the glasses do
+    (tmp_path / "clip").mkdir()
+    upright.transpose(Image.Transpose.ROTATE_90).save(tmp_path / "clip/a.jpg", quality=95,
+                                                      exif=exif)
+    upright.save(tmp_path / "clip/b.jpg", quality=95)
+    frames = load_frames(tmp_path / "clip")
+    with Image.open(io.BytesIO(frames[0].data)) as img:
+        assert img.size == (48, 64) and img.getexif().get(0x0112, 1) == 1
+        assert img.getpixel((24, 8))[0] > 200 and img.getpixel((24, 56))[2] > 200
+    assert frames[0].gray.shape == (427, 320)
+    assert frames[1].data == (tmp_path / "clip/b.jpg").read_bytes()  # untagged: untouched
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+def test_video_decode_leaves_stdin_alone(tmp_path):
+    frames = write_frames(tmp_path / "src", [scene(i % 3) for i in range(6)])
+    video = tmp_path / "clip.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-framerate", "6", "-i",
+                    str(frames / "frame_%03d.jpg"), "-pix_fmt", "yuv420p", str(video)],
+                   check=True)
+    read_end, write_end = os.pipe()
+    os.write(write_end, b"y\n" * 50)  # answers meant for the prompts
+    os.close(write_end)
+    saved = os.dup(0)
+    try:
+        os.dup2(read_end, 0)
+        load_frames(video, fps=3)
+        assert os.read(0, 1000) == b"y\n" * 50
+    finally:
+        os.dup2(saved, 0)
+        os.close(saved)
+        os.close(read_end)

@@ -89,6 +89,7 @@ def test_structured_call_is_billed_then_cached(tmp_path):
     again = client.structured("muse-spark-1.3", [text_part("Is it done?"), image_part(JPEG)],
                               SCHEMA, name="label", skill="washer_done")
     assert again.data == {"label": "yes"} and again.info.cached and again.info.cost_usd == 0
+    assert again.info.billed_usd == pytest.approx(first.info.cost_usd)  # kept with the reply
     assert len(rec.requests) == 1
     entries = client.ledger.entries()
     assert len(entries) == 1 and entries[0]["skill"] == "washer_done"
@@ -264,6 +265,35 @@ def test_unusable_output_is_billed_but_not_cached(tmp_path, reply, message):
     entries = client.ledger.entries()
     assert all(e["actual_usd"] > 0 and e["status"] == "output_error" for e in entries)
     assert client.ledger.totals()["errors"] == 2
+
+
+def test_retries_stop_at_the_spend_cap(tmp_path):
+    rec = Recorder(*[httpx.Response(502, text="bad gateway")] * 6)
+    client, sleeps = make_client(tmp_path, rec, TE_SKILL_CAP_USD="0.10")
+    with pytest.raises(BudgetExceeded, match="skill 'washer_done'"):
+        client.image_generate("x", skill="washer_done", n=4)  # $0.04 per attempt
+    assert len(rec.requests) == 2 and len(sleeps) == 1
+    [entry] = client.ledger.entries()
+    assert entry["status"] == "error" and entry["actual_usd"] == pytest.approx(0.08)
+    assert client.ledger.spent("washer_done") <= 0.10
+
+
+@pytest.mark.parametrize("body", [
+    {**chat_reply('{"label": "yes"}'), "usage": "n/a"},
+    {**chat_reply('{"label": "yes"}'), "usage": [1, 2]},
+    {"choices": [None], "usage": {"prompt_tokens": 10, "completion_tokens": 5}},
+    chat_reply([{"type": "text", "text": '{"label": "yes"}'}]),
+    httpx.Response(200, content=json.dumps(chat_reply('{"label": "yes"}')).replace(
+        '"prompt_tokens": 1000', '"prompt_tokens": 1e999').encode()),  # parses as inf
+])
+def test_odd_200_replies_are_always_recorded(tmp_path, body):
+    client, _ = make_client(tmp_path, Recorder(body))
+    try:
+        client.structured("muse-spark-1.3", "x", SCHEMA)
+    except OutputError:
+        pass
+    [entry] = client.ledger.entries()
+    assert entry["actual_usd"] > 0  # served, so counted against the caps either way
 
 
 def test_fenced_json_and_missing_usage(tmp_path):

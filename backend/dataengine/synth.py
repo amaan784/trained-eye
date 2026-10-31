@@ -16,11 +16,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from backend.meta.cache import sha256_hex
-from backend.meta.client import EXTENSIONS, MetaClient, sniff_mime
+from backend.meta.client import EXTENSIONS, MetaAPIError, MetaClient, OutputError, sniff_mime
 from backend.skills.spec import SkillSpec, lower_first
 
 NUISANCE = (
@@ -96,6 +97,21 @@ def _clause(text: str) -> str:
     return lower_first(text)
 
 
+# Errors that concern one image (a rejected prompt, no image returned): that variation is
+# skipped and recorded. Anything else (auth, rate limits, server, budget) stops the run.
+SKIPPABLE_STATUSES = frozenset({400, 422})
+MAX_FAILED_SHARE = 0.2
+
+
+def skippable(err: MetaAPIError) -> bool:
+    return isinstance(err, OutputError) or err.status in SKIPPABLE_STATUSES
+
+
+def too_many_failures(failed: int, total: int) -> bool:
+    """More than a few items failing means something systematic is wrong: stop paying."""
+    return failed > max(5, MAX_FAILED_SHARE * total)
+
+
 def estimate_cost(client: MetaClient, count: int) -> float:
     return count * client.settings.price(client.settings.model("image")).per_image
 
@@ -105,20 +121,40 @@ def generate(
     plan: list[Variation],
     keyframes: dict[str, bytes],
     out_dir: Path,
+    progress: Callable[[bool, float], None] | None = None,
 ) -> list[dict]:
-    """Run the plan (cached), save images untouched, write manifest.jsonl."""
+    """Run the plan (cached), save images untouched, write manifest.jsonl.
+
+    A variation whose edit is rejected is recorded in the manifest with file null and the
+    error, and left out of the returned rows; failed calls are not cached, so a rerun
+    tries it again. `progress(cached, cost_usd)` is called after each item.
+    """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    rows = []
+    rows, failed = [], []
     for v in plan:
-        result = client.image_edit(keyframes[v.keyframe_sha256], v.prompt, skill=v.skill)
+        try:
+            result = client.image_edit(keyframes[v.keyframe_sha256], v.prompt, skill=v.skill)
+        except MetaAPIError as err:
+            if not skippable(err):
+                raise
+            failed.append({**asdict(v), "file": None, "error": str(err)[:300]})
+            if too_many_failures(len(failed), len(plan)):
+                raise MetaAPIError(err.status, f"{len(failed)} of {len(plan)} image edits "
+                                   f"failed so far; last: {str(err)[:300]}") from None
+            if progress:
+                progress(False, 0.0)
+            continue
         image = result.images[0]
         path = out_dir / f"{v.id}.{EXTENSIONS.get(sniff_mime(image), 'bin')}"
         path.write_bytes(image)  # always the bytes the manifest describes, untouched
         rows.append({**asdict(v), "file": path.name, "image_sha256": sha256_hex(image),
                      "model": result.info.model, "cache_key": result.info.cache_key,
-                     "cost_usd": result.info.cost_usd})
+                     # what the image cost when it was made, also on a cached rerun
+                     "cost_usd": result.info.billed_usd, "cached": result.info.cached})
+        if progress:
+            progress(result.info.cached, result.info.cost_usd)
     with (out_dir / "manifest.jsonl").open("w", encoding="utf-8") as fh:
-        for row in rows:
+        for row in rows + failed:
             fh.write(json.dumps(row, sort_keys=True) + "\n")
     return rows

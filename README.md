@@ -11,26 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v22 (M1): Handover and setup guide
+## Build stage v30 (M1 review): Fix: docs and notes
 
-HANDOVER.md, for whoever picks the project up next in a local or cloud session: where
-everything is, what is done and what is not (with the exact commands for each open
-item), the author's rules for work, policy, version stages and git, the facts from
-Meta's docs that the next milestones depend on, and the plan for M2 to M5. SETUP.md
-covers accounts and keys, the Mac, a cloud session (network, keys, the workarounds
-that were needed) and git on the stage branch. CLAUDE.md and PROGRESS.md now point to
-both. No code changes.
+The glasses check now tests that the phone reaches the Mac while CameraAccess is
+streaming (ping from the Mac during a one-minute preview); before, it switched to
+Safari, which ends the stream, so it could not tell. HANDOVER.md gains the build
+spec's visual design rules (dark and minimal, one accent colour, Inter, no gradients,
+the four signature visuals) for the iOS app and the playground, and the notes record
+the review and these fixes.
 
 Files added or changed in this stage:
 
 - `CLAUDE.md` (changed): short setup, commands and conventions
-- `HANDOVER.md` (new): how to pick the project up in a new session: state, the
+- `HANDOVER.md` (changed): how to pick the project up in a new session: state, the
   author's rules, open items with exact commands, and the plan for M2 to M5 with the
   facts from the docs
 - `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
   open issues and spend
-- `SETUP.md` (new): accounts and keys, setting up the Mac, setting up a cloud session,
-  and git on the stage branch
+- `docs/glasses-check.md` (changed): how to check, with Meta's own sample app, that
+  the glasses stream camera frames, deliver the mic and play audio
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -43,14 +42,16 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 38%]
-    ........................................................................ [ 77%]
-    .........................................                                [100%]
-    185 passed in 4.57s
+    ........................................................................ [ 24%]
+    ........................................................................ [ 48%]
+    ........................................................................ [ 72%]
+    ........................................................................ [ 96%]
+    .........                                                                [100%]
+    297 passed in 5.11s
 
     $ ruff check .
     All checks passed!
@@ -114,12 +115,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 185 tests, all offline; none calls a paid API.
+- `tests/`: 297 tests, all offline; none calls a paid API.
 
 ## Next
 
-Milestone M2: Modal QLoRA training on the washer skill, export and serving, and the
-watch loop with smoothing, the Spark confirmation and spoken alerts on the glasses.
+The confirmed findings from the second half of the review (F30 to F62), then milestone
+M2: Modal QLoRA training on the washer skill, export and serving, and the watch loop
+with smoothing, the Spark confirmation and spoken alerts on the glasses.
 
 ## Privacy and policy
 

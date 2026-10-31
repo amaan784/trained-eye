@@ -1,0 +1,6 @@
+# stagetools is branch-only tooling: lint it with the project's settings but ruff's
+# classic rule set, so a newer ruff with wider defaults cannot turn the branch's CI red.
+extend = "../pyproject.toml"
+
+[lint]
+select = ["E4", "E7", "E9", "F"]

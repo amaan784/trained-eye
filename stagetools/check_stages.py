@@ -8,12 +8,16 @@ Checks:
   3. the last stage matches the root byte for byte (local-only paths excluded).
   4. every file path a stage README names exists in that stage.
   5. no caches, secrets or generated data inside any stage.
-With --run: runs ruff, pytest and the import-location check inside every stage.
+With --run: runs ruff at the root, and ruff, pytest and the import-location check inside
+every stage. Run it with a Python that has only the dependencies installed: an installed
+copy of the project (pip install -e of the root or of a v folder) adds its folder to
+backend's namespace path, and every stage then fails the import-location check.
 """
 
 from __future__ import annotations
 
 import filecmp
+import json
 import os
 import re
 import shutil
@@ -21,8 +25,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-LOCAL_ONLY_TOP = {".git", ".claude", ".env", "data", "outputs", "VERSIONS.md", ".venv",
-                  "stagetools"}
+from peel import project_files
+
 FORBIDDEN_PARTS = {"__pycache__", ".pytest_cache", ".ruff_cache", ".env", "data", "outputs",
                    ".venv", "wandb", "build", "dist"}
 STAGE_RE = re.compile(r"^v(\d+)$")
@@ -52,6 +56,27 @@ def files_of(folder: Path, exclude_top: set[str] = frozenset()) -> dict[str, Pat
     return out
 
 
+ISOLATION_PROBE = ("import json, backend, backend.config as c; "
+                   "print(json.dumps([c.__file__, list(backend.__path__)]))")
+
+
+def isolation_problem(stage: Path, python, env: dict) -> str | None:
+    """None if backend, and every part of its namespace path, comes from inside `stage`."""
+    loc = subprocess.run([str(python), "-c", ISOLATION_PROBE], cwd=stage, env=env,
+                         capture_output=True, text=True)
+    stage = stage.resolve()
+
+    def inside(p: str) -> bool:
+        return os.path.isabs(p) and Path(p).resolve().is_relative_to(stage)
+
+    if loc.returncode == 0:
+        cfg, paths = json.loads(loc.stdout)
+        if inside(cfg) and all(inside(p) for p in paths):
+            return None
+    return (f"{stage.name}: backend imports from outside the folder (use a Python with only "
+            f"the dependencies, no pip install of the project): {loc.stdout}{loc.stderr}")
+
+
 def same(a: Path, b: Path) -> bool:
     return filecmp.cmp(a, b, shallow=False)
 
@@ -78,17 +103,17 @@ def main() -> int:
     stages = stage_dirs(root)
     problems: list[str] = []
     global ALL_BASENAMES
-    ALL_BASENAMES = {Path(r).name for r in files_of(root, exclude_top=LOCAL_ONLY_TOP)}
+    ALL_BASENAMES = {Path(r).name for r in project_files(root)}
     ALL_BASENAMES |= {"VERSIONS.md", "SPEC.md"}
     ALL_BASENAMES -= {"README.md"}
     prev: dict[str, Path] | None = None
     print(f"{len(stages)} stages: {', '.join(s.name for s in stages)}")
     for stage in stages:
-        cur = files_of(stage)
-        for rel in cur:
+        for rel in files_of(stage):  # everything on disk, ignored files included
             parts = set(Path(rel).parts)
             if parts & FORBIDDEN_PARTS or rel.endswith((".pyc", ".egg-info")) or ".egg-info/" in rel:
                 problems.append(f"{stage.name}: forbidden file {rel}")
+        cur = {rel: stage / rel for rel in project_files(root, stage.name)}
         if prev is None:
             changed = sorted(cur)
             if len(cur) > 5:
@@ -118,8 +143,8 @@ def main() -> int:
         prev = cur
 
     if stages:
-        last = files_of(stages[-1])
-        rootfiles = files_of(root, exclude_top=LOCAL_ONLY_TOP)
+        last = {rel: stages[-1] / rel for rel in project_files(root, stages[-1].name)}
+        rootfiles = {rel: root / rel for rel in project_files(root)}
         only_root = sorted(set(rootfiles) - set(last))
         only_last = sorted(set(last) - set(rootfiles))
         differ = sorted(r for r in set(last) & set(rootfiles) if not same(last[r], rootfiles[r]))
@@ -132,14 +157,15 @@ def main() -> int:
 
     if run:
         env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        root_lint = subprocess.run([str(RUFF), "check", "--no-cache", "."], cwd=root, env=env,
+                                   capture_output=True, text=True)
+        print(f"root: ruff {'ok' if root_lint.returncode == 0 else 'FAIL'}")
+        if root_lint.returncode != 0:
+            problems.append(f"root: ruff failed\n{root_lint.stdout}")
         for stage in stages:
-            loc = subprocess.run(
-                [str(VENV_PY), "-c",
-                 "import backend.config as c, backend; print(c.__file__); print(list(backend.__path__))"],
-                cwd=stage, env=env, capture_output=True, text=True,
-            )
-            if loc.returncode != 0 or str(stage) not in loc.stdout or str(root / "backend") + "'" in loc.stdout:
-                problems.append(f"{stage.name}: backend imports from outside the folder: {loc.stdout}{loc.stderr}")
+            problem = isolation_problem(stage, VENV_PY, env)
+            if problem:
+                problems.append(problem)
             lint = subprocess.run([str(RUFF), "check", "--no-cache", "."], cwd=stage, env=env,
                                   capture_output=True, text=True)
             tests = subprocess.run([str(VENV_PY), "-m", "pytest", "-p", "no:cacheprovider"],

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -51,6 +50,9 @@ def main() -> None:
         for k, st in sorted(mod.STAGES.items()):
             all_stages.append((k, label, st))
     last = max(k for k, _, _ in all_stages)
+    files = [p for p in (ROOT / f"v{last}").rglob("*") if p.is_file()]
+    largest = max(files, key=lambda p: p.stat().st_size)
+    total = sum(p.stat().st_size for p in files)
     for k, label, st in all_stages:
         m = measured[f"v{k}"]
         files = ", ".join(f"`{rel}`" + ("" if added else " (changed)") for rel, added in m["changed"])
@@ -110,6 +112,13 @@ the recording protocol and notes last.
 v22 comes after M1 and holds no code: the handover for the next session and the setup
 guide, written once M1 was finished so they describe the whole project.
 
+v23 to v30 hold the fixes from the review after M1 (bugs, version compatibility,
+functionality against the spec, the UI). They follow the same order as the layers they
+fix: settings, the API client, the policy check and compiler, keyframes, the data
+engine, the teach flow, te teach, then the docs. Each changes only files the earlier
+stages already have, so `git diff --no-index` against the stage before shows exactly
+one fix.
+
 ## How to review a stage
 
 Clone the branch next to your repository, then compare any two neighbouring folders:
@@ -140,9 +149,10 @@ description below:
     git add -A
     git commit -m "<summary>" -m "<description>"
 
-Then the same for v2, v3 and so on. Stages v1 to v11 (M0) do not change when later
-milestones are added, so if you have already committed them, carry on from v12. `git status` before each commit should show only the
-files listed for that stage. LICENSE and .gitattributes already exist in the repository
+Then the same for v2, v3 and so on. Earlier stages never change when later ones are
+added, so carry on from the first stage you have not committed yet (v23 if v1 to v22
+are already on `main`). `git status` before each commit should show only the files
+listed for that stage. LICENSE and .gitattributes already exist in the repository
 from its first commit, and the stage copies are identical, so v10 changes only its own
 files. After the last stage, `main` matches the root of the `build-stages` branch, and
 you can push it.
@@ -154,15 +164,16 @@ you can push it.
   stages were then made from it by removing layers with exact edits (whole files, or
   exact blocks such as the media part of the client), working backwards. No code outside
   a layer was rewritten. M1's stages were peeled from the finished M1 tree, and peeling
-  v12 once more gives v11 byte for byte (README aside), so M1 sits exactly on M0. Each
-  folder was then tested as its own project. The READMEs were written per stage.
+  v12 once more gives v11 byte for byte (README aside), so M1 sits exactly on M0; the
+  same holds for v22 on v21 and v23 on v22. Each folder was then tested as its own
+  project. The READMEs were written per stage, from commands run inside each folder.
 - **Files from the first commit.** `.gitignore` enters at v2 as the original Python
   template plus Trained Eye's own entries. `LICENSE` (MIT, the original) and
   `.gitattributes` enter unchanged at v10, so the last folder matches the repository.
 - **Branch-only tools.** `stagetools/` holds the scripts that built and checked these
   folders (see `stagetools/README.md`). Like this file, it lives only on this branch.
-- **Large files.** None. The largest file is `backend/meta/client.py` at about 24 KB;
-  the whole of v{last} is about 216 KB.
+- **Large files.** None. The largest file is `{largest.relative_to(ROOT / f"v{last}")}` at
+  about {largest.stat().st_size // 1024} KB; the whole of v{last} is about {total // 1024} KB.
 - **Untested paths.** The build machine had no API keys, no network access to Meta, and
   no PyPI, so these were not run:
   - live Meta API calls (`te models`, `te api-smoke`); all client tests use
@@ -177,7 +188,9 @@ you can push it.
     instead by calling `backend.cli:main` from each stage's `[project.scripts]`.
   - the GitHub Actions workflow itself; the same `ruff check .` and `pytest` were run in
     every folder.
-  - Python 3.11 and 3.12, and macOS: everything ran on Python 3.13 on Linux.
+  - Python 3.11 and 3.12, and macOS: everything ran on Python 3.13 on Linux. For the
+    review after M1 the code was also compiled with Python 3.11 and 3.12 and type-checked
+    against the 3.11 standard library, but not run there.
   - the glasses guide: written from Meta's SDK docs and samples; nobody has followed it
     on real glasses yet.
   - the teach flow against the real API (M1): every test uses a fake Meta API, so the
@@ -200,7 +213,8 @@ A script (kept outside the repository) checked every folder after it was built:
 7. Every README command was run inside its folder with no keys or `TE_*` settings in the
    environment; the outputs in the READMEs are pasted from those runs.
 8. From v4 on, the `te` entry point in `pyproject.toml` was called inside each folder.
-   For M1, peeling v12 once more was checked to give v11 exactly.
+   For each later milestone, peeling its first stage once more was checked to give the
+   stage before it exactly (v12 to v11, v22 to v21, v23 to v22).
 9. The READMEs and this file contain no emoji or em dashes.
 """
     (ROOT / "VERSIONS.md").write_text(text, encoding="utf-8")

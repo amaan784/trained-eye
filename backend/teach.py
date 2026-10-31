@@ -15,6 +15,7 @@ for evaluation, but the dataset holds only real frames with the user's own label
 
 from __future__ import annotations
 
+import functools
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -23,12 +24,14 @@ from pathlib import Path
 from backend.dataengine import dataset, labels, roi, synth
 from backend.dataengine.keyframes import load_frames, select_keyframes
 from backend.meta.cache import sha256_hex
-from backend.meta.client import EXTENSIONS, MetaClient, sniff_mime, wav_duration_s
+from backend.meta.client import EXTENSIONS, MetaAPIError, MetaClient, sniff_mime, wav_duration_s
 from backend.meta.ledger import token_cost, unit_cost
 from backend.skills.compiler import compile_skill
 from backend.skills.spec import SkillSpec, check_name, read_back
 
 IMAGE_TOKENS = 1500  # guess per image for estimates only
+LABEL_WORDS = {"yes": "yes", "y": "yes", "true": "yes", "no": "no", "n": "no", "false": "no"}
+_print = functools.partial(print, flush=True)  # progress reaches a pipe or a log as it happens
 
 
 @dataclass
@@ -41,6 +44,7 @@ class TeachOptions:
     negatives: int = 150
     audio_s: float | None = None  # length of the audio, if the caller measured it
     real_labels: dict[str, str] = field(default_factory=dict)  # keyframe file -> yes/no
+    correction: str | None = None  # the user's fix for a wrong read-back
 
 
 def estimate(client: MetaClient, *, audio_s: float, keyframes: int, positives: int,
@@ -59,6 +63,31 @@ def estimate(client: MetaClient, *, audio_s: float, keyframes: int, positives: i
     return parts
 
 
+def keyframe_name(i: int, data: bytes) -> str:
+    """kf_<position>_<content hash>: a --labels entry only matches the image it was made for."""
+    return f"kf_{i:02d}_{sha256_hex(data)[:8]}.{EXTENSIONS.get(sniff_mime(data), 'jpg')}"
+
+
+def normalise_labels(raw, names: list[str]) -> dict[str, str]:
+    """The user's own labels as {keyframe name: yes|no}. Keys may be bare names or paths
+    ending in one; values yes/no in any case (y, true, n, false also work). Raises
+    TypeError if `raw` is not an object, ValueError naming every entry that cannot be used."""
+    if not isinstance(raw, dict):
+        raise TypeError('--labels must be a JSON object like {"kf_00_1a2b3c4d.jpg": "yes"}')
+    out, bad = {}, []
+    for key, value in raw.items():
+        name, label = Path(str(key)).name, LABEL_WORDS.get(str(value).strip().lower())
+        if name in names and label:
+            out[name] = label
+        else:
+            bad.append(f"{key!r}: {value!r}")
+    if bad:
+        valid = f"{names[0]} to {names[-1]}" if names else "none (the clip gave no keyframes)"
+        raise ValueError(f"--labels entries that cannot be used: {', '.join(bad)}. Keys must "
+                         f"be keyframe names of this clip ({valid}), values yes or no")
+    return out
+
+
 def spread(items: list, count: int) -> list:
     """`count` items evenly spread over the list (first and last included)."""
     if len(items) <= count:
@@ -72,7 +101,7 @@ def run_teach(
     opts: TeachOptions,
     out_root: Path,
     confirm: Callable[[str], bool],
-    say: Callable[[str], None] = print,
+    say: Callable[[str], None] = _print,
 ) -> dict:
     check_name(opts.skill)
     root = Path(out_root) / opts.skill
@@ -85,14 +114,21 @@ def run_teach(
         raise ValueError(f"no frames found in {opts.clip}")
     kf_dir = root / "keyframes"
     kf_dir.mkdir(exist_ok=True)
-    keyframes = {}
-    for i, frame in enumerate(frames):
-        name = f"kf_{i:02d}.{EXTENSIONS.get(sniff_mime(frame.data), 'jpg')}"
-        (kf_dir / name).write_bytes(frame.data)
-        keyframes[name] = frame.data
+    keyframes = {keyframe_name(i, frame.data): frame.data for i, frame in enumerate(frames)}
+    for old in kf_dir.glob("kf_*"):
+        if old.name not in keyframes:
+            old.unlink()  # from an earlier take; keyframes are rebuilt from the clip each run
+    for name, data in keyframes.items():
+        (kf_dir / name).write_bytes(data)
     say(f"keyframes: {len(frames)} kept")
-    if not client.settings.train_on_model_outputs and not any(
-            opts.real_labels.get(name) in ("yes", "no") for name in keyframes):
+    try:
+        human = normalise_labels(opts.real_labels, list(keyframes)) if opts.real_labels else {}
+    except (TypeError, ValueError) as err:
+        report["stopped"] = str(err)
+        return report
+    if human:
+        say(f"your labels: {len(human)} of {len(keyframes)} keyframes")
+    if not client.settings.train_on_model_outputs and not human:
         report["stopped"] = ("training on model outputs is off, so the dataset needs your own "
                              f"labels: label the frames in {kf_dir} and pass --labels")
         return report
@@ -108,11 +144,15 @@ def run_teach(
         request = (opts.request or "").strip()
     if not request:
         raise ValueError("no request: pass audio or request text")
-    _write_json(root / "request.json", {"request": request, "from_audio": bool(opts.audio)})
+    _write_json(root / "request.json", {"request": request, "from_audio": bool(opts.audio),
+                                        "correction": opts.correction})
     say(f'request: "{request}"')
+    if opts.correction:
+        say(f'correction: "{opts.correction}"')
 
     # 3. skill spec, read back, confirm
-    spec = compile_skill(client, request, spread(list(keyframes.values()), 3), name=opts.skill)
+    spec = compile_skill(client, request, spread(list(keyframes.values()), 3), name=opts.skill,
+                         correction=opts.correction)
     _write_json(root / "spec.json", spec.model_dump())
     sentence = read_back(spec)
     say(sentence)
@@ -122,32 +162,57 @@ def run_teach(
         return report
 
     # 4. region of interest
-    rois = roi.locate(client, spec, list(keyframes.values()))
+    say(f"region of interest: SAM on {len(keyframes)} keyframes")
+    rois = roi.locate(client, spec, list(keyframes.values()),
+                      progress=_progress(say, "sam", len(keyframes)))
     roi.save(rois, root / "roi.json")
     report["roi_frames_with_box"] = sum(1 for r in rois if r.best)
+    say(f"region of interest: {report['roi_frames_with_box']} of {len(rois)} keyframes "
+        "with a box")
 
     # 5. synthetic variations
     by_hash = {sha256_hex(data): data for data in keyframes.values()}
     plan = synth.plan_variations(spec, list(by_hash), opts.positives, opts.negatives)
-    generated = synth.generate(client, plan, by_hash, root / "synthetic")
-    say(f"generated: {len(generated)} images")
+    say(f"generating {len(plan)} images with Muse Image (finished calls are cached, so "
+        "stopping and rerunning costs nothing for them)")
+    generated = synth.generate(client, plan, by_hash, root / "synthetic",
+                               progress=_progress(say, "images", len(plan)))
+    report["generation_failed"] = len(plan) - len(generated)
+    failed = f", {report['generation_failed']} failed" if report["generation_failed"] else ""
+    say(f"generated: {len(generated)} images{failed}")
 
     # 6. labels for every image, real and generated
-    label_rows = []
+    total = len(keyframes) + len(generated)
+    tick = _progress(say, "labels", total)
+    label_rows, label_errors = [], 0
+
+    def label(data: bytes) -> labels.Label:
+        nonlocal label_errors
+        lab = labels.label_image(client, spec, data)
+        tick(lab.cached, lab.cost_usd)
+        if lab.error:
+            label_errors += 1
+            if synth.too_many_failures(label_errors, total):
+                raise MetaAPIError(None, f"{label_errors} of {total} labels failed so far; "
+                                   f"last: {lab.reason}")
+        return lab
+
     for name, data in keyframes.items():
-        lab = labels.label_image(client, spec, data)
+        lab = label(data)
         label_rows.append({"file": f"keyframes/{name}", "source": "real", "spark_label": lab.label,
-                           "reason": lab.reason, "human_label": opts.real_labels.get(name)})
+                           "reason": lab.reason, "human_label": human.get(name),
+                           "label_error": lab.error})
     for row in generated:
-        data = (root / "synthetic" / row["file"]).read_bytes()
-        lab = labels.label_image(client, spec, data)
+        lab = label((root / "synthetic" / row["file"]).read_bytes())
         label_rows.append({**row, "file": f"synthetic/{row['file']}", "source": "synthetic",
-                           "spark_label": lab.label, "reason": lab.reason})
+                           "spark_label": lab.label, "reason": lab.reason,
+                           "label_error": lab.error})
     _write_jsonl(root / "labels.jsonl", label_rows)
     kept, stats = labels.filter_generated([r for r in label_rows if r["source"] == "synthetic"])
     _write_json(root / "label_stats.json", stats)
+    errors = f", {label_errors} could not be labelled" if label_errors else ""
     say(f"labels: kept {stats['kept']} of {stats['total']} generated "
-        f"(agreement {stats['agreement']})")
+        f"(agreement {stats['agreement']}){errors}")
 
     # 7. dataset
     examples = _examples(spec, root, label_rows, kept, client.settings.train_on_model_outputs)
@@ -166,7 +231,11 @@ def _examples(spec: SkillSpec, root: Path, rows: list[dict], kept: list[dict],
     for row in rows:
         if row["source"] != "real":
             continue
-        answer = row.get("human_label") or (row["spark_label"] if allow_model_outputs else None)
+        human = row.get("human_label")
+        if human in ("yes", "no"):
+            answer = human
+        else:
+            answer = row["spark_label"] if allow_model_outputs else None
         if answer in ("yes", "no"):
             out.append(_example(spec, root, row, answer))
     if allow_model_outputs:
@@ -181,6 +250,22 @@ def _example(spec: SkillSpec, root: Path, row: dict, answer: str) -> dataset.Exa
         answer=answer, source=row["source"], skill=spec.name, positive=spec.positive,
         negatives=list(spec.negatives),
     )
+
+
+def _progress(say: Callable[[str], None], what: str, total: int,
+              every: int = 10) -> Callable[[bool, float], None]:
+    """A callback for the paid loops: a line every `every` items and at the end."""
+    done = cached = 0
+    spent = 0.0
+
+    def tick(was_cached: bool, cost_usd: float) -> None:
+        nonlocal done, cached, spent
+        done += 1
+        cached += was_cached
+        spent += cost_usd
+        if done % every == 0 or done == total:
+            say(f"  {what} {done}/{total}  ${spent:.2f} spent  ({cached} from cache)")
+    return tick
 
 
 def _write_json(path: Path, data) -> None:

@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+train = ["modal>=1.0", "wandb>=0.19"]
 
 [project.scripts]
 te = "backend.cli:main"

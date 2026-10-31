@@ -11,25 +11,24 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v12 (M1): Skill spec and policy check
+## Build stage v13 (M1): Skill compiler
 
-The skill spec as a versioned pydantic model (target with its SAM prompt, the positive
-condition, near-miss negatives, the alert, cooldown, cloud check, refusal), the
-plain-English read-back the user confirms, and a local policy check. The check
-refuses, before any API call and at no cost, requests that would identify or track a
-person (by name, pronoun or role), concern bodies, health or medication, monitor
-someone covertly, watch a sensitive place, or coach sports. Words that also name
-objects only count inside phrases, so walk signs, kitchen scales and meat thermometers
-pass. te policy runs it on any sentence.
+The skill compiler. The local policy check runs first; otherwise the request and 3
+keyframes go to Muse Wonder with a flat strict JSON schema and a system prompt that
+spells out the refusal rules. A model refusal is kept as is (also a filled-in refusal
+reason, or a native refusal), and the spec the model wrote goes through the local
+check again. Fields are clamped to the spec's limits. MetaClient.structured gains a
+validate hook, so an answer that parses but cannot become a spec is billed once and
+never cached.
 
 Files added or changed in this stage:
 
-- `backend/cli.py` (changed): the te command line
-- `backend/skills/spec.py` (new): the skill spec (version 1), the local policy check
-  that refuses skills about people, health, covert monitoring or sports, and the
-  plain-English read-back
-- `pyproject.toml` (changed): requirements and tool settings
-- `tests/test_skills.py` (new): tests
+- `backend/meta/client.py` (changed): MetaClient, the only way the code calls Meta's
+  API: cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and
+  spend recorded from the reported usage
+- `backend/skills/compiler.py` (new): the skill compiler: the request and 3 keyframes
+  go to Muse Wonder (structured output), which returns a spec or a refusal
+- `tests/test_compiler.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -46,20 +45,13 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 47%]
-    ........................................................................ [ 95%]
-    .......                                                                  [100%]
-    151 passed in 1.41s
+    ........................................................................ [ 44%]
+    ........................................................................ [ 89%]
+    .................                                                        [100%]
+    161 passed in 1.55s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli policy "Tell me when Sam gets here"
-    refused: I can't watch for or recognize specific people. Skills can cover objects, states, text, displays, signs and vehicles.
-    (exit code 1)
-
-    $ python -m backend.cli policy "let me know when the washer says done"
-    ok: no local policy objection (the skill compiler checks again)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -83,17 +75,18 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
+- `backend/skills/compiler.py`: the skill compiler: the request and 3 keyframes go to
+  Muse Wonder (structured output), which returns a spec or a refusal.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
   and spend.
 - `CLAUDE.md`: short setup, commands and conventions.
-- `tests/`: 151 tests, all offline; none calls a paid API.
+- `tests/`: 161 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v13 adds the skill compiler, which turns a request and 3 keyframes into a spec
-with Muse Wonder.
+Stage v14 adds the keyframe picker for the 10 second teaching clip.
 
 ## Privacy and policy
 

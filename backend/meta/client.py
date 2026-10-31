@@ -393,8 +393,13 @@ class MetaClient:
         skill: str | None = None,
         max_tokens: int = 2048,
         reasoning_effort: str | None = None,
+        validate: Callable[[Any], None] | None = None,
     ) -> StructuredResult:
-        """JSON output constrained by `schema`, via Chat Completions."""
+        """JSON output constrained by `schema`, via Chat Completions.
+
+        `validate(data)` may raise OutputError for output that parses but is unusable;
+        such output is billed like any other but never cached.
+        """
         endpoint = "/chat/completions"
         messages = _messages(input, system)
         payload = {
@@ -428,9 +433,12 @@ class MetaClient:
                 hint = " (raise max_tokens: reasoning used the budget)" if reason == "length" else ""
                 raise OutputError(f"empty output, finish_reason={reason}{hint}")
             try:
-                return _parse_json_text(content)
+                data = _parse_json_text(content)
             except json.JSONDecodeError:
                 raise OutputError(f"output is not JSON: {content[:200]!r}") from None
+            if validate is not None:
+                validate(data)
+            return data
 
         _, _, info, data = self._call(endpoint=endpoint, model=model, key_request=payload,
                                       skill=skill, estimate_usd=estimate, send=send, cost=cost,

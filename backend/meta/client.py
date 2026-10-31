@@ -29,6 +29,7 @@ import base64
 import email.utils
 import io
 import json
+import math
 import random
 import re
 import time
@@ -387,6 +388,8 @@ class MetaClient:
             usage = {"unreadable": repr(usage)[:100]}
         try:
             entry.actual_usd = cost(response) if usage else estimate_usd
+            if not math.isfinite(entry.actual_usd) or entry.actual_usd < 0:
+                raise ValueError("not a cost")  # nan or a negative would switch the caps off
         except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
             entry.actual_usd = estimate_usd
             usage = {**usage, "unpriced": True}

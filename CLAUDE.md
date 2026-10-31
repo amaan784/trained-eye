@@ -24,6 +24,13 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
                                      # teach flow; prints a cost estimate and asks first
                                      # --correct "<fix>" after a wrong read-back,
                                      # --labels <json> with names from keyframes/
+    te train --skills washer_done --run exp1-mixed --smoke
+                                     # the recipe's two-step smoke on Modal; asks first.
+                                     # Without --smoke: the real run, priced from the smoke
+    te watch --skills washer_done --clip <video or frame folder>
+                                     # replay a clip through watch mode (needs TE_STUDENT_URL)
+    te calibrate --skill washer_done --log <frame log> --labels <true ranges json>
+                                     # threshold from labelled validation clips
     modal run backend/training/wandb_smoke.py   # one W&B run from Modal
 
 ## Conventions

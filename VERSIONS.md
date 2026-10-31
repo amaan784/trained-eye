@@ -1,6 +1,6 @@
 # Version stages
 
-The finished project split into stages v1 to v38, in the order a developer would build
+The finished project split into stages v1 to v49, in the order a developer would build
 it, so it can be reviewed and committed one layer at a time. These folders and this file
 live only on the `build-stages` branch; they are not part of the project itself.
 
@@ -13,7 +13,7 @@ live only on the `build-stages` branch; they are not part of the project itself.
   over the repository and committed.
 - Every folder runs on its own: it has its own README, `pyproject.toml` (requirements and
   tool settings), tests and CI workflow, and nothing in it points into another folder.
-- The last folder, v38, is the finished project: byte for byte the same as the
+- The last folder, v49, is the finished project: byte for byte the same as the
   repository root, apart from local-only things (this file, the v folders,
   `stagetools/`, caches, `.env`, `data/`).
 - Folders hold code and docs only: no caches, generated data or secrets.
@@ -60,6 +60,17 @@ live only on the `build-stages` branch; they are not part of the project itself.
 | v36 | M1 review: Fix: teach flow and te teach | The teach flow and te teach fixes: inputs checked before the estimate, a worst-case figure, and datasets that must hold both answers. | `backend/cli.py` (changed), `backend/teach.py` (changed), `tests/test_cli.py` (changed), `tests/test_teach.py` (changed), `README.md` (changed) | `ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4` | 400 passed |
 | v37 | M1 review: Fix: CI and setup | CI and setup: ffmpeg in CI, Python 3.12 and ffmpeg in the Mac setup, and the W&B team note. | `.env.example` (changed), `.github/workflows/ci.yml` (changed), `CLAUDE.md` (changed), `README.md` (changed) | `python -m pytest` | 400 passed |
 | v38 | M1 review: Fix: docs and notes, second round | The docs for these fixes: the estimator figures for a real clip, the recording protocol and the notes. | `HANDOVER.md` (changed), `PROGRESS.md` (changed), `docs/recording-protocol.md` (changed), `README.md` (changed) | `python -m backend.cli spend` | 400 passed |
+| v39 | M1 review: Fix: client and settings, third round | The client and settings fixes from a review of v31 to v38: costs that are not numbers, and an unknown home folder. | `backend/config.py` (changed), `backend/meta/client.py` (changed), `tests/test_client.py` (changed), `tests/test_config.py` (changed), `README.md` (changed) | `python -m backend.cli spend` | 404 passed |
+| v40 | M1 review: Fix: policy check and compiler, third round | The policy and compiler fixes from that review: two-name arrivals, titles, the glasses' light, and fewer false refusals. | `backend/skills/compiler.py` (changed), `backend/skills/spec.py` (changed), `tests/test_compiler.py` (changed), `tests/test_skills.py` (changed), `README.md` (changed) | `python -m backend.cli policy "Tell me when Sam and Jake get home"` | 442 passed |
+| v41 | M2: Watch trigger and calibration | The watch trigger, 3 of the last 4 frames over the threshold, then the cooldown, and the threshold calibration. | `backend/watch/trigger.py`, `tests/test_trigger.py`, `README.md` (changed) | `python -m pytest` | 452 passed |
+| v42 | M2: Student scorer | The student scorer: the trained model behind an OpenAI-compatible endpoint, read at its answer token. | `backend/inference/student.py`, `tests/test_student.py`, `README.md` (changed) | `python -m pytest` | 461 passed |
+| v43 | M2: Watcher | The watcher: frames in, alerts out, with the Muse Spark check and a frame log. | `backend/watch/watcher.py`, `tests/test_watcher.py`, `README.md` (changed) | `python -m pytest` | 468 passed |
+| v44 | M2: Watch mode on the server | Watch mode on the WebSocket: the phone names the skills, and the server sends scores and alerts. | `backend/config.py` (changed), `backend/server.py` (changed), `tests/test_config.py` (changed), `tests/test_server.py` (changed), `README.md` (changed) | `python -m backend.config` | 474 passed |
+| v45 | M2: Training bundle and config | The training data: taught skills bundled for Modal, and the Axolotl config from Meta's recipe. | `backend/training/axolotl.py`, `backend/training/prepare.py`, `tests/test_training_prep.py`, `README.md` (changed) | `python -m pytest` | 481 passed |
+| v46 | M2: Modal training app | The Modal training app: one H100, the recipe's pins, the volume and both Modal Secrets. | `backend/training/modal_train.py`, `tests/test_modal_train.py`, `README.md` (changed) | `python -m pytest` | 485 passed |
+| v47 | M2: te train, te watch, te calibrate | The commands: te train on Modal, te watch to replay a clip, te calibrate for the threshold. | `CLAUDE.md` (changed), `backend/cli.py` (changed), `backend/config.py` (changed), `tests/test_cli.py` (changed), `README.md` (changed) | `python -m backend.cli train --help` | 496 passed |
+| v48 | M2: Docs and notes | The notes for these stages: the review round, what M2 has so far, and the steps that need the Mac or Modal. | `.env.example` (changed), `HANDOVER.md` (changed), `PROGRESS.md` (changed), `docs/recording-protocol.md` (changed), `README.md` (changed) | `python -m backend.cli spend` | 496 passed |
+| v49 | M1 review: Fix: te teach messages | The last small fixes from the review of v31 to v38, in te teach. | `backend/cli.py` (changed), `backend/teach.py` (changed), `tests/test_cli.py` (changed), `tests/test_teach.py` (changed), `README.md` (changed) | `python -m pytest` | 498 passed |
 
 Every README lists the exact commands and the output they printed when run inside that
 folder.
@@ -98,6 +109,15 @@ v31 to v38 hold the second half of that review (F30 to F62) and the faults a sec
 check found in the v23 to v30 fixes themselves, in the same order: the API client,
 settings and the spend report, the policy check and compiler, keyframes and generated
 images, labels and SAM, the teach flow with te teach, CI and setup, then the docs.
+v39 and v40 hold what a review of v31 to v38 found: the client and settings, then the
+policy check and compiler.
+
+M2 (v41 to v48) holds the parts of the milestone that need neither the Mac nor Modal.
+Watch mode is built from the decision outwards: when a skill fires, how a frame is
+scored, the watcher that joins them, then the server that serves it to the phone. The
+training side follows the order a run takes: the bundle and the config, the Modal app
+that trains, then the commands that drive both, and the notes last. v49 comes after
+them with the last small fixes from the review of v31 to v38, in te teach.
 
 ## How to review a stage
 
@@ -130,7 +150,7 @@ description below:
     git commit -m "<summary>" -m "<description>"
 
 Then the same for v2, v3 and so on. Earlier stages never change when later ones are
-added, so carry on from the first stage you have not committed yet (v31 if v1 to v30
+added, so carry on from the first stage you have not committed yet (v39 if v1 to v38
 are already on `main`). `git status` before each commit should show only the files
 listed for that stage. LICENSE and .gitattributes already exist in the repository
 from its first commit, and the stage copies are identical, so v10 changes only its own
@@ -289,6 +309,50 @@ Adds an ffmpeg install step to the CI workflow, switches the Mac setup in CLAUDE
 
 Updates the cost figures, records the second review round, its open questions and the M2 and M4 notes in HANDOVER.md and PROGRESS.md, and extends the teaching-clip section of docs/recording-protocol.md.
 
+**v39.** `Fix cost checks and the TE_DATA_DIR home error`
+
+Falls back to the estimate when a computed cost is not finite or is negative, so a malformed usage or duration can no longer switch the spend caps off, and turns an unexpandable ~user in TE_DATA_DIR into a ConfigError. Tests cover NaN, -9e9 and 1e999 durations and the unknown user.
+
+**v40.** `Fix named-person gaps and false refusals in policy`
+
+Reworks the named-arrival patterns (two names, titles, contracted 's, readings with units), narrows the capture-light, covert, sports and count rules to what they mean, adds object phrases, bounds the negation in corrections, checks the model's trigger with its 'when', and fixes the read-back's capitals. Tests cover every case the review reported.
+
+**v41.** `Add the watch trigger and threshold calibration`
+
+Adds the 3-of-4 trigger with cooldown, gap reset and snooze, the alert simulation and evaluation over labelled clips, the calibration that picks the lowest threshold with at most one false alarm per hour, and the reader for watch frame logs, with tests.
+
+**v42.** `Add the student scorer for an OpenAI-style endpoint`
+
+Adds OpenAIStudent, which sends a frame as the dataset builds it and reads the yes/no probability from the answer token's logprobs, with tests for the request, the reasoning before the answer and endpoint failures.
+
+**v43.** `Add the watcher with the Spark check and frame log`
+
+Adds Watcher, the alert message, the frame log and load_skill, with tests for a confirmed alert, a cloud no, a failed check, skills without the check, student errors and two skills at once.
+
+**v44.** `Add watch mode to the WebSocket server`
+
+Lets a session ask to watch taught skills, scores each frame in a worker thread, sends scores in the acks and alert messages, and reports a watch request that cannot be met without ending the session. Adds the student endpoint settings. Tests cover the protocol, the errors and the default watcher.
+
+**v45.** `Add the training bundle and the Axolotl config`
+
+Adds the bundle writer with variants, limits, validation split and volume paths, and the config builder that copies Meta's QLoRA recipe and changes only paths, names and gradient accumulation. Tests compare the config with the recipe and cover every bundle option.
+
+**v46.** `Add the Modal training app with the recipe pins`
+
+Adds the Modal app, image, volume and training function, the bundle upload and the local entrypoint, with static tests for the pins, the GPU, the secrets and the bundle check.
+
+**v47.** `Add te train, te watch and te calibrate`
+
+Adds the three commands, the H100 price setting and their CLAUDE.md lines. Tests cover the smoke, a priced run, the over-$15 question, input errors, a failed run, a replay and a calibration that watch mode then uses.
+
+**v48.** `Update the notes for the review and M2 so far`
+
+Records the review fixes and the offline half of M2 in HANDOVER.md and PROGRESS.md, with the next steps on Modal and the Mac and corrected cost figures, adds the student settings to .env.example, and extends the teaching-clip section of docs/recording-protocol.md.
+
+**v49.** `Fix te teach input checks and stop messages`
+
+Checks the normalised request text, adds a non-negative count type for --positives and --negatives, prints the failure reason before the hint, and corrects two messages. Tests cover each.
+
 ## Notes
 
 - **Reconstructed stages.** Each milestone was written as one finished tree, and its
@@ -296,15 +360,15 @@ Updates the cost figures, records the second review round, its open questions an
   exact blocks such as the media part of the client), working backwards. No code outside
   a layer was rewritten. M1's stages were peeled from the finished M1 tree, and peeling
   v12 once more gives v11 byte for byte (README aside), so M1 sits exactly on M0; the
-  same holds for v22 on v21, v23 on v22 and v31 on v30. Each folder was then tested as its own
+  same holds for v22 on v21, v23 on v22, v31 on v30 and v39 on v38. Each folder was then tested as its own
   project. The READMEs were written per stage, from commands run inside each folder.
 - **Files from the first commit.** `.gitignore` enters at v2 as the original Python
   template plus Trained Eye's own entries. `LICENSE` (MIT, the original) and
   `.gitattributes` enter unchanged at v10, so the last folder matches the repository.
 - **Branch-only tools.** `stagetools/` holds the scripts that built and checked these
   folders (see `stagetools/README.md`). Like this file, it lives only on this branch.
-- **Large files.** None. The largest file is `backend/meta/client.py` at
-  about 27 KB; the whole of v38 is about 336 KB.
+- **Large files.** None. The largest file is `HANDOVER.md` at
+  about 29 KB; the whole of v49 is about 429 KB.
 - **Untested paths.** The build machine had no API keys, no network access to Meta, and
   no PyPI, so these were not run:
   - live Meta API calls (`te models`, `te api-smoke`); all client tests use
@@ -321,6 +385,11 @@ Updates the cost figures, records the second review round, its open questions an
     every folder (GitHub ran it on the branch root after each push).
   - `te serve` on a real network: its phone address and log setup were tested with
     uvicorn's run replaced.
+  - training on Modal (M2): the Modal app was read by its tests, not run, and `te train`
+    was tested with the modal command replaced. The CUDA image tag and the H100 price
+    are unchecked.
+  - the student endpoint: no trained model exists yet, so the scorer, `te watch` and
+    watch mode were tested against fake endpoints.
   - Python 3.11 and 3.12, and macOS: everything ran on Python 3.13 on Linux. For the
     review after M1 the code was also compiled with Python 3.11 and 3.12 and type-checked
     against the 3.11 standard library, but not run there.
@@ -338,7 +407,7 @@ A script (kept outside the repository) checked every folder after it was built:
 1. v1 has at most 5 files, and each later stage adds or changes at most 5 files compared
    with the one before (README included).
 2. Every folder contains every file of the folder before it.
-3. v38 matches the repository root byte for byte (local-only things excluded).
+3. v49 matches the repository root byte for byte (local-only things excluded).
 4. Every file a README names, in backticks or as a bare file name, exists in that folder.
 5. No folder holds caches, `.env`, `data/`, build output or secrets.
 6. Inside every folder: `ruff check .` and `python -m pytest` pass, and `backend` imports
@@ -347,5 +416,5 @@ A script (kept outside the repository) checked every folder after it was built:
    environment; the outputs in the READMEs are pasted from those runs.
 8. From v4 on, the `te` entry point in `pyproject.toml` was called inside each folder.
    For each later milestone, peeling its first stage once more was checked to give the
-   stage before it exactly (v12 to v11, v22 to v21, v23 to v22, v31 to v30).
+   stage before it exactly (v12 to v11, v22 to v21, v23 to v22, v31 to v30, v39 to v38).
 9. The READMEs and this file contain no emoji or em dashes.

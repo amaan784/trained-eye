@@ -11,24 +11,22 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v38 (M1 review): Fix: docs and notes, second round
+## Build stage v49 (M1 review): Fix: te teach messages
 
-HANDOVER.md and PROGRESS.md give the estimator's figures for a real 10 s clip, with
-the worst case, record this round of fixes and the questions it leaves for the author
-and the organizers, and add notes for M2 (dataset paths on the Modal volume) and M4
-(shipping what regenerates the generated images). The recording protocol asks for
-movement during the teaching look and, with training on model outputs off, for a look
-in which the condition becomes true.
+te teach now refuses a --request of only spaces and negative --positives or
+--negatives before it shows the estimate (before, the first was only noticed after the
+spend question, and the second printed a negative estimate). After a stop for too many
+failures it prints the reason first, then the hint, and exits with code 2. A --labels
+file that names a keyframe twice, the second time with an unusable value, now says the
+value is the problem. The keyframe warning says what it checks: fewer than 20.
 
 Files added or changed in this stage:
 
-- `HANDOVER.md` (changed): how to pick the project up in a new session: state, the
-  author's rules, open items with exact commands, and the plan for M2 to M5 with the
-  facts from the docs
-- `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
-  open issues and spend
-- `docs/recording-protocol.md` (changed): what real clips to record for the three
-  skills, and how to keep training and test sessions apart
+- `backend/cli.py` (changed): the te command line
+- `backend/teach.py` (changed): the teach flow end to end, cached so a rerun costs
+  nothing
+- `tests/test_cli.py` (changed): tests
+- `tests/test_teach.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -45,27 +43,17 @@ These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 18%]
-    ........................................................................ [ 36%]
-    ........................................................................ [ 54%]
+    ........................................................................ [ 14%]
+    ........................................................................ [ 28%]
+    ........................................................................ [ 43%]
+    ........................................................................ [ 57%]
     ........................................................................ [ 72%]
-    ........................................................................ [ 90%]
-    ........................................                                 [100%]
-    400 passed in 7.09s
+    ........................................................................ [ 86%]
+    ..................................................................       [100%]
+    498 passed in 14.58s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli spend
-    Meta API spend (ledger: data/ledger.jsonl)
-      calls: 0  errors: 0
-      actual: $0.0000  (estimated before calls: $0.0000)
-      global cap: $120.00  remaining: $120.0000
-      per-skill cap: $10.00
-      by model:
-        (no calls yet)
-      by skill:
-        (no calls yet)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -86,6 +74,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
+- `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
+  recipe with the run's paths, W&B names and gradient accumulation for one H100.
+- `backend/training/prepare.py`: bundles taught skills into one training set for Modal
+  (real, synthetic or mixed, with a validation split and volume paths).
+- `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
+  recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -103,6 +97,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/dataengine/labels.py`: Muse Spark labels for every image, the filter that
   keeps generated images only when Spark agrees, and agreement stats.
 - `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
+- `backend/watch/trigger.py`: when a skill fires: 3 of the last 4 frames over the
+  threshold, then the cooldown; the threshold calibration on labelled clips.
+- `backend/inference/student.py`: scores a frame with the trained model on an
+  OpenAI-compatible endpoint, read at its yes or no answer token.
+- `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
+  alert, alert messages and the frame log.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -115,12 +115,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 400 tests, all offline; none calls a paid API.
+- `tests/`: 498 tests, all offline; none calls a paid API.
 
 ## Next
 
-Milestone M2: Modal QLoRA training on the washer skill, export and serving, and the
-watch loop with smoothing, the Spark confirmation and spoken alerts on the glasses.
+The rest of M2 on Modal and the Mac: the two-step smoke and the first training run
+(asking first), export and serving, the iOS app, and thresholds from labelled
+validation footage.
 
 ## Privacy and policy
 

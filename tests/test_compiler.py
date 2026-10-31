@@ -206,7 +206,7 @@ def test_correction_is_policy_checked_and_sent(tmp_path, monkeypatch):
     "not the bathroom light, the one on the lid",
     "not a person, the delivery van",
     "the red light, not the kid's toy",
-    "the lid light instead of the one by the shower in the bathroom",
+    "the lid light instead of the bathroom light",
 ])
 def test_what_a_correction_rules_out_is_not_policy_checked(tmp_path, monkeypatch, correction):
     monkeypatch.chdir(tmp_path)
@@ -219,6 +219,10 @@ def test_what_a_correction_rules_out_is_not_policy_checked(tmp_path, monkeypatch
 @pytest.mark.parametrize("correction", [
     "not the van but the person at the door", "not the car, when Sam gets here",
     "the pill organizer, not the box", "not the stove, secretly watch the hallway",
+    "not the door opening I mean when Sam gets here",
+    "not the lid light watch my neighbor secretly",
+    "the hallway and do not let my roommate notice",
+    "the front door rather than the window when Sam gets here",
 ])
 def test_a_refused_correction_says_it_was_the_correction(tmp_path, monkeypatch, correction):
     monkeypatch.chdir(tmp_path)
@@ -260,3 +264,20 @@ def test_the_rest_of_the_model_wording_gets_the_topic_rules(tmp_path, monkeypatc
     spec = compile_skill(client_with({**ACCEPTED, field: value}, []),
                          "let me know when the washer says done", [JPEG])
     assert spec.refused
+
+
+@pytest.mark.parametrize("positive", ["When Sam walks through the front door",
+                                      "When Jake's car pulls in", "Once Priya is home"])
+def test_a_named_person_in_the_model_trigger_is_refused(tmp_path, monkeypatch, positive):
+    monkeypatch.chdir(tmp_path)
+    spec = compile_skill(client_with({**ACCEPTED, "positive": positive}, []),
+                         "tell me when the front door opens", [JPEG])
+    assert spec.refused and "specific people" in spec.refusal_reason
+
+
+def test_a_bus_shelter_description_is_not_a_sensitive_place(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    reply = {**ACCEPTED, "target_description": "the arrival sign in the bus shelter"}
+    spec = compile_skill(client_with(reply, []),
+                         "Tell me when the bus shelter sign shows 2 minutes", [JPEG])
+    assert not spec.refused

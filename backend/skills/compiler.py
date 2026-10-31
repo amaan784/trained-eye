@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from backend.meta.client import MetaClient, OutputError, image_part, text_part
 from backend.skills.spec import (
+    OBJECT_PHRASES,
     REFUSALS,
     SENSITIVE_WORDS,
     SkillSpec,
@@ -37,9 +38,15 @@ MAX_REQUEST = 500  # SkillSpec.request
 # places may not.
 PLACES = tuple(w for w in SENSITIVE_WORDS if w not in ("bathroom", "restroom", "toilet"))
 # What a correction rules out ("not the bathroom light, the one on the lid") is not
-# what it asks for, so it is left out of the correction's policy check.
-NEGATED = re.compile(r"\b(?:not|isn't|isnt|instead of|rather than)\s+[^,;.]*?"
-                     r"(?=[,;.]|\s+but\b|\s+and\b|$)", re.IGNORECASE)
+# what it asks for, so it is left out of the correction's policy check: up to five words
+# after "not", stopping at punctuation and at words that start a new clause, so "not the
+# light tell me when Sam gets here" is still checked from "tell".
+_CLAUSE = (r"but|and|or|so|when|whenever|if|once|until|while|because|to|i|tell|remind|let|"
+           r"watch|notify|alert|warn|track|follow|record")
+NEGATED = re.compile(r"\b(?:not|isn't|isnt|instead of|rather than)\s+"
+                     rf"(?:(?!(?:{_CLAUSE})\b)[^\s,;.!?:\u2014\u2013-]+"
+                     r"(?:\s+|(?=[,;.!?:\u2014\u2013-])|$)){1,5}",
+                     re.IGNORECASE)
 
 COMPILE_SCHEMA = {
     "type": "object",
@@ -146,12 +153,13 @@ def compile_skill(
         # rest may mention people and rooms at home in passing ("someone opens the door
         # mid-cycle"), so it gets the covert, health and sports rules, and the description
         # also the person and sensitive-place rules.
+        # The trigger is checked with its "when" put back, as the user would say it.
         description = spec.target.description
-        refusal = (policy_check(f"{spec.target.sam_prompt}. {spec.positive}")
+        refusal = (policy_check(f"{spec.target.sam_prompt}. When {spec.positive}")
                    or topic_check(". ".join([description, *spec.negatives, spec.alert])))
         if not refusal and policy_check(description) == REFUSALS["person"]:
             refusal = REFUSALS["person"]
-        if not refusal and _has_word(normalise(description), PLACES):
+        if not refusal and _has_word(OBJECT_PHRASES.sub(" ", normalise(description)), PLACES):
             refusal = REFUSALS["sensitive"]
         if refusal:
             return SkillSpec(name=skill_name, request=request, refused=True,

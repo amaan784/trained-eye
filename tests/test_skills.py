@@ -119,6 +119,8 @@ def test_read_back_handles_capitalised_model_phrasing():
      "I'll watch these two burners and tell you when both flames are out."),
     ("Its front display", "End shows",
      "I'll watch its front display and tell you when End shows."),
+    ("The LG washer display", "Ready light turns green",
+     "I'll watch the LG washer display and tell you when ready light turns green."),
 ])
 def test_read_back_wording(description, positive, expected):
     spec = SkillSpec(**{**WASHER, "target": Target(sam_prompt="x", description=description),
@@ -191,6 +193,21 @@ def test_check_name_rejects(name):
     "Tell me when I've had 500 kcal",
     "tell me when I take my vitamins",
     "Tell me when the pillbox is open",
+    "Tell me when Sam and Jake get home",
+    "Tell me when Mike and Sarah arrive",
+    "Tell me when Sam or Jake gets home",
+    "Tell me when Mary Jane Watson arrives",
+    "Tell me when Mr. Dyson arrives",
+    "Tell me when Sam's at the door",
+    "Tell me when Sam's outside",
+    "Tell me when the guys get here",
+    "Tell me when the nannies leave",
+    "Watch the door and turn the capture light off",
+    "Watch the hallway and hide the LED",
+    "Turn off the LED on the glasses while you watch the door",
+    "Watch the door without the capture light on",
+    "count my bicep curls",
+    "discreetly watch the front door",
 ])
 def test_policy_refuses_review_cases(request_text):
     assert policy_check(request_text) is not None
@@ -236,6 +253,20 @@ def test_policy_refuses_review_cases(request_text):
     "Tell me when the glass cleaner bottle is empty",
     "Tell me when the courier van arrives",
     "Tell me when the rice cooker comes on",
+    "Tell me when Brita's filter light comes on",
+    "Tell me when Rivian's battery gets to 80%",
+    "Tell me when Ecobee gets to 70 degrees",
+    "Tell me when my lift arrives",
+    "Tell me when my pitch deck finishes uploading",
+    "Give me a discreet alert when the oven is done",
+    "Tell me when the Snoopy night light turns on",
+    "Count the planks on the pallet",
+    "Count my Lego sets",
+    "Count my espresso shots",
+    "Tell me if I forget to turn off the recording light",
+    "Tell me when the router comes back with the LED off",
+    "Tell me when the walk signal shows the green men",
+    "Tell me when the parent folder finishes syncing",
 ])
 def test_policy_allows_object_skills(request_text):
     assert policy_check(request_text) is None

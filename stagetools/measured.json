@@ -1472,5 +1472,422 @@
    ]
   ],
   "tests": "400 tests"
+ },
+ "v39": {
+  "layer": "Fix: client and settings, third round",
+  "changed": [
+   [
+    "backend/config.py",
+    false
+   ],
+   [
+    "backend/meta/client.py",
+    false
+   ],
+   [
+    "tests/test_client.py",
+    false
+   ],
+   [
+    "tests/test_config.py",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 17%]\n........................................................................ [ 35%]\n........................................................................ [ 53%]\n........................................................................ [ 71%]\n........................................................................ [ 89%]\n............................................                             [100%]\n404 passed in 8.40s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ],
+   [
+    "python -m backend.cli spend",
+    "Meta API spend (ledger: data/ledger.jsonl)\n  calls: 0  errors: 0\n  actual: $0.0000  (estimated before calls: $0.0000)\n  global cap: $120.00  remaining: $120.0000\n  per-skill cap: $10.00\n  by model:\n    (no calls yet)\n  by skill:\n    (no calls yet)",
+    0
+   ]
+  ],
+  "tests": "404 tests"
+ },
+ "v40": {
+  "layer": "Fix: policy check and compiler, third round",
+  "changed": [
+   [
+    "backend/skills/compiler.py",
+    false
+   ],
+   [
+    "backend/skills/spec.py",
+    false
+   ],
+   [
+    "tests/test_compiler.py",
+    false
+   ],
+   [
+    "tests/test_skills.py",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 16%]\n........................................................................ [ 32%]\n........................................................................ [ 48%]\n........................................................................ [ 65%]\n........................................................................ [ 81%]\n........................................................................ [ 97%]\n..........                                                               [100%]\n442 passed in 8.84s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ],
+   [
+    "python -m backend.cli policy \"Tell me when Sam and Jake get home\"",
+    "refused: I can't watch for or recognize specific people. Skills can cover objects, states, text, displays, signs and vehicles.",
+    1
+   ],
+   [
+    "python -m backend.cli policy \"Tell me when Ecobee gets to 70 degrees\"",
+    "ok: no local policy objection (the skill compiler checks again)",
+    0
+   ]
+  ],
+  "tests": "442 tests"
+ },
+ "v41": {
+  "layer": "Watch trigger and calibration",
+  "changed": [
+   [
+    "backend/watch/trigger.py",
+    true
+   ],
+   [
+    "tests/test_trigger.py",
+    true
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 15%]\n........................................................................ [ 31%]\n........................................................................ [ 47%]\n........................................................................ [ 63%]\n........................................................................ [ 79%]\n........................................................................ [ 95%]\n....................                                                     [100%]\n452 passed in 9.29s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "452 tests"
+ },
+ "v42": {
+  "layer": "Student scorer",
+  "changed": [
+   [
+    "backend/inference/student.py",
+    true
+   ],
+   [
+    "tests/test_student.py",
+    true
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 15%]\n........................................................................ [ 31%]\n........................................................................ [ 46%]\n........................................................................ [ 62%]\n........................................................................ [ 78%]\n........................................................................ [ 93%]\n.............................                                            [100%]\n461 passed in 7.93s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "461 tests"
+ },
+ "v43": {
+  "layer": "Watcher",
+  "changed": [
+   [
+    "backend/watch/watcher.py",
+    true
+   ],
+   [
+    "tests/test_watcher.py",
+    true
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 15%]\n........................................................................ [ 30%]\n........................................................................ [ 46%]\n........................................................................ [ 61%]\n........................................................................ [ 76%]\n........................................................................ [ 92%]\n....................................                                     [100%]\n468 passed in 9.15s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "468 tests"
+ },
+ "v44": {
+  "layer": "Watch mode on the server",
+  "changed": [
+   [
+    "backend/config.py",
+    false
+   ],
+   [
+    "backend/server.py",
+    false
+   ],
+   [
+    "tests/test_config.py",
+    false
+   ],
+   [
+    "tests/test_server.py",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 15%]\n........................................................................ [ 30%]\n........................................................................ [ 45%]\n........................................................................ [ 60%]\n........................................................................ [ 75%]\n........................................................................ [ 91%]\n..........................................                               [100%]\n474 passed in 8.72s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ],
+   [
+    "python -m backend.config",
+    "Trained Eye settings\n  base_url: https://api.meta.ai/v1\n  data_dir: data\n  spend caps: $10.00 per skill, $120.00 global\n  train on model outputs: yes\n  student: not set (TE_STUDENT_URL) (trained-eye)\n  models:\n    transcribe    muse-voice-transcribe-1.0\n    compiler      muse-wonder-1.0\n    sam           sam-3.1\n    image         muse-image-1.0\n    labeler       muse-spark-1.3\n    confirm       muse-spark-1.3\n    student_base  meta-models/Muse-Glimmer-30B\n                  (student_base revision a4e59da52a7b)\n  secrets:\n    MODEL_API_KEY  missing\n    HF_TOKEN       missing\n    WANDB_API_KEY  missing",
+    0
+   ],
+   [
+    "python -m backend.cli ws-selftest",
+    "connected: session s1, protocol 1\nframe 1: ack 640x480, 5427 bytes\nframe 2: ack 640x480, 5426 bytes\nframe 3: ack 640x480, 5426 bytes\nsent 3 frames, got 3 acks",
+    0
+   ]
+  ],
+  "tests": "474 tests"
+ },
+ "v45": {
+  "layer": "Training bundle and config",
+  "changed": [
+   [
+    "backend/training/axolotl.py",
+    true
+   ],
+   [
+    "backend/training/prepare.py",
+    true
+   ],
+   [
+    "tests/test_training_prep.py",
+    true
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 14%]\n........................................................................ [ 29%]\n........................................................................ [ 44%]\n........................................................................ [ 59%]\n........................................................................ [ 74%]\n........................................................................ [ 89%]\n.................................................                        [100%]\n481 passed in 11.17s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "481 tests"
+ },
+ "v46": {
+  "layer": "Modal training app",
+  "changed": [
+   [
+    "backend/training/modal_train.py",
+    true
+   ],
+   [
+    "tests/test_modal_train.py",
+    true
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 14%]\n........................................................................ [ 29%]\n........................................................................ [ 44%]\n........................................................................ [ 59%]\n........................................................................ [ 74%]\n........................................................................ [ 89%]\n.....................................................                    [100%]\n485 passed in 10.40s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "485 tests"
+ },
+ "v47": {
+  "layer": "te train, te watch, te calibrate",
+  "changed": [
+   [
+    "CLAUDE.md",
+    false
+   ],
+   [
+    "backend/cli.py",
+    false
+   ],
+   [
+    "backend/config.py",
+    false
+   ],
+   [
+    "tests/test_cli.py",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 14%]\n........................................................................ [ 29%]\n........................................................................ [ 43%]\n........................................................................ [ 58%]\n........................................................................ [ 72%]\n........................................................................ [ 87%]\n................................................................         [100%]\n496 passed in 12.86s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ],
+   [
+    "python -m backend.cli train --help",
+    "usage: te train [-h] --skills SKILLS --run RUN\n                [--variant {mixed,real,synthetic}] [--limit LIMIT] [--smoke]\n                [--estimate-only] [--yes]\n\noptions:\n  -h, --help            show this help message and exit\n  --skills SKILLS       comma-separated, e.g. washer_done\n  --run RUN             run name, e.g. exp1-mixed\n  --variant {mixed,real,synthetic}\n  --limit LIMIT         at most this many examples per skill\n  --smoke               the recipe's two-step check\n  --estimate-only       bundle and price only\n  --yes                 no question (not over $15)",
+    0
+   ]
+  ],
+  "tests": "496 tests"
+ },
+ "v48": {
+  "layer": "Docs and notes",
+  "changed": [
+   [
+    ".env.example",
+    false
+   ],
+   [
+    "HANDOVER.md",
+    false
+   ],
+   [
+    "PROGRESS.md",
+    false
+   ],
+   [
+    "docs/recording-protocol.md",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 14%]\n........................................................................ [ 29%]\n........................................................................ [ 43%]\n........................................................................ [ 58%]\n........................................................................ [ 72%]\n........................................................................ [ 87%]\n................................................................         [100%]\n496 passed in 13.13s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ],
+   [
+    "python -m backend.cli spend",
+    "Meta API spend (ledger: data/ledger.jsonl)\n  calls: 0  errors: 0\n  actual: $0.0000  (estimated before calls: $0.0000)\n  global cap: $120.00  remaining: $120.0000\n  per-skill cap: $10.00\n  by model:\n    (no calls yet)\n  by skill:\n    (no calls yet)",
+    0
+   ]
+  ],
+  "tests": "496 tests"
+ },
+ "v49": {
+  "layer": "Fix: te teach messages",
+  "changed": [
+   [
+    "backend/cli.py",
+    false
+   ],
+   [
+    "backend/teach.py",
+    false
+   ],
+   [
+    "tests/test_cli.py",
+    false
+   ],
+   [
+    "tests/test_teach.py",
+    false
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 14%]\n........................................................................ [ 28%]\n........................................................................ [ 43%]\n........................................................................ [ 57%]\n........................................................................ [ 72%]\n........................................................................ [ 86%]\n..................................................................       [100%]\n498 passed in 14.58s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "498 tests"
  }
 }

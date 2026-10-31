@@ -297,6 +297,18 @@ def test_odd_200_replies_are_always_recorded(tmp_path, body):
     assert entry["actual_usd"] > 0  # served, so counted against the caps either way
 
 
+@pytest.mark.parametrize("duration", ["NaN", "-9e9", "1e999"])
+def test_a_reported_cost_that_is_not_a_cost_is_charged_at_the_estimate(tmp_path, duration):
+    body = ('{"text": "tell me when the pot boils", "duration": ' + duration + "}").encode()
+    rec = Recorder(httpx.Response(200, content=body), chat_reply('{"label": "yes"}'))
+    client, _ = make_client(tmp_path, rec)
+    client.transcribe(wav_bytes(), skill="pot_boils")
+    [entry] = client.ledger.entries()
+    assert entry["actual_usd"] == pytest.approx(0.18 * 2 / 3600) and entry["usage"]["unpriced"]
+    client.structured("muse-spark-1.3", "x", SCHEMA, skill="pot_boils")  # the caps still work
+    assert client.ledger.spent() > entry["actual_usd"]
+
+
 def test_ctrl_c_during_a_call_is_charged(tmp_path):
     rec = Recorder(KeyboardInterrupt(), chat_reply('{"label": "yes"}'))
     client, _ = make_client(tmp_path, rec)

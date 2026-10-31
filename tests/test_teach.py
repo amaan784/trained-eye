@@ -442,10 +442,17 @@ def test_labels_so_far_are_saved_when_labelling_stops(tmp_path):
 
 def test_a_short_clip_warns_about_few_keyframes(tmp_path):
     _, said = teach(tmp_path, fallback_client(tmp_path, FakeMeta()), clip=clip(tmp_path / "c", 8))
-    assert any(line.startswith("warning: fewer keyframes") for line in said)
+    assert any(line.startswith("warning: fewer than 20 keyframes") for line in said)
 
 
 def test_estimate_prices_the_label_retry_as_an_upper_bound(tmp_path):
     client = client_for(tmp_path, FakeMeta())
     parts = estimate(client, audio_s=5, keyframes=24, positives=150, negatives=150)
     assert parts["at_most"] > parts["total"] + parts["labels"]  # 4096 tokens after 1024
+
+
+def test_a_repeated_label_with_an_unusable_value_says_what_is_wrong():
+    with pytest.raises(ValueError) as err:
+        normalise_labels({"kf_00_1a2b3c4d.jpg": "yes", "keyframes/kf_00_1a2b3c4d.jpg": "maybe"},
+                         ["kf_00_1a2b3c4d.jpg"])
+    assert "'maybe'" in str(err.value) and "opposite" not in str(err.value)

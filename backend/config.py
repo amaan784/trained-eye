@@ -57,6 +57,11 @@ PRICES = {
     "muse-voice-transcribe-1.0": Price(per_audio_hour=0.18),
 }
 
+# Modal GPU list price per hour, used for training estimates. Not checked: modal.com was
+# not reachable from the build sandbox. Check modal.com/pricing and fix it here.
+MODAL_GPU_USD_PER_HOUR = {"H100": 3.95}
+ASK_ABOVE_USD = 15.0  # the author's rule: ask before any job estimated over this
+
 
 class ConfigError(RuntimeError):
     pass
@@ -85,6 +90,10 @@ class Settings:
     max_retries: int = 5
     # False = SPEC.md's fallback: train on real frames and the user's own labels only.
     train_on_model_outputs: bool = True
+    # The trained student's OpenAI-compatible endpoint for watch mode (llama-server on the
+    # Mac or vLLM on Modal) and the model name it serves.
+    student_url: str | None = None
+    student_model: str = "trained-eye"
     secrets: Mapping[str, str] = field(default_factory=dict, repr=False)
 
     @property
@@ -187,16 +196,23 @@ def load_settings(
         # Fail closed: a misspelt "off" must not leave training on model outputs switched on.
         raise ConfigError(f"{name} must be 1 or 0, got {merged[name]!r}")
 
+    raw_dir = merged.get("TE_DATA_DIR") or str(Settings.data_dir)
+    try:
+        data_dir = Path(raw_dir).expanduser()  # here, as .env files are not read by a shell
+    except RuntimeError:
+        raise ConfigError(f"TE_DATA_DIR {raw_dir!r}: cannot expand ~ (no such user?)") from None
+
     return Settings(
         base_url=(merged.get("TE_BASE_URL") or Settings.base_url).rstrip("/"),
-        # ~ is expanded here: .env files are not read by a shell
-        data_dir=PROJECT_ROOT / Path(merged.get("TE_DATA_DIR") or Settings.data_dir).expanduser(),
+        data_dir=PROJECT_ROOT / data_dir,
         models=models,
         skill_cap_usd=number("TE_SKILL_CAP_USD", Settings.skill_cap_usd),
         global_cap_usd=number("TE_GLOBAL_CAP_USD", Settings.global_cap_usd),
         max_retries=number("TE_MAX_RETRIES", Settings.max_retries, int),
         train_on_model_outputs=switch("TE_TRAIN_ON_MODEL_OUTPUTS",
                                       Settings.train_on_model_outputs),
+        student_url=(merged.get("TE_STUDENT_URL") or "").strip().rstrip("/") or None,
+        student_model=(merged.get("TE_STUDENT_MODEL") or "").strip() or Settings.student_model,
         secrets={name: merged[name] for name in SECRET_NAMES if merged.get(name)},
     )
 
@@ -219,6 +235,8 @@ def describe(settings: Settings) -> str:
             f"${settings.global_cap_usd:.2f} global"
         ),
         f"  train on model outputs: {'yes' if settings.train_on_model_outputs else 'no'}",
+        (f"  student: {settings.student_url or 'not set (TE_STUDENT_URL)'} "
+         f"({settings.student_model})"),
         "  models:",
     ]
     width = max(len(job) for job in settings.models)

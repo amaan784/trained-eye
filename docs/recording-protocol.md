@@ -48,7 +48,7 @@ spoken request recorded as audio (for example on the phone's voice memo app).
     data/teach/washer_done/request.m4a
 
 Move your head a little during the look (closer, a step aside, a slight tilt): the
-teach flow keeps 20 to 30 sharp, different keyframes and says so when it finds fewer.
+teach flow keeps 20 to 24 sharp, different keyframes and says so when it finds fewer than 20.
 Video works best; a folder of frames must be JPEG, PNG or WebP (export iPhone HEIC photos
 as JPEG first).
 

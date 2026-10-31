@@ -187,3 +187,17 @@ def test_module_entry_point(tmp_path):
     ).stdout
     assert out.startswith("Trained Eye settings")
     assert FAKE_KEY not in out
+
+
+def test_student_endpoint_settings():
+    s = load_settings(env={}, env_file=None)
+    assert s.student_url is None and s.student_model == "trained-eye"
+    assert "student: not set (TE_STUDENT_URL)" in describe(s)
+    s = load_settings(env={"TE_STUDENT_URL": " http://192.168.1.23:8080/v1/ ",
+                           "TE_STUDENT_MODEL": "washer-v1"}, env_file=None)
+    assert (s.student_url, s.student_model) == ("http://192.168.1.23:8080/v1", "washer-v1")
+
+
+def test_an_unknown_home_folder_is_a_config_error():
+    with pytest.raises(ConfigError, match="TE_DATA_DIR"):
+        load_settings(env={"TE_DATA_DIR": "~no_such_user_te_8f3/x"}, env_file=None)

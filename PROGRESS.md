@@ -1,15 +1,16 @@
 # Progress
 
 The source of truth between sessions. Updated at the end of every milestone.
-Last update: 2026-10-31, fixes from the review after M1 (stages v23 to v38).
+Last update: 2026-10-31, the review fixes after M1 (v23 to v40, v49) and the offline parts of M2 (v41 to v48).
 
 ## Status
 
-M0 and M1 code are done and tested offline (400 tests, none calls a paid API). A full
+M0 and M1 code are done and tested offline (498 tests, none calls a paid API). A full
 review after M1 (bugs, version compatibility, functionality against SPEC.md, the UI)
 found 27 confirmed problems in F1 to F29, fixed in stages v23 to v30. The rest, F30 to
-F62, and a second check of those fixes are fixed in stages v31 to v38 (see "Review after
-M1" below). M2 comes next.
+F62, and a second check of those fixes are fixed in stages v31 to v38, and a review of
+those in v39, v40 and v49 (see "Review after M1" below). The parts of M2 that need neither
+the Mac nor Modal are stages v41 to v48; training, serving and the iOS app come next.
 HANDOVER.md explains how to pick the project up; SETUP.md covers setup. What is still
 open needs the Mac, the keys, the glasses or new footage:
 
@@ -17,9 +18,9 @@ open needs the Mac, the keys, the glasses or new footage:
 2. the first live Meta calls: `te models` (free), then `te api-smoke` (under $0.01)
 3. the W&B smoke run from Modal: `modal run backend/training/wandb_smoke.py`
 4. the first real washer teach run: `te teach --skill washer_done --clip <10 s clip>
-   --audio <request>`. For a 10 s clip (20 to 30 keyframes) and the default 150 positives
-   and 150 negatives the estimator prints about $5.25 to $5.34, and at most $11.52 to
-   $11.80 if every label has to be asked again with the larger budget (over the $10 skill
+   --audio <request>`. For a 10 s clip (20 to 24 keyframes) and the default 150 positives
+   and 150 negatives the estimator prints about $5.25 to $5.28, and at most $11.52 to
+   $11.63 if every label has to be asked again with the larger budget (over the $10 skill
    cap, which would then stop the run partway). Run a small batch first
    (`--positives 6 --negatives 6`) and check the SAM output and the images by eye.
 5. real clips for all three skills (`docs/recording-protocol.md`)
@@ -95,11 +96,38 @@ open needs the Mac, the keys, the glasses or new footage:
   with python3.12 and ffmpeg; the `.env.example` W&B note
 - [x] Docs (v38): estimator figures for a real clip, the recording protocol (both states
   in the teaching clip), M2 and M4 notes, open questions
+- [x] A review of v31 to v38 (v39 and v40): a reported cost of NaN or below zero is
+  charged at the estimate instead (it would have switched the caps off); an unknown
+  `~user` in `TE_DATA_DIR` is a settings error; the policy check refuses two names ("Sam
+  and Jake arrive"), titles with brand names, "Sam's at the door" and more ways to hide
+  the glasses' light, and no longer refuses brand readings, "my lift", "discreet" alerts,
+  object counts or other devices' recording lights; a correction's "not" covers at most
+  five words; the model's trigger is checked with its "when"
+- [x] The same review's small `te teach` fixes (v49): a blank `--request` and negative
+  counts are refused before the estimate, the failure reason prints before the hint, and
+  a repeated label with a bad value gets the right message
 
 ### M2, Fri to Sat: training and watching
 
-- [ ] Modal QLoRA training on the washer skill, export, serving (Mac or Modal)
-- [ ] Watch loop: smoothing, Spark confirmation, spoken alerts on the glasses
+- [x] Watch trigger: 3 of the last 4 frames over the threshold, then the cooldown; a
+  stream pause starts the window again; `calibrate()` picks the lowest threshold with at
+  most one false alarm per hour of labelled footage
+- [x] Student scorer for an OpenAI-compatible endpoint, sending each frame as the
+  training examples were built and reading the answer token's logprobs
+- [x] Watcher: Muse Spark checks an alert first (a no snoozes the skill for a minute, a
+  failed check alerts unconfirmed); every scored frame goes to a JSON-lines log
+- [x] Watch mode on the WebSocket: `"watch"` in the hello, scores in each ack, alerts
+- [x] Training bundle (skills combined, real, synthetic or mixed, a validation split,
+  image paths on the Modal volume) and the Axolotl config, which is Meta's QLoRA recipe
+  with this run's paths, W&B names and gradient accumulation 32 on one H100
+- [x] Modal training app with the recipe's pins; `te train` (smoke first, then a run
+  priced from the smoke, asking always over $15) and `te watch` (replay a clip)
+- [ ] The two-step smoke and the first real run on Modal (asks first)
+- [ ] Export (merge) and serving on the Mac or Modal, then `TE_STUDENT_URL`
+- [ ] The iOS app (needs Xcode on the Mac)
+- [x] `te calibrate`: a skill's threshold from replayed validation clips and their true
+  time ranges
+- [ ] Thresholds from real labelled validation footage (needs footage and M3's labels)
 
 ### M3, Sat to Sun: all skills and experiments
 
@@ -182,6 +210,16 @@ open needs the Mac, the keys, the glasses or new footage:
   Auth, rate-limit, server and budget errors always stop it.
 - **Keyframe names** are `kf_<position>_<first 8 hex of the SHA-256>.<ext>`, so a labels
   file made for another take of the clip cannot label the wrong frames.
+- **The student is scored at its answer token.** The scorer asks the endpoint for
+  logprobs and reads the last generated yes or no, renormalised over the two; a reply
+  without one is an error, never a guess. It needs no chat template, so it works the same
+  on vLLM and on llama-server.
+- **Alerts:** a skill fires on 3 of its last 4 frames at or over its threshold, then waits
+  for its cooldown. If Muse Spark says no, the skill waits a minute instead; if the check
+  fails, the alert goes out marked unconfirmed (missing the washer is worse than one
+  unchecked alert). Frames are never written; the log holds times, scores and decisions.
+- **Training config as JSON:** the Axolotl config is Meta's recipe written as JSON (YAML
+  reads it), with only the paths, the W&B names and gradient accumulation changed.
 - **Provenance:** generated images are stored exactly as returned; the padded dataset PNGs
   are derived copies, and the dataset manifest maps every example back to its source and
   the SHA-256 of the original image. Only real, approved footage is ever published.
@@ -198,7 +236,7 @@ sources disagree with SPEC.md, the sources win.
 |---|---|---|---|
 | 1 | Base URL `https://api.meta.ai/v1`, model IDs, prices, SAM output format, image and audio endpoints | None of it is in the cookbook or the DAT repo (they cover only open-weight models) | Kept from SPEC.md, marked unverified; `te models` checks the IDs on the first live call |
 | 2 | `structured(model, input, schema)`, request shape not given | Cookbook recipes use Chat Completions with `response_format` json_schema | Implemented that way |
-| 3 | Score frames by the probability that the first token is yes or no | Glimmer and Spark always reason first (`to=self` channel), so the first token is not the answer; the recipe's targets are an explanation followed by the answer, not a bare yes or no | M2: prefill up to the answer channel and read the yes/no logits there; check how a bare yes/no target renders before training |
+| 3 | Score frames by the probability that the first token is yes or no | Glimmer and Spark always reason first (`to=self` channel), so the first token is not the answer; the recipe's targets are an explanation followed by the answer, not a bare yes or no | M2: the scorer generates with logprobs and reads the answer token (the last yes or no), renormalised over the two; prefilling up to the answer channel is a later speed-up; check how a bare yes/no target renders before training |
 | 4 | Base model pinned "to the revision the guide uses" | Cookbook pins `a4e59da52a7bc87ae7251dd5545c0dd437c44b68` | Pinned in `backend/config.py` |
 | 5 | Dataset: images inline, system prompt in every example | Recipe uses image parts with an absolute local PNG `path`; its examples have no system turn; images padded to 512x512 | M1 follows the recipe; system turn kept but can be folded into the user text |
 | 6 | QLoRA verified on one H100; L40S or A100 if needed | Meta verified quality on 8x H100; 1x H100 only as a 2-step smoke (peak about 27 GB, on a 96 GB H100); L40S and A100 untested; no merge step in the cookbook | M2: own 2-step smoke on Modal first; merge is our own step |

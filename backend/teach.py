@@ -35,7 +35,7 @@ from backend.skills.spec import SkillSpec, check_name, read_back
 IMAGE_TOKENS = 1500  # guess per image for estimates only
 LABEL_WORDS = {"yes": "yes", "y": "yes", "true": "yes", "no": "no", "n": "no", "false": "no"}
 KEYFRAME_FILE = re.compile(r"kf_\d{2}(?:_[0-9a-f]{8})?\.(?:jpg|png|webp)")  # written here
-MIN_KEYFRAMES = 20  # SPEC: 20 to 30 from the 10 s clip
+MIN_KEYFRAMES = 20  # SPEC asks for 20 to 30; select_keyframes keeps at most 24
 MIN_CLASS_SHARE = 0.1  # below this, warn that the dataset is unbalanced
 _print = functools.partial(print, flush=True)  # progress reaches a pipe or a log as it happens
 
@@ -104,7 +104,7 @@ def normalise_labels(raw, names: list[str]) -> dict[str, str]:
         name, label = Path(str(key)).name, LABEL_WORDS.get(str(value).strip().lower())
         if name in names and label and out.get(name, label) == label:
             out[name] = label
-        elif name in out:
+        elif label and name in out:
             bad.append(f"{key!r}: {value!r} (says the opposite of an earlier entry)")
         else:
             bad.append(f"{key!r}: {value!r}")
@@ -170,8 +170,8 @@ def run_teach(
     keyframes = save_keyframes(kf_dir, frames)
     say(f"keyframes: {len(frames)} kept")
     if len(frames) < MIN_KEYFRAMES:
-        say(f"warning: fewer keyframes than the {MIN_KEYFRAMES} to 30 aimed for; a 10 s clip "
-            "with more movement gives more")
+        say(f"warning: fewer than {MIN_KEYFRAMES} keyframes; a 10 s clip with more movement "
+            "gives more")
     try:
         human = normalise_labels(opts.real_labels, list(keyframes)) if opts.real_labels else {}
     except (TypeError, ValueError) as err:

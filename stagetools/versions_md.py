@@ -123,6 +123,15 @@ v31 to v38 hold the second half of that review (F30 to F62) and the faults a sec
 check found in the v23 to v30 fixes themselves, in the same order: the API client,
 settings and the spend report, the policy check and compiler, keyframes and generated
 images, labels and SAM, the teach flow with te teach, CI and setup, then the docs.
+v39 and v40 hold what a review of v31 to v38 found: the client and settings, then the
+policy check and compiler.
+
+M2 (v41 to v48) holds the parts of the milestone that need neither the Mac nor Modal.
+Watch mode is built from the decision outwards: when a skill fires, how a frame is
+scored, the watcher that joins them, then the server that serves it to the phone. The
+training side follows the order a run takes: the bundle and the config, the Modal app
+that trains, then the commands that drive both, and the notes last. v49 comes after
+them with the last small fixes from the review of v31 to v38, in te teach.
 
 ## How to review a stage
 
@@ -155,7 +164,7 @@ description below:
     git commit -m "<summary>" -m "<description>"
 
 Then the same for v2, v3 and so on. Earlier stages never change when later ones are
-added, so carry on from the first stage you have not committed yet (v31 if v1 to v30
+added, so carry on from the first stage you have not committed yet (v39 if v1 to v38
 are already on `main`). `git status` before each commit should show only the files
 listed for that stage. LICENSE and .gitattributes already exist in the repository
 from its first commit, and the stage copies are identical, so v10 changes only its own
@@ -170,7 +179,7 @@ you can push it.
   exact blocks such as the media part of the client), working backwards. No code outside
   a layer was rewritten. M1's stages were peeled from the finished M1 tree, and peeling
   v12 once more gives v11 byte for byte (README aside), so M1 sits exactly on M0; the
-  same holds for v22 on v21, v23 on v22 and v31 on v30. Each folder was then tested as its own
+  same holds for v22 on v21, v23 on v22, v31 on v30 and v39 on v38. Each folder was then tested as its own
   project. The READMEs were written per stage, from commands run inside each folder.
 - **Files from the first commit.** `.gitignore` enters at v2 as the original Python
   template plus Trained Eye's own entries. `LICENSE` (MIT, the original) and
@@ -195,6 +204,11 @@ you can push it.
     every folder (GitHub ran it on the branch root after each push).
   - `te serve` on a real network: its phone address and log setup were tested with
     uvicorn's run replaced.
+  - training on Modal (M2): the Modal app was read by its tests, not run, and `te train`
+    was tested with the modal command replaced. The CUDA image tag and the H100 price
+    are unchecked.
+  - the student endpoint: no trained model exists yet, so the scorer, `te watch` and
+    watch mode were tested against fake endpoints.
   - Python 3.11 and 3.12, and macOS: everything ran on Python 3.13 on Linux. For the
     review after M1 the code was also compiled with Python 3.11 and 3.12 and type-checked
     against the 3.11 standard library, but not run there.
@@ -221,7 +235,7 @@ A script (kept outside the repository) checked every folder after it was built:
    environment; the outputs in the READMEs are pasted from those runs.
 8. From v4 on, the `te` entry point in `pyproject.toml` was called inside each folder.
    For each later milestone, peeling its first stage once more was checked to give the
-   stage before it exactly (v12 to v11, v22 to v21, v23 to v22, v31 to v30).
+   stage before it exactly (v12 to v11, v22 to v21, v23 to v22, v31 to v30, v39 to v38).
 9. The READMEs and this file contain no emoji or em dashes.
 """
     (ROOT / "VERSIONS.md").write_text(text, encoding="utf-8")

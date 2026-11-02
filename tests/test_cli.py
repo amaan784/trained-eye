@@ -67,3 +67,42 @@ def test_api_error_is_a_clean_error(env, monkeypatch, capsys):
     assert cli.main(["models"]) == 2
     err = capsys.readouterr().err
     assert "401" in err and "sk-test-cli-key" not in err
+
+
+def write_clip(folder, n=12):
+    from backend.cli import synthetic_jpeg
+
+    folder.mkdir()
+    for i in range(n):
+        (folder / f"f{i:03d}.jpg").write_bytes(synthetic_jpeg(i, size=(320, 240)))
+    return folder
+
+
+def test_teach_estimate_only_makes_no_call(env, monkeypatch, capsys):
+    calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    clip = write_clip(env / "clip")
+    code = cli.main(["teach", "--skill", "washer_done", "--clip", str(clip), "--request",
+                     "let me know when the washer says done", "--estimate-only"])
+    assert code == 0 and calls == []
+    out = capsys.readouterr().out
+    assert out.startswith("estimate for washer_done") and "images $3.00" in out
+
+
+def test_teach_refused_request_stops_for_free(env, monkeypatch, capsys):
+    calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    clip = write_clip(env / "clip")
+    code = cli.main(["teach", "--skill", "sam_arrives", "--clip", str(clip), "--request",
+                     "Tell me when Sam gets here", "--yes"])
+    assert code == 1 and calls == []
+    out = capsys.readouterr().out
+    assert "I can't learn that one." in out and "stopped: refused" in out
+
+
+def test_teach_rejects_a_bad_skill_name_before_anything(env, monkeypatch, capsys):
+    calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    clip = write_clip(env / "clip")
+    code = cli.main(["teach", "--skill", "washer-done", "--clip", str(clip), "--request",
+                     "let me know when the washer says done", "--yes"])
+    assert code == 2 and calls == []
+    assert "snake_case" in capsys.readouterr().err
+    assert not (env / "data" / "skills").exists()

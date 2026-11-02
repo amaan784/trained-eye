@@ -11,24 +11,18 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v19 (M1): Teach flow
+## Build stage v20 (M1): te teach
 
-The teach flow end to end: request (typed, or audio through Voice Transcribe),
-keyframes, skill spec and read-back, then nothing more unless the user confirms; then
-region of interest, synthetic set, labels and dataset, each written under
-data/skills/<skill>/. Every call is cached, so a rerun costs nothing. A settings
-switch, TE_TRAIN_ON_MODEL_OUTPUTS=0, keeps generating and labelling for evaluation but
-trains on real frames with the user's own labels only (the build spec's fallback);
-without those labels it stops after the free keyframe step. The skill name is checked
-before anything else.
+The te teach command: it measures the clip and the audio, prints a cost estimate per
+step, asks before spending, reads the spec back and asks again, then runs the teach
+flow and prints the spend report. --estimate-only stops after the estimate, --labels
+takes your own keyframe labels, and --yes skips both questions. A skill name that is
+not snake_case is rejected first.
 
 Files added or changed in this stage:
 
-- `backend/config.py` (changed): settings: model IDs for every job, prices, spend caps
-  and data paths; secrets come from the environment or a local .env file and are never
-  printed
-- `backend/teach.py` (new): the teach flow end to end, cached so a rerun costs nothing
-- `tests/test_teach.py` (new): tests
+- `backend/cli.py` (changed): the te command line
+- `tests/test_cli.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -45,13 +39,23 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 39%]
-    ........................................................................ [ 79%]
-    ......................................                                   [100%]
-    182 passed in 4.20s
+    ........................................................................ [ 38%]
+    ........................................................................ [ 77%]
+    .........................................                                [100%]
+    185 passed in 4.55s
 
     $ ruff check .
     All checks passed!
+
+    $ ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4
+
+    $ python -m backend.cli teach --skill washer_done --clip /tmp/te-demo.mp4 --request "let me know when the washer says done" --estimate-only
+    estimate for washer_done (before cache hits): transcribe $0.00, compile $0.10, sam $0.03, images $3.00, labels $2.05, total $5.18
+
+The estimate is an upper bound: each label is priced at its full output budget and
+each image at 1,500 input tokens, since the real image token count is not known yet.
+Video clips are decoded with ffmpeg (on the Mac: brew install ffmpeg). The demo clip
+is ffmpeg's built-in test pattern, written to /tmp, outside the folder.
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -94,11 +98,11 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
   and spend.
 - `CLAUDE.md`: short setup, commands and conventions.
-- `tests/`: 182 tests, all offline; none calls a paid API.
+- `tests/`: 185 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v20 adds te teach, which prints a cost estimate and asks before spending.
+Stage v21 adds the recording protocol for real clips and the updated project notes.
 
 ## Privacy and policy
 

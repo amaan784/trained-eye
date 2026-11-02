@@ -6,6 +6,7 @@
   te serve          run the backend (WebSocket at /ws)
   te ws-selftest    stream synthetic frames through the WebSocket, in process
   te policy         check a request against the local policy rules (free, offline)
+  te teach          teach a skill: request + 10 s clip -> spec, generated data, labels, dataset
 """
 
 from __future__ import annotations
@@ -13,7 +14,10 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import shutil
+import subprocess
 import sys
+from pathlib import Path
 
 from backend.config import ConfigError, load_settings
 from backend.meta.client import MetaAPIError, MetaClient
@@ -119,6 +123,63 @@ def cmd_policy(args) -> int:
     return 0
 
 
+def audio_duration_s(path: Path) -> float | None:
+    """Duration via ffprobe, for audio formats the client cannot measure itself."""
+    if shutil.which("ffprobe") is None:
+        return None
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+         str(path)], capture_output=True, text=True, check=False,
+    )
+    try:
+        return float(out.stdout.strip())
+    except ValueError:
+        return None
+
+
+def ask(question: str) -> bool:
+    return input(f"{question} [y/N] ").strip().lower() in ("y", "yes")
+
+
+def cmd_teach(args) -> int:
+    from backend.dataengine.keyframes import load_frames, select_keyframes
+    from backend.skills.spec import check_name
+    from backend.teach import TeachOptions, estimate, run_teach
+
+    try:
+        check_name(args.skill)
+    except ValueError as err:
+        print(f"te: {err}", file=sys.stderr)
+        return 2
+    settings = load_settings()
+    client = make_client(settings)
+    if not (args.audio or args.request):
+        print("te: pass --audio or --request", file=sys.stderr)
+        return 2
+    audio_s = (audio_duration_s(Path(args.audio)) or 10.0) if args.audio else 0.0
+    keyframes = len(select_keyframes(load_frames(args.clip)))
+    parts = estimate(client, audio_s=audio_s, keyframes=keyframes,
+                     positives=args.positives, negatives=args.negatives)
+    print(f"estimate for {args.skill} (before cache hits): " + ", ".join(
+        f"{k} ${v:.2f}" for k, v in parts.items()))
+    if args.estimate_only:
+        return 0
+    if not args.yes and not ask(f"Spend up to about ${parts['total']:.2f}?"):
+        return 1
+    labels = json.loads(Path(args.labels).read_text()) if args.labels else {}
+    opts = TeachOptions(skill=args.skill, clip=Path(args.clip),
+                        audio=Path(args.audio) if args.audio else None, request=args.request,
+                        positives=args.positives, negatives=args.negatives, real_labels=labels,
+                        audio_s=audio_s or None)
+    confirm = (lambda sentence: True) if args.yes else (lambda sentence: ask("Is that right?"))
+    report = run_teach(client, opts, settings.data_dir / "skills", confirm=confirm)
+    if report.get("stopped"):
+        print(f"stopped: {report['stopped']}")
+        return 1
+    print(format_report(make_ledger(settings)))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="te", description="Trained Eye")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -142,6 +203,18 @@ def build_parser() -> argparse.ArgumentParser:
     policy = sub.add_parser("policy", help="check a request against the local policy rules")
     policy.add_argument("request")
     policy.set_defaults(func=cmd_policy)
+
+    teach = sub.add_parser("teach", help="teach a skill from a request and a 10 s clip")
+    teach.add_argument("--skill", required=True, help="skill name, e.g. washer_done")
+    teach.add_argument("--clip", required=True, help="video file or folder of JPEG frames")
+    teach.add_argument("--audio", help="the spoken request (wav, m4a, ...)")
+    teach.add_argument("--request", help="the request as text, instead of --audio")
+    teach.add_argument("--positives", type=int, default=150)
+    teach.add_argument("--negatives", type=int, default=150)
+    teach.add_argument("--labels", help="JSON of your own keyframe labels {file: yes|no}")
+    teach.add_argument("--estimate-only", action="store_true", help="print the cost estimate")
+    teach.add_argument("--yes", action="store_true", help="skip both confirmations")
+    teach.set_defaults(func=cmd_teach)
     return parser
 
 

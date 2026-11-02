@@ -11,18 +11,24 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v18 (M1): Labels (Muse Spark)
+## Build stage v19 (M1): Teach flow
 
-Muse Spark labels. Every image, real or generated, gets a structured label (yes, no or
-unsure, with a one-sentence reason) against the skill's condition. A generated image
-is kept only when Spark agrees with the label it was generated for; unsure is dropped.
-The agreement rates, overall and per kind, are Experiment 2's raw data.
+The teach flow end to end: request (typed, or audio through Voice Transcribe),
+keyframes, skill spec and read-back, then nothing more unless the user confirms; then
+region of interest, synthetic set, labels and dataset, each written under
+data/skills/<skill>/. Every call is cached, so a rerun costs nothing. A settings
+switch, TE_TRAIN_ON_MODEL_OUTPUTS=0, keeps generating and labelling for evaluation but
+trains on real frames with the user's own labels only (the build spec's fallback);
+without those labels it stops after the free keyframe step. The skill name is checked
+before anything else.
 
 Files added or changed in this stage:
 
-- `backend/dataengine/labels.py` (new): Muse Spark labels for every image, the filter
-  that keeps generated images only when Spark agrees, and agreement stats
-- `tests/test_labels.py` (new): tests
+- `backend/config.py` (changed): settings: model IDs for every job, prices, spend caps
+  and data paths; secrets come from the environment or a local .env file and are never
+  printed
+- `backend/teach.py` (new): the teach flow end to end, cached so a rerun costs nothing
+- `tests/test_teach.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -39,10 +45,10 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 40%]
-    ........................................................................ [ 81%]
-    ................................                                         [100%]
-    176 passed in 2.53s
+    ........................................................................ [ 39%]
+    ........................................................................ [ 79%]
+    ......................................                                   [100%]
+    182 passed in 4.20s
 
     $ ruff check .
     All checks passed!
@@ -82,17 +88,17 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   untouched with a manifest.
 - `backend/dataengine/labels.py`: Muse Spark labels for every image, the filter that
   keeps generated images only when Spark agrees, and agreement stats.
+- `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
   and spend.
 - `CLAUDE.md`: short setup, commands and conventions.
-- `tests/`: 176 tests, all offline; none calls a paid API.
+- `tests/`: 182 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v19 adds the teach flow end to end, with the fallback for training on real data
-only.
+Stage v20 adds te teach, which prints a cost estimate and asks before spending.
 
 ## Privacy and policy
 

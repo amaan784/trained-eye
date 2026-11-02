@@ -122,15 +122,28 @@ Settings, Set up your glasses, then on the Identify tab tap Start listening: aft
 ## 7. Can the phone still reach the Mac while streaming?
 
 DAT can use a Wi-Fi link to the glasses. Trained Eye sends frames from the phone to the
-Mac over your home Wi-Fi, so check both work at once:
+Mac over your home Wi-Fi, so check both work at the same time. CameraAccess ends its
+session as soon as it leaves the foreground, so do not switch apps while it streams.
 
-1. On the Mac, in the trained-eye folder: `pip install -e .` once, then `te serve`.
-   If macOS asks whether Python may accept incoming connections, allow it. Find the
-   Mac's address in System Settings, Wi-Fi, Details (for example 192.168.1.20).
-2. Start the CameraAccess preview as in step 4, then switch to Safari on the phone and open
-   `http://192.168.1.20:8765/health` (your address). Success: `{"ok":true,"protocol":1}`.
-   Switching apps ends the CameraAccess session, so do it right after the preview starts
-   and just note whether the page loaded.
+1. Before opening CameraAccess: on the iPhone, open Settings, Wi-Fi, tap the (i) next to
+   your home network, and note its IP Address (for example 192.168.1.42). Find the Mac's
+   address in System Settings, Wi-Fi, Details (for example 192.168.1.20).
+2. On the Mac, run `ping 192.168.1.42` (the iPhone's address) and leave it running. Keep
+   the phone unlocked. Replies should arrive before you go on; if none ever do, note that
+   and go to step 5.
+3. Open CameraAccess, start the preview as in step 4, and leave it streaming in the
+   foreground for one minute with the screen on. During that minute, swipe down from the
+   top-right corner to open Control Center (this does not end the session), press and
+   hold the network tile, note the Wi-Fi name it shows, then close Control Center.
+4. Success: ping keeps getting replies for the whole minute (a few lost ones are normal;
+   note the usual time in ms), and Control Center still shows your home network.
+   Failure: "Request timeout" for more than about 10 seconds in a row, or another network
+   name. Note whether replies stop when the preview starts and come back when it stops.
+5. After the session, on the Mac in the trained-eye folder (venv active): `te serve`. If
+   macOS asks whether Python may accept incoming connections, allow it. Then open
+   `http://192.168.1.20:8765/health` (your address) in Safari on the phone. Success:
+   `{"ok":true,"protocol":1}`. This shows the phone reaches the Mac after streaming, not
+   during it; steps 2 to 4 cover that.
 
 ## 8. Without glasses: the Mock Device Kit
 
@@ -156,6 +169,9 @@ as the "Meta Glasses" model instead.
 
 - the output of `xcodebuild -version` and `sysctl hw.memsize`
 - for steps 4 to 8: worked or not, plus the exact text of any error
+- step 7: ping replies during the preview (yes, with gaps, or no) and their usual time,
+  the Wi-Fi name Control Center showed during the preview, and whether /health loaded
+  afterwards
 - what the capture LED did during the preview
 - anything the Meta AI app asked you to update, and its version numbers if you can see
   them (Meta AI app version, glasses firmware version)

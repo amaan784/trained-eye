@@ -20,7 +20,7 @@ build next. Last updated 2026-10-29, at the end of milestone M1 (code).
 
 - Repository: github.com/amaan784/trained-eye. All work is on the branch
   `build-stages` (the author chose the name). Its root is the finished code. The folders
-  v1 to v22 are the same code in cumulative stages, for the author to commit to `main`
+  v1 to v30 are the same code in cumulative stages, for the author to commit to `main`
   one at a time. `main` holds only what the author has committed from the stages so far;
   check with `git log origin/main`.
 - Hackathon: Meta Global AI Developer Hackathon, solo. Submission is due Wed Nov 4, 9 PM
@@ -47,7 +47,7 @@ Code map (all under `backend/`, namespace packages without `__init__.py`):
 | `dataengine/dataset.py` | Axolotl JSONL in Meta's recipe format, 512x512 padded PNGs, manifest with provenance index |
 | `teach.py` | The teach flow end to end, cached; fallback switch `TE_TRAIN_ON_MODEL_OUTPUTS=0` |
 
-Other files: `tests/` (185 tests, all offline), `docs/glasses-check.md`,
+Other files: `tests/` (297 tests, all offline), `docs/glasses-check.md`,
 `docs/recording-protocol.md`, `.env.example`, `.github/workflows/ci.yml` (ruff and
 pytest on every push), `CLAUDE.md` (short conventions file the author asked for).
 
@@ -70,6 +70,15 @@ Local data, all under `data/` and gitignored: `cache/`, `ledger.jsonl`, and
 - Each milestone had an independent code review (several reviewers, and a skeptic
   re-checking every finding). The real bugs it found were fixed before the stages were
   cut (see the Decisions in PROGRESS.md).
+- **Review after M1 (Oct 31):** bugs, version compatibility, functionality against
+  SPEC.md and the UI, every finding checked by one reviewer who reproduced it and one who
+  tried to refute it. The 27 confirmed in F1 to F29 are fixed in stages v23 to v30
+  (PROGRESS.md, "Review after M1"). F30 to F62 were not verified yet when those stages
+  were cut; the confirmed ones become the next stages, before M2.
+- **Teaching changes for the author:** keyframes are now named
+  `kf_<position>_<hash>.jpg`, so a `--labels` file uses those names (from
+  `data/skills/<skill>/keyframes/`); a wrong read-back is fixed with
+  `--correct "what is wrong"` on the same command, which reuses the clip and transcript.
 - Spend so far: $0.00 Meta API, $0.00 Modal. Nothing has called a paid service yet.
 
 ### Not done yet, in priority order
@@ -154,7 +163,7 @@ PROGRESS.md.
 ### Version stages
 
 The author reviews and commits the project one layer at a time. New work becomes new
-stages after the newest folder (v22 now). The rules, as the author gave them:
+stages after the newest folder (v30 now). The rules, as the author gave them:
 
 - Stages v1 to vN live in the root of `build-stages`, in the order a developer would
   build them: foundations first, docs and UI late.
@@ -259,6 +268,22 @@ copied files, and list them in CONTRIBUTIONS.md.
 
 ## 6. What comes next (from SPEC.md)
 
+### Visual design (for ios/, the playground, the eval charts and the video)
+
+- Look: dark and minimal, one accent colour, a clean sans font (Inter), flat shapes, no
+  gradients. Every chart uses the same palette, labels values directly, and reads in
+  light and dark mode.
+- Four signature visuals, used in the playground and the video:
+  1. The training wall: a grid of generated variations flips in, each tagged green "yes"
+     or red "no" as Spark labels it; rejected ones fade out.
+  2. The live timeline: the first-person video on top, the student's yes-probability as
+     a line below it, the threshold dashed, and an alert marker with the spoken text
+     when it fires.
+  3. The cost chart: accuracy against dollars per hour, three points (fine-tuned
+     Glimmer, base Glimmer, Spark), the fine-tuned point highlighted.
+  4. The SAM outline on the teaching frame, showing what the glasses learned to look at.
+- If time runs short, cut UI polish before cutting experiments (SPEC.md).
+
 ### M2 (Fri to Sat): training, serving, watching
 
 - `backend/training/`: a Modal function with Axolotl in the image and data on a Modal
@@ -282,9 +307,10 @@ copied files, and list them in CONTRIBUTIONS.md.
   in every demo); send `{"type": "alert", "text": ...}` to the phone over the WebSocket;
   log every scored frame (time, probability, decision) for the timeline visual.
 - `ios/` (SwiftUI, with the DAT facts above): Connect, Teach (hold to talk, 10 second
-  capture with a countdown, read-back, confirm), Skills, Watch (live indicator, last
-  alert, battery), Clips (saved by the user only). Configurable WebSocket URL (local
-  Wi-Fi or a tunnel). The backend needs an endpoint that takes the 10 second capture
+  capture with a countdown, read-back, confirm), Skills (list, on/off toggles, status:
+  training or ready), Watch (live indicator, last alert, battery), Clips (saved by the
+  user only). Configurable WebSocket URL (local Wi-Fi or a tunnel). Follow "Visual
+  design" above. The backend needs an endpoint that takes the 10 second capture
   (frames and audio) and runs `teach.run_teach`; today teaching is CLI only.
 
 ### M3 (Sat to Sun): all skills, evaluation, experiments
@@ -309,8 +335,10 @@ copied files, and list them in CONTRIBUTIONS.md.
 
 - The web playground (Hugging Face Space or Modal): recorded clips with the probability
   timeline, how each skill was built (keyframes, SAM outline, generated variations with
-  labels), "teach it yourself" with live Meta calls (budget-capped per visitor and per
-  day), and the results page. Precomputed results are fine if serving live is too slow;
+  labels), "teach it yourself" with live Meta calls (type a condition, pick a provided
+  keyframe, see the compiled skill and 12 live Muse Image variations labelled by Spark;
+  budget-capped per visitor and per day), and the results page (the four experiment
+  charts). It uses the four signature visuals and the look in "Visual design" above. Precomputed results are fine if serving live is too slow;
   say so on the page.
 - Hugging Face collection (ask before every upload): the final LoRA adapter, the Mac
   build, the experiment adapters, the human-labelled test set (faces blurred, approved
@@ -333,3 +361,7 @@ copied files, and list them in CONTRIBUTIONS.md.
   chose the branch name `build-stages`, asked for their own identity on every commit
   with no AI credit, chose to add new stages after each milestone, and asked for this
   handover (stage v22).
+- 2026-10-31, cloud session 1 (continued): the author asked for a scan for bugs and
+  version compatibility issues, a functionality check against the plan and a UI check,
+  with fixes as stages v23 and later and M2 after them. There is no UI yet (the iOS app
+  and the playground are M2 and M4). Fixes for F1 to F29: stages v23 to v30.

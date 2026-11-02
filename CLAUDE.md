@@ -21,6 +21,8 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
     te policy "<request>"            # local policy check, free
     te teach --skill washer_done --clip <video or frame folder> --audio <request audio>
                                      # teach flow; prints a cost estimate and asks first
+                                     # --correct "<fix>" after a wrong read-back,
+                                     # --labels <json> with names from keyframes/
     modal run backend/training/wandb_smoke.py   # one W&B run from Modal
 
 ## Conventions

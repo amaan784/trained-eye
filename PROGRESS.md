@@ -1,11 +1,14 @@
 # Progress
 
 The source of truth between sessions. Updated at the end of every milestone.
-Last update: 2026-10-29, end of M1 (code).
+Last update: 2026-10-31, fixes from the review after M1 (stages v23 to v30).
 
 ## Status
 
-M0 and M1 code are done and tested offline (185 tests, none calls a paid API).
+M0 and M1 code are done and tested offline (297 tests, none calls a paid API). A full
+review after M1 (bugs, version compatibility, functionality against SPEC.md, the UI)
+found 27 confirmed problems in F1 to F29; their fixes are stages v23 to v30 (see "Review
+after M1" below). Findings F30 to F62 were still being verified when this was written.
 HANDOVER.md explains how to pick the project up; SETUP.md covers setup. What is still
 open needs the Mac, the keys, the glasses or new footage:
 
@@ -44,6 +47,28 @@ open needs the Mac, the keys, the glasses or new footage:
 - [ ] First live washer run on the Mac
 - [x] Ask for real clips for all 3 skills (`docs/recording-protocol.md`)
 - [ ] Real clips recorded
+
+### Review after M1, Sat Oct 31
+
+- [x] Settings: the fallback switch fails closed (an unknown value is an error), quoted
+  `.env` values with a comment lose their quotes, nan or negative numbers are refused,
+  and `.env`, the ledger and the cache belong to the project, not the current folder
+- [x] Client: the caps are checked again before a retry that may have been billed; any
+  served reply is recorded, whatever goes wrong reading it; cached replies keep their cost
+- [x] Policy: names with accents, curly apostrophes, titles; no false refusals for child
+  locks, bus shelters, espresso shots, "Roomba gets stuck"; the model's wording is
+  re-checked only where it decides what is watched; placeholder refusal reasons
+- [x] Keyframes: EXIF orientation baked in; ffmpeg leaves the terminal alone
+- [x] Data engine: one rejected image edit or unusable label no longer stops the run
+  (more than 5, or 20 percent, still does); labels cut off for length are asked again
+- [x] Teach: own labels normalised and checked before any spend; keyframe names carry a
+  content hash; `--correct` for a wrong read-back; progress lines during paid steps
+- [x] CLI: warning when the estimate is over what is left under the caps; how to
+  continue after a cap stop or Ctrl+C; EOF at a prompt is a no; `--audio` and `--request`
+  exclusive; `te api-smoke` never caches a failed check
+- [x] Docs: the glasses check tests reachability while streaming; HANDOVER has SPEC.md's
+  visual design rules
+- [ ] F30 to F62: verdicts pending
 
 ### M2, Fri to Sat: training and watching
 
@@ -112,6 +137,15 @@ open needs the Mac, the keys, the glasses or new footage:
 - **Fallback switch:** `TE_TRAIN_ON_MODEL_OUTPUTS=0` keeps generating and labelling (for
   evaluation) but trains only on real frames with the user's own labels. Without those
   labels it stops after writing the keyframes, before any paid call.
+- **Project folder:** `.env`, `data/` (ledger, cache, skills) and a relative `TE_DATA_DIR`
+  are taken inside the checkout `backend/` is imported from, so `te` sees the same spend
+  and caps from any folder. Tests point this at a temporary folder (tests/conftest.py).
+- **Per-item failures:** an image edit rejected with 400 or 422, or a reply that cannot
+  be used, skips that one item (recorded in the manifest with the error); more than
+  max(5, 20 percent) failures stops the run, so a systematic problem does not keep paying.
+  Auth, rate-limit, server and budget errors always stop it.
+- **Keyframe names** are `kf_<position>_<first 8 hex of the SHA-256>.<ext>`, so a labels
+  file made for another take of the clip cannot label the wrong frames.
 - **Provenance:** generated images are stored exactly as returned; the padded dataset PNGs
   are derived copies, and the dataset manifest maps every example back to its source and
   the SHA-256 of the original image. Only real, approved footage is ever published.
@@ -160,6 +194,9 @@ sources disagree with SPEC.md, the sources win.
 - `meta-sam-parser` (SAM output parsing) could not be installed or read; M1 stores SAM's
   raw output and parses it once a real cached response shows the format.
 - SPEC.md is not in the repository, so a fresh session needs it uploaded again.
+- Review findings F30 to F62 (client, CLI, policy wording, dataset paths, dependency
+  bounds, tests, docs) were not verified yet when stages v23 to v30 were cut; the
+  confirmed ones become the next stages, before M2.
 - SAM output parsing: the first live run stores SAM's raw text (cached); write the parser
   against it, then the boxes feed crops and the outline visual.
 - Image token counts are unknown, so estimates assume 1,500 tokens per image; the real

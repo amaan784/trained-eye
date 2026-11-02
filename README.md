@@ -11,21 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v29 (M1 review): Fix: te teach
+## Build stage v30 (M1 review): Fix: docs and notes
 
-te teach checks a --labels file before printing the estimate, prints which training
-mode it runs in, and warns when the estimate is more than is left under the spend
-caps. --audio and --request can no longer be passed together (the text used to be
-ignored), and --correct fixes a wrong read-back; after a 'no' it says how. End of
-input at a prompt counts as no, Ctrl+C and a cap stop say that a rerun continues for
-free, and te api-smoke never caches a reply that fails its check. .env.example lists
-the training switch.
+The glasses check now tests that the phone reaches the Mac while CameraAccess is
+streaming (ping from the Mac during a one-minute preview); before, it switched to
+Safari, which ends the stream, so it could not tell. HANDOVER.md gains the build
+spec's visual design rules (dark and minimal, one accent colour, Inter, no gradients,
+the four signature visuals) for the iOS app and the playground, and the notes record
+the review and these fixes.
 
 Files added or changed in this stage:
 
-- `.env.example` (changed): template for the keys (copy to .env)
-- `backend/cli.py` (changed): the te command line
-- `tests/test_cli.py` (changed): tests
+- `CLAUDE.md` (changed): short setup, commands and conventions
+- `HANDOVER.md` (changed): how to pick the project up in a new session: state, the
+  author's rules, open items with exact commands, and the plan for M2 to M5 with the
+  facts from the docs
+- `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
+  open issues and spend
+- `docs/glasses-check.md` (changed): how to check, with Meta's own sample app, that
+  the glasses stream camera frames, deliver the mic and play audio
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -47,19 +51,21 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 72%]
     ........................................................................ [ 96%]
     .........                                                                [100%]
-    297 passed in 5.62s
+    297 passed in 5.11s
 
     $ ruff check .
     All checks passed!
 
-    $ ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4
-
-    $ python -m backend.cli teach --skill washer_done --clip /tmp/te-demo.mp4 --request "let me know when the washer says done" --estimate-only
-    estimate for washer_done (before cache hits): transcribe $0.00, compile $0.10, sam $0.03, images $3.00, labels $2.05, total $5.18
-    train on model outputs: yes
-
-Video clips are decoded with ffmpeg (on the Mac: brew install ffmpeg). The demo clip
-is ffmpeg's built-in test pattern, written to /tmp, outside the folder.
+    $ python -m backend.cli spend
+    Meta API spend (ledger: data/ledger.jsonl)
+      calls: 0  errors: 0
+      actual: $0.0000  (estimated before calls: $0.0000)
+      global cap: $120.00  remaining: $120.0000
+      per-skill cap: $10.00
+      by model:
+        (no calls yet)
+      by skill:
+        (no calls yet)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -113,8 +119,9 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v30 adds the docs for these fixes: the glasses reachability check and the visual
-design rules.
+The confirmed findings from the second half of the review (F30 to F62), then milestone
+M2: Modal QLoRA training on the washer skill, export and serving, and the watch loop
+with smoothing, the Spark confirmation and spoken alerts on the glasses.
 
 ## Privacy and policy
 

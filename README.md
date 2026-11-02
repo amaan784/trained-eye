@@ -11,19 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v26 (M1 review): Fix: keyframes
+## Build stage v27 (M1 review): Fix: data engine failures
 
-Frames from a folder that carry an EXIF Orientation tag (phone and glasses photos are
-often stored sideways) are turned upright once, when they are loaded, so every later
-step and the dataset see them the right way up; untagged frames stay byte for byte.
-ffmpeg now runs with -nostdin and no stdin, so a te teach run in the background no
-longer stops on the terminal, and answers piped to the prompts reach them.
+One image edit rejected for its prompt (400 or 422) or one reply that cannot be used
+no longer stops the whole teach run: that variation is recorded in the manifest with
+its error and skipped, and a rerun tries it again. More than max(5, 20 percent)
+failures still stop the run, so a systematic problem does not keep paying. A Spark
+label cut off for length is asked again with a bigger budget; any other unusable label
+becomes 'unsure' with an error flag and is counted apart in the label stats. The
+manifest records what each image cost even when it came from the cache, and SAM, the
+image edits and the labels can report progress.
 
 Files added or changed in this stage:
 
-- `backend/dataengine/keyframes.py` (changed): the keyframe picker: 20 to 30 sharp,
-  distinct frames from the 10 second teaching clip
-- `tests/test_keyframes.py` (changed): tests
+- `backend/dataengine/labels.py` (changed): Muse Spark labels for every image, the
+  filter that keeps generated images only when Spark agrees, and agreement stats
+- `backend/dataengine/roi.py` (changed): the region of interest: SAM 3.1 on each
+  keyframe; the raw output is kept and parsing is still to come
+- `backend/dataengine/synth.py` (changed): the synthetic set: a deterministic plan of
+  Muse Image edits of the keyframes (positives, hard negatives, nuisance variation),
+  saved untouched with a manifest
+- `tests/test_labels.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -41,10 +49,10 @@ set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
     ........................................................................ [ 26%]
-    ........................................................................ [ 53%]
-    ........................................................................ [ 80%]
-    ....................................................                     [100%]
-    268 passed in 3.37s
+    ........................................................................ [ 52%]
+    ........................................................................ [ 78%]
+    ..........................................................               [100%]
+    274 passed in 4.17s
 
     $ ruff check .
     All checks passed!
@@ -97,12 +105,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 268 tests, all offline; none calls a paid API.
+- `tests/`: 274 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v27 adds the data engine fixes: one rejected image or label no longer stops the
-run.
+Stage v28 adds the teach flow fixes: checked labels, keyframe names tied to their
+content, corrections and progress lines.
 
 ## Privacy and policy
 

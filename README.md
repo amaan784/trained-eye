@@ -11,26 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v22 (M1): Handover and setup guide
+## Build stage v23 (M1 review): Fix: settings
 
-HANDOVER.md, for whoever picks the project up next in a local or cloud session: where
-everything is, what is done and what is not (with the exact commands for each open
-item), the author's rules for work, policy, version stages and git, the facts from
-Meta's docs that the next milestones depend on, and the plan for M2 to M5. SETUP.md
-covers accounts and keys, the Mac, a cloud session (network, keys, the workarounds
-that were needed) and git on the stage branch. CLAUDE.md and PROGRESS.md now point to
-both. No code changes.
+Fixes from the review after M1. TE_TRAIN_ON_MODEL_OUTPUTS now fails closed: only 1,
+true, yes, on, 0, false, no or off are accepted, anything else is an error (before, a
+quoted value with a comment, or a spelling such as 'none', left training on model
+outputs switched on), and the settings printout shows the mode. Quoted .env values
+followed by a comment lose their quotes (a quoted API key used to be sent with the
+quotes). Spend caps and retries must be finite and not negative (nan used to switch a
+cap off). The .env file, the ledger and the cache now belong to the project folder, so
+te sees the same spend and caps from any folder; the tests point that folder at a
+temporary one. The ledger report shows its path relative to where you are.
 
 Files added or changed in this stage:
 
-- `CLAUDE.md` (changed): short setup, commands and conventions
-- `HANDOVER.md` (new): how to pick the project up in a new session: state, the
-  author's rules, open items with exact commands, and the plan for M2 to M5 with the
-  facts from the docs
-- `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
-  open issues and spend
-- `SETUP.md` (new): accounts and keys, setting up the Mac, setting up a cloud session,
-  and git on the stage branch
+- `backend/config.py` (changed): settings: model IDs for every job, prices, spend caps
+  and data paths; secrets come from the environment or a local .env file and are never
+  printed
+- `backend/meta/ledger.py` (changed): spend ledger: estimated cost checked against the
+  per-skill ($10) and global ($120) caps before each call, actual cost recorded after
+- `tests/conftest.py` (changed): tests
+- `tests/test_config.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -43,28 +44,37 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 38%]
-    ........................................................................ [ 77%]
-    .........................................                                [100%]
-    185 passed in 4.57s
+    ........................................................................ [ 34%]
+    ........................................................................ [ 69%]
+    ..............................................................           [100%]
+    206 passed in 3.35s
 
     $ ruff check .
     All checks passed!
 
-    $ python -m backend.cli spend
-    Meta API spend (ledger: data/ledger.jsonl)
-      calls: 0  errors: 0
-      actual: $0.0000  (estimated before calls: $0.0000)
-      global cap: $120.00  remaining: $120.0000
-      per-skill cap: $10.00
-      by model:
-        (no calls yet)
-      by skill:
-        (no calls yet)
+    $ python -m backend.config
+    Trained Eye settings
+      base_url: https://api.meta.ai/v1
+      data_dir: data
+      spend caps: $10.00 per skill, $120.00 global
+      train on model outputs: yes
+      models:
+        transcribe    muse-voice-transcribe-1.0
+        compiler      muse-wonder-1.0
+        sam           sam-3.1
+        image         muse-image-1.0
+        labeler       muse-spark-1.3
+        confirm       muse-spark-1.3
+        student_base  meta-models/Muse-Glimmer-30B
+                      (student_base revision a4e59da52a7b)
+      secrets:
+        MODEL_API_KEY  missing
+        HF_TOKEN       missing
+        WANDB_API_KEY  missing
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -114,12 +124,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 185 tests, all offline; none calls a paid API.
+- `tests/`: 206 tests, all offline; none calls a paid API.
 
 ## Next
 
-Milestone M2: Modal QLoRA training on the washer skill, export and serving, and the
-watch loop with smoothing, the Spark confirmation and spoken alerts on the glasses.
+Stage v24 adds the client fixes: the spend caps are checked again before a retry,
+every served reply is recorded, and cached replies keep their cost.
 
 ## Privacy and policy
 

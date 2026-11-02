@@ -11,27 +11,23 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v23 (M1 review): Fix: settings
+## Build stage v24 (M1 review): Fix: API client
 
-Fixes from the review after M1. TE_TRAIN_ON_MODEL_OUTPUTS now fails closed: only 1,
-true, yes, on, 0, false, no or off are accepted, anything else is an error (before, a
-quoted value with a comment, or a spelling such as 'none', left training on model
-outputs switched on), and the settings printout shows the mode. Quoted .env values
-followed by a comment lose their quotes (a quoted API key used to be sent with the
-quotes). Spend caps and retries must be finite and not negative (nan used to switch a
-cap off). The .env file, the ledger and the cache now belong to the project folder, so
-te sees the same spend and caps from any folder; the tests point that folder at a
-temporary one. The ledger report shows its path relative to where you are.
+The spend caps are checked again before retrying an attempt that may have been billed
+(a timeout or a 500/502/504), so retries can no longer push spend past a cap. A reply
+that was served is recorded in the ledger whatever goes wrong reading it (usage that
+is not an object, a null choice, content that is not text, an infinite token count).
+The cache keeps what each reply cost, and CallInfo.billed_usd reports it on a cache
+hit too.
 
 Files added or changed in this stage:
 
-- `backend/config.py` (changed): settings: model IDs for every job, prices, spend caps
-  and data paths; secrets come from the environment or a local .env file and are never
-  printed
+- `backend/meta/client.py` (changed): MetaClient, the only way the code calls Meta's
+  API: cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and
+  spend recorded from the reported usage
 - `backend/meta/ledger.py` (changed): spend ledger: estimated cost checked against the
   per-skill ($10) and global ($120) caps before each call, actual cost recorded after
-- `tests/conftest.py` (changed): tests
-- `tests/test_config.py` (changed): tests
+- `tests/test_client.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -48,33 +44,24 @@ These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 34%]
-    ........................................................................ [ 69%]
-    ..............................................................           [100%]
-    206 passed in 3.35s
+    ........................................................................ [ 33%]
+    ........................................................................ [ 67%]
+    ....................................................................     [100%]
+    212 passed in 3.98s
 
     $ ruff check .
     All checks passed!
 
-    $ python -m backend.config
-    Trained Eye settings
-      base_url: https://api.meta.ai/v1
-      data_dir: data
-      spend caps: $10.00 per skill, $120.00 global
-      train on model outputs: yes
-      models:
-        transcribe    muse-voice-transcribe-1.0
-        compiler      muse-wonder-1.0
-        sam           sam-3.1
-        image         muse-image-1.0
-        labeler       muse-spark-1.3
-        confirm       muse-spark-1.3
-        student_base  meta-models/Muse-Glimmer-30B
-                      (student_base revision a4e59da52a7b)
-      secrets:
-        MODEL_API_KEY  missing
-        HF_TOKEN       missing
-        WANDB_API_KEY  missing
+    $ python -m backend.cli spend
+    Meta API spend (ledger: data/ledger.jsonl)
+      calls: 0  errors: 0
+      actual: $0.0000  (estimated before calls: $0.0000)
+      global cap: $120.00  remaining: $120.0000
+      per-skill cap: $10.00
+      by model:
+        (no calls yet)
+      by skill:
+        (no calls yet)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -124,12 +111,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 206 tests, all offline; none calls a paid API.
+- `tests/`: 212 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v24 adds the client fixes: the spend caps are checked again before a retry,
-every served reply is recorded, and cached replies keep their cost.
+Stage v25 adds the policy and compiler fixes: names in any script, fewer false
+refusals, and the user's correction of a wrong read-back.
 
 ## Privacy and policy
 

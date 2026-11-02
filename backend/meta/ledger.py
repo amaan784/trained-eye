@@ -66,7 +66,11 @@ class Ledger:
         )
 
     def check(self, estimate_usd: float, skill: str | None = None) -> None:
-        """Raise BudgetExceeded if this call could push spend past a cap."""
+        """Raise BudgetExceeded if this call could push spend past a cap.
+
+        The client calls this before each call, and again before retrying an attempt that
+        may have been billed, with the estimate grown by those attempts.
+        """
         total = self.spent()
         if total + estimate_usd > self.global_cap_usd:
             raise BudgetExceeded(

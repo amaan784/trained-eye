@@ -11,27 +11,22 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v27 (M1 review): Fix: data engine failures
+## Build stage v28 (M1 review): Fix: teach flow
 
-One image edit rejected for its prompt (400 or 422) or one reply that cannot be used
-no longer stops the whole teach run: that variation is recorded in the manifest with
-its error and skipped, and a rerun tries it again. More than max(5, 20 percent)
-failures still stop the run, so a systematic problem does not keep paying. A Spark
-label cut off for length is asked again with a bigger budget; any other unusable label
-becomes 'unsure' with an error flag and is counted apart in the label stats. The
-manifest records what each image cost even when it came from the cache, and SAM, the
-image edits and the labels can report progress.
+Your own labels are normalised (keyframes/kf_00_....jpg, Yes, ' NO ' all work) and
+checked before any paid call; an entry that matches no keyframe of this clip stops the
+run with the list of valid names. Keyframes are named kf_<position>_<hash>, so a
+labels file made for another take cannot label the wrong frames, and an earlier take's
+keyframes are removed. A correction of a wrong read-back is sent to the compiler and
+recorded in request.json. The run prints a line per step and progress during SAM, the
+image edits and the labels, flushed so it shows in a log as it happens, plus how many
+images or labels failed.
 
 Files added or changed in this stage:
 
-- `backend/dataengine/labels.py` (changed): Muse Spark labels for every image, the
-  filter that keeps generated images only when Spark agrees, and agreement stats
-- `backend/dataengine/roi.py` (changed): the region of interest: SAM 3.1 on each
-  keyframe; the raw output is kept and parsing is still to come
-- `backend/dataengine/synth.py` (changed): the synthetic set: a deterministic plan of
-  Muse Image edits of the keyframes (positives, hard negatives, nuisance variation),
-  saved untouched with a manifest
-- `tests/test_labels.py` (changed): tests
+- `backend/teach.py` (changed): the teach flow end to end, cached so a rerun costs
+  nothing
+- `tests/test_teach.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -48,11 +43,11 @@ These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 26%]
-    ........................................................................ [ 52%]
-    ........................................................................ [ 78%]
-    ..........................................................               [100%]
-    274 passed in 4.17s
+    ........................................................................ [ 25%]
+    ........................................................................ [ 50%]
+    ........................................................................ [ 76%]
+    ...................................................................      [100%]
+    283 passed in 5.73s
 
     $ ruff check .
     All checks passed!
@@ -105,12 +100,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 274 tests, all offline; none calls a paid API.
+- `tests/`: 283 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v28 adds the teach flow fixes: checked labels, keyframe names tied to their
-content, corrections and progress lines.
+Stage v29 adds the te teach fixes: labels checked before the estimate, a cap warning,
+--correct, and clear stops.
 
 ## Privacy and policy
 

@@ -11,22 +11,18 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v17 (M1): Synthetic set (Muse Image)
+## Build stage v18 (M1): Labels (Muse Spark)
 
-The synthetic set. A deterministic plan turns the spec into Muse Image edit prompts on
-the user's own keyframes: positives render the condition, hard negatives render each
-near-miss while ruling the condition out, with 11 nuisance variations (light, angle,
-distance, blur, occlusion). Every combination of condition, keyframe and nuisance is
-used once before any repeats, so no two requests are identical. Every prompt asks for
-no people in view. Images are saved exactly as returned, and the full prompt manifest
-is written next to them.
+Muse Spark labels. Every image, real or generated, gets a structured label (yes, no or
+unsure, with a one-sentence reason) against the skill's condition. A generated image
+is kept only when Spark agrees with the label it was generated for; unsure is dropped.
+The agreement rates, overall and per kind, are Experiment 2's raw data.
 
 Files added or changed in this stage:
 
-- `backend/dataengine/synth.py` (new): the synthetic set: a deterministic plan of Muse
-  Image edits of the keyframes (positives, hard negatives, nuisance variation), saved
-  untouched with a manifest
-- `tests/test_synth.py` (new): tests
+- `backend/dataengine/labels.py` (new): Muse Spark labels for every image, the filter
+  that keeps generated images only when Spark agrees, and agreement stats
+- `tests/test_labels.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -43,18 +39,13 @@ These commands were run inside this folder on 2026-10-29 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 41%]
-    ........................................................................ [ 82%]
-    ...............................                                          [100%]
-    175 passed in 2.29s
+    ........................................................................ [ 40%]
+    ........................................................................ [ 81%]
+    ................................                                         [100%]
+    176 passed in 2.53s
 
     $ ruff check .
     All checks passed!
-
-    $ python -c "from backend.skills.spec import SkillSpec, Target; from backend.dataengine.synth import plan_variations; s = SkillSpec(name='washer_done', request='let me know when the washer says done', target=Target(sam_prompt='washing machine display', description='the washer display'), positive='the display shows the cycle has finished', negatives=['display shows time remaining', 'display off'], alert='Laundry done.'); p = plan_variations(s, ['a' * 64]); print(len(p), 'variations'); print(p[0].prompt); print(p[150].prompt)"
-    300 variations
-    Edit this photo so that the display shows the cycle has finished. Show it with the edge of a hand or an object partly in front. Keep it a realistic first-person photo of the same scene and the same object. No people or faces in view. No added text, borders or captions.
-    Edit this photo so that display shows time remaining, and it is clearly not the case that the display shows the cycle has finished. Show it slightly out of focus. Keep it a realistic first-person photo of the same scene and the same object. No people or faces in view. No added text, borders or captions.
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -89,16 +80,19 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
+- `backend/dataengine/labels.py`: Muse Spark labels for every image, the filter that
+  keeps generated images only when Spark agrees, and agreement stats.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
   and spend.
 - `CLAUDE.md`: short setup, commands and conventions.
-- `tests/`: 175 tests, all offline; none calls a paid API.
+- `tests/`: 176 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v18 adds Muse Spark labels for every image, with filtering and agreement stats.
+Stage v19 adds the teach flow end to end, with the fallback for training on real data
+only.
 
 ## Privacy and policy
 

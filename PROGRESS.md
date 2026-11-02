@@ -5,8 +5,9 @@ Last update: 2026-10-29, end of M1 (code).
 
 ## Status
 
-M0 and M1 code are done and tested offline (185 tests, none calls a paid API). What is
-still open needs the Mac, the keys, the glasses or new footage:
+M0 and M1 code are done and tested offline (185 tests, none calls a paid API).
+HANDOVER.md explains how to pick the project up; SETUP.md covers setup. What is still
+open needs the Mac, the keys, the glasses or new footage:
 
 1. the glasses check with Meta's sample app (`docs/glasses-check.md`)
 2. the first live Meta calls: `te models` (free), then `te api-smoke` (under $0.01)

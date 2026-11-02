@@ -11,19 +11,26 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v21 (M1): Recording protocol and notes
+## Build stage v22 (M1): Handover and setup guide
 
-The recording protocol for the real clips the experiments need (three skills, training
-and validation sessions apart from the test session, near-misses, people kept out of
-view), and the project notes updated for M1. This is the finished M1.
+HANDOVER.md, for whoever picks the project up next in a local or cloud session: where
+everything is, what is done and what is not (with the exact commands for each open
+item), the author's rules for work, policy, version stages and git, the facts from
+Meta's docs that the next milestones depend on, and the plan for M2 to M5. SETUP.md
+covers accounts and keys, the Mac, a cloud session (network, keys, the workarounds
+that were needed) and git on the stage branch. CLAUDE.md and PROGRESS.md now point to
+both. No code changes.
 
 Files added or changed in this stage:
 
 - `CLAUDE.md` (changed): short setup, commands and conventions
+- `HANDOVER.md` (new): how to pick the project up in a new session: state, the
+  author's rules, open items with exact commands, and the plan for M2 to M5 with the
+  facts from the docs
 - `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
   open issues and spend
-- `docs/recording-protocol.md` (new): what real clips to record for the three skills,
-  and how to keep training and test sessions apart
+- `SETUP.md` (new): accounts and keys, setting up the Mac, setting up a cloud session,
+  and git on the stage branch
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -43,7 +50,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 38%]
     ........................................................................ [ 77%]
     .........................................                                [100%]
-    185 passed in 4.48s
+    185 passed in 4.57s
 
     $ ruff check .
     All checks passed!
@@ -102,6 +109,11 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
   and spend.
 - `CLAUDE.md`: short setup, commands and conventions.
+- `HANDOVER.md`: how to pick the project up in a new session: state, the author's
+  rules, open items with exact commands, and the plan for M2 to M5 with the facts from
+  the docs.
+- `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
+  git on the stage branch.
 - `tests/`: 185 tests, all offline; none calls a paid API.
 
 ## Next

@@ -11,19 +11,22 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v16 (M1): Region of interest (SAM 3.1)
+## Build stage v17 (M1): Synthetic set (Muse Image)
 
-The region-of-interest step: SAM 3.1 on every keyframe with the spec's noun phrase,
-one concept per request. SAM's output format could not be checked while this was
-written, so the raw text is stored (and the call cached) and boxes come from a parser
-hook that returns none for now. The largest confident box per frame is picked once
-boxes exist.
+The synthetic set. A deterministic plan turns the spec into Muse Image edit prompts on
+the user's own keyframes: positives render the condition, hard negatives render each
+near-miss while ruling the condition out, with 11 nuisance variations (light, angle,
+distance, blur, occlusion). Every combination of condition, keyframe and nuisance is
+used once before any repeats, so no two requests are identical. Every prompt asks for
+no people in view. Images are saved exactly as returned, and the full prompt manifest
+is written next to them.
 
 Files added or changed in this stage:
 
-- `backend/dataengine/roi.py` (new): the region of interest: SAM 3.1 on each keyframe;
-  the raw output is kept and parsing is still to come
-- `tests/test_roi.py` (new): tests
+- `backend/dataengine/synth.py` (new): the synthetic set: a deterministic plan of Muse
+  Image edits of the keyframes (positives, hard negatives, nuisance variation), saved
+  untouched with a manifest
+- `tests/test_synth.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -41,12 +44,17 @@ set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
     ........................................................................ [ 41%]
-    ........................................................................ [ 83%]
-    .............................                                            [100%]
-    173 passed in 2.14s
+    ........................................................................ [ 82%]
+    ...............................                                          [100%]
+    175 passed in 2.29s
 
     $ ruff check .
     All checks passed!
+
+    $ python -c "from backend.skills.spec import SkillSpec, Target; from backend.dataengine.synth import plan_variations; s = SkillSpec(name='washer_done', request='let me know when the washer says done', target=Target(sam_prompt='washing machine display', description='the washer display'), positive='the display shows the cycle has finished', negatives=['display shows time remaining', 'display off'], alert='Laundry done.'); p = plan_variations(s, ['a' * 64]); print(len(p), 'variations'); print(p[0].prompt); print(p[150].prompt)"
+    300 variations
+    Edit this photo so that the display shows the cycle has finished. Show it with the edge of a hand or an object partly in front. Keep it a realistic first-person photo of the same scene and the same object. No people or faces in view. No added text, borders or captions.
+    Edit this photo so that display shows time remaining, and it is clearly not the case that the display shows the cycle has finished. Show it slightly out of focus. Keep it a realistic first-person photo of the same scene and the same object. No people or faces in view. No added text, borders or captions.
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -78,17 +86,19 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   (image path part, then text; 512x512 padded PNGs).
 - `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
   raw output is kept and parsing is still to come.
+- `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
+  edits of the keyframes (positives, hard negatives, nuisance variation), saved
+  untouched with a manifest.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
   and spend.
 - `CLAUDE.md`: short setup, commands and conventions.
-- `tests/`: 173 tests, all offline; none calls a paid API.
+- `tests/`: 175 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v17 adds the synthetic set: Muse Image edits of the keyframes with a prompt
-manifest.
+Stage v18 adds Muse Spark labels for every image, with filtering and agreement stats.
 
 ## Privacy and policy
 

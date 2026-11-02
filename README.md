@@ -11,18 +11,19 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v20 (M1): te teach
+## Build stage v21 (M1): Recording protocol and notes
 
-The te teach command: it measures the clip and the audio, prints a cost estimate per
-step, asks before spending, reads the spec back and asks again, then runs the teach
-flow and prints the spend report. --estimate-only stops after the estimate, --labels
-takes your own keyframe labels, and --yes skips both questions. A skill name that is
-not snake_case is rejected first.
+The recording protocol for the real clips the experiments need (three skills, training
+and validation sessions apart from the test session, near-misses, people kept out of
+view), and the project notes updated for M1. This is the finished M1.
 
 Files added or changed in this stage:
 
-- `backend/cli.py` (changed): the te command line
-- `tests/test_cli.py` (changed): tests
+- `CLAUDE.md` (changed): short setup, commands and conventions
+- `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
+  open issues and spend
+- `docs/recording-protocol.md` (new): what real clips to record for the three skills,
+  and how to keep training and test sessions apart
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -42,20 +43,21 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 38%]
     ........................................................................ [ 77%]
     .........................................                                [100%]
-    185 passed in 4.55s
+    185 passed in 4.48s
 
     $ ruff check .
     All checks passed!
 
-    $ ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4
-
-    $ python -m backend.cli teach --skill washer_done --clip /tmp/te-demo.mp4 --request "let me know when the washer says done" --estimate-only
-    estimate for washer_done (before cache hits): transcribe $0.00, compile $0.10, sam $0.03, images $3.00, labels $2.05, total $5.18
-
-The estimate is an upper bound: each label is priced at its full output budget and
-each image at 1,500 input tokens, since the real image token count is not known yet.
-Video clips are decoded with ffmpeg (on the Mac: brew install ffmpeg). The demo clip
-is ffmpeg's built-in test pattern, written to /tmp, outside the folder.
+    $ python -m backend.cli spend
+    Meta API spend (ledger: data/ledger.jsonl)
+      calls: 0  errors: 0
+      actual: $0.0000  (estimated before calls: $0.0000)
+      global cap: $120.00  remaining: $120.0000
+      per-skill cap: $10.00
+      by model:
+        (no calls yet)
+      by skill:
+        (no calls yet)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -95,6 +97,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
+- `docs/recording-protocol.md`: what real clips to record for the three skills, and
+  how to keep training and test sessions apart.
 - `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
   and spend.
 - `CLAUDE.md`: short setup, commands and conventions.
@@ -102,7 +106,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v21 adds the recording protocol for real clips and the updated project notes.
+Milestone M2: Modal QLoRA training on the washer skill, export and serving, and the
+watch loop with smoothing, the Spark confirmation and spoken alerts on the glasses.
 
 ## Privacy and policy
 

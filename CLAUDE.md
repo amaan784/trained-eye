@@ -17,6 +17,9 @@ PROGRESS.md is the source of truth between sessions: read it first.
     te serve                         # backend, WebSocket at ws://<mac>:8765/ws
     te ws-selftest                   # synthetic frames through the WebSocket, in process
     te api-smoke                     # one tiny paid Muse Spark call (needs MODEL_API_KEY)
+    te policy "<request>"            # local policy check, free
+    te teach --skill washer_done --clip <video or frame folder> --audio <request audio>
+                                     # teach flow; prints a cost estimate and asks first
     modal run backend/training/wandb_smoke.py   # one W&B run from Modal
 
 ## Conventions
@@ -34,5 +37,8 @@ PROGRESS.md is the source of truth between sessions: read it first.
 ## Pointers
 
 - docs/glasses-check.md: how to verify the glasses with Meta's DAT sample app.
+- docs/recording-protocol.md: what real clips to record for the experiments.
+- Teach-flow outputs go to data/skills/<skill>/ (gitignored): spec, keyframes, roi,
+  synthetic images with manifest.jsonl, labels.jsonl, label_stats.json, dataset/.
 - Meta cookbook: github.com/meta-models/meta-oss-cookbook (muse-glimmer/post-training).
 - DAT iOS SDK: github.com/facebook/meta-wearables-dat-ios (samples/CameraAccess).

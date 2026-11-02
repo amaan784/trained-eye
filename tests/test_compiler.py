@@ -137,3 +137,66 @@ def test_display_labels_in_model_wording_are_not_people(tmp_path, monkeypatch):
                                        "the light stays on when Boil is selected"]}
     spec = compile_skill(client_with(reply, []), "let me know when the washer says done", [JPEG])
     assert not spec.refused
+
+
+@pytest.mark.parametrize("field, value", [
+    ("negatives", ["display shows time remaining", "the child lock icon is lit"]),
+    ("negatives", ["someone opens the door mid-cycle", "display off"]),
+    ("negatives", ["the display counts down until Done shows up", "display off"]),
+    ("target_description", "the washing machine display in the bathroom"),
+    ("alert", "Someone's laundry is done!"),
+    ("alert", "Laundry's done!"),
+])
+def test_near_misses_and_descriptions_may_mention_people_and_rooms(tmp_path, monkeypatch,
+                                                                    field, value):
+    monkeypatch.chdir(tmp_path)
+    spec = compile_skill(client_with({**ACCEPTED, field: value}, []),
+                         "let me know when the washer says done", [JPEG])
+    assert not spec.refused
+
+
+@pytest.mark.parametrize("reason", ["None.", "N/A.", "Not applicable.", "No refusal.",
+                                    "\u2014", "No", "null"])
+def test_placeholder_refusal_reason_is_not_a_refusal(tmp_path, monkeypatch, reason):
+    monkeypatch.chdir(tmp_path)
+    spec = compile_skill(client_with({**ACCEPTED, "refusal_reason": reason}, []),
+                         "let me know when the washer says done", [JPEG])
+    assert not spec.refused
+
+
+def test_real_reasons_still_refuse_and_a_bare_refusal_says_so(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    spec = compile_skill(client_with({**ACCEPTED, "refusal_reason": "N/A (would identify a "
+                                      "person)"}, []), "tell me when the light is on", [JPEG])
+    assert spec.refused
+    bare = compile_skill(client_with({**ACCEPTED, "refused": True, "refusal_reason": "None"},
+                                     []), "tell me when the lamp is on", [JPEG])
+    assert bare.refused and bare.refusal_reason == "The model refused it without giving a reason."
+
+
+@pytest.mark.parametrize("reply", [
+    [1, 2], "hello", {**ACCEPTED, "negatives": [None, "display off"]},
+    {**ACCEPTED, "negatives": "displays"}, {**ACCEPTED, "alert": None},
+])
+def test_wrong_typed_output_is_a_recorded_output_error(tmp_path, monkeypatch, reply):
+    monkeypatch.chdir(tmp_path)
+    client = client_with(reply, [])
+    with pytest.raises(OutputError):
+        compile_skill(client, "let me know when the washer says done", [JPEG])
+    [entry] = client.ledger.entries()
+    assert entry["status"] == "output_error" and entry["actual_usd"] > 0
+
+
+def test_correction_is_policy_checked_and_sent(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    requests = []
+    client = client_with(ACCEPTED, requests)
+    compile_skill(client, "let me know when the washer says done", [JPEG])
+    compile_skill(client, "let me know when the washer says done", [JPEG],
+                  correction="the light on the lid")
+    assert len(requests) == 2  # a correction changes the request, so it compiles again
+    texts = [p["text"] for p in requests[1]["messages"][1]["content"] if p["type"] == "text"]
+    assert any("the light on the lid" in t for t in texts)
+    refused = compile_skill(client, "let me know when the washer says done", [JPEG],
+                            correction="when my wife takes it out")
+    assert refused.refused and len(requests) == 2

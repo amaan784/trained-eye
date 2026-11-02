@@ -13,6 +13,7 @@ locally (no API call, no cost); the compiler model refuses the rest.
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -124,20 +125,43 @@ COVERT_WORDS = ("secretly", "without them knowing", "without her knowing",
 SENSITIVE_WORDS = ("clinic", "hospital", "locker room", "changing room", "bathroom",
                    "restroom", "toilet", "church", "mosque", "synagogue", "temple",
                    "shelter", "polling", "courthouse", "police station")
-SPORTS_WORDS = ("count my", "workout", "coach me", "coaching", "sports")
-SPORTS_FORM = re.compile(r"\bmy\s+(?:\w+\s+)?(?:swing|form|serve|stroke|shot|technique|"
-                         r"posture|reps|stance)\b", re.IGNORECASE)
+SPORTS_WORDS = ("workout", "coach me", "coaching", "sports")
+# "my shot" and "my form" count bare or after a sport word, so "my espresso shot" and
+# "my tax form" pass.
+SPORTS_FORM = re.compile(
+    r"\bmy\s+(?:\w+\s+)?(?:swing|serve|stroke|technique|posture|reps|stance)\b"
+    r"|\bmy\s+(?:(?:golf|tennis|basketball|jump|running|squat|lifting|deadlift|bench|"
+    r"throwing|batting|shooting|free[ -]throw)\s+)?(?:shot|form)\b"
+    r"|\bcount\s+my\s+(?:reps|sets|laps|steps|push[- ]?ups|pull[- ]?ups|sit[- ]?ups|squats|"
+    r"lunges|jumps)\b", re.IGNORECASE)
+# Object names that contain a person word; removed before the word lists are checked.
+# "child lock" stays a phrase only before a word break, so "the child locks the door" counts.
+OBJECT_PHRASES = re.compile(r"\b(?:child[ -]?lock|child[ -]?proof|baby (?:bottle|food|"
+                            r"spinach|carrots?)|bus shelter)\b", re.IGNORECASE)
 
 # A capitalized word after "when" counts as a name only if an arrival or presence verb
 # follows, so devices and display labels ("when Roomba is stuck", "until End lights up")
-# are not mistaken for people.
+# are not mistaken for people. "gets" and "comes" do not count before a device state
+# ("Roomba gets stuck", "Instant Pot comes to pressure", "Ready comes on").
 NAMED_ARRIVAL = re.compile(
-    r"\b(?i:when|if|once|until|whenever|as soon as)\s+([A-Z][a-z]+)(?:'s)?\s+"
-    r"(?i:(?:\w+\s+)?(?:gets?|arrives?|comes?|leaves?|pulls?|walks?|drives?|enters?|"
+    r"\b(?i:when|if|once|until|whenever|as soon as)\s+(?:(?i:dr|mr|mrs|ms|mx|miss)\.?\s+)?"
+    r"([^\W\d_][\w'-]*?)(?:'s)?\s+"
+    r"(?i:(?:\w+\s+){0,2}(?:(?:gets?|comes?)(?!\s+(?:(?:stuck|jammed|clogged|full|empty|hot|"
+    r"cold|warm|low|ready|done)\b|to\s+(?:\d|pressure|temp)|up\s+on\b|o(?:n|ff)\W*$))|"
+    r"arrives?|leaves?|pulls?|walks?|drives?|enters?|"
     r"shows up|is (?:here|home|back|at|in|out|outside|leaving|coming)|home|here|back))\b"
 )
 NOT_NAMES = frozenset({"The", "This", "That", "It", "My", "Our", "Your", "There", "Its",
-                       "Amazon", "UPS", "FedEx", "Uber", "Lyft", "Tesla"})
+                       "Amazon", "UPS", "FedEx", "Uber", "Lyft", "Tesla", "DHL", "USPS",
+                       "DoorDash", "UberEats", "Grubhub", "GrubHub", "Instacart",
+                       # display labels
+                       "End", "Done", "Ready", "Off", "On", "Error", "Hot", "Low", "Full",
+                       "Empty", "Open", "Closed", "Start", "Stop", "Pause", "Boil", "Warm",
+                       # days ("when Sunday's paper arrives")
+                       "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+                       "Sunday"})
+# Typed apostrophes (iOS and macOS turn ' into a curly one by default).
+APOSTROPHES = {0x2019: "'", 0x2018: "'", 0x02BC: "'", 0x60: "'"}
 
 REFUSALS = {
     "person": "I can't watch for or recognize specific people. Skills can cover objects, "
@@ -162,11 +186,20 @@ def _has_word(text: str, words: tuple[str, ...]) -> bool:
     return False
 
 
+def normalise(text: str) -> str:
+    """NFKC, plain apostrophes, and no invisible format characters."""
+    text = unicodedata.normalize("NFKC", text).translate(APOSTROPHES)
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+
+
 def policy_check(request: str) -> str | None:
     """Return a one-sentence refusal if the request clearly breaks policy, else None."""
+    request = normalise(request)
     for named in NAMED_ARRIVAL.finditer(request):
-        if named.group(1) not in NOT_NAMES:
+        word = named.group(1)
+        if word[0].isupper() and not word.isupper() and word not in NOT_NAMES:
             return REFUSALS["person"]
+    request = OBJECT_PHRASES.sub(" ", request)
     if IDENTIFY.search(request) or _has_word(request, PERSON_WORDS):
         return REFUSALS["person"]
     if _has_word(request, COVERT_WORDS):

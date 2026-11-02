@@ -11,23 +11,26 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v24 (M1 review): Fix: API client
+## Build stage v25 (M1 review): Fix: policy check and compiler
 
-The spend caps are checked again before retrying an attempt that may have been billed
-(a timeout or a 500/502/504), so retries can no longer push spend past a cap. A reply
-that was served is recorded in the ledger whatever goes wrong reading it (usage that
-is not an object, a null choice, content that is not text, an infinite token count).
-The cache keeps what each reply cost, and CallInfo.billed_usd reports it on a cache
-hit too.
+The local policy check now catches names with accents or internal capitals, titles
+(Dr. Patel), curly apostrophes and invisible characters, and no longer refuses
+everyday requests: child lock lights, baby bottle warmers, bus shelter signs, my
+espresso shot, Roomba gets stuck, Instant Pot comes to pressure, Sunday's paper. The
+compiler re-checks only the model fields that decide what is watched (a near-miss such
+as 'someone opens the door' no longer refuses a washer skill), treats placeholder
+refusal reasons such as 'None.' or 'N/A' as no refusal, rejects wrongly typed output,
+and takes an optional correction from the user, policy-checked like the request.
 
 Files added or changed in this stage:
 
-- `backend/meta/client.py` (changed): MetaClient, the only way the code calls Meta's
-  API: cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and
-  spend recorded from the reported usage
-- `backend/meta/ledger.py` (changed): spend ledger: estimated cost checked against the
-  per-skill ($10) and global ($120) caps before each call, actual cost recorded after
-- `tests/test_client.py` (changed): tests
+- `backend/skills/compiler.py` (changed): the skill compiler: the request and 3
+  keyframes go to Muse Wonder (structured output), which returns a spec or a refusal
+- `backend/skills/spec.py` (changed): the skill spec (version 1), the local policy
+  check that refuses skills about people, health, covert monitoring or sports, and the
+  plain-English read-back
+- `tests/test_compiler.py` (changed): tests
+- `tests/test_skills.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -44,24 +47,21 @@ These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 33%]
-    ........................................................................ [ 67%]
-    ....................................................................     [100%]
-    212 passed in 3.98s
+    ........................................................................ [ 27%]
+    ........................................................................ [ 54%]
+    ........................................................................ [ 81%]
+    ..................................................                       [100%]
+    266 passed in 3.87s
 
     $ ruff check .
     All checks passed!
 
-    $ python -m backend.cli spend
-    Meta API spend (ledger: data/ledger.jsonl)
-      calls: 0  errors: 0
-      actual: $0.0000  (estimated before calls: $0.0000)
-      global cap: $120.00  remaining: $120.0000
-      per-skill cap: $10.00
-      by model:
-        (no calls yet)
-      by skill:
-        (no calls yet)
+    $ python -m backend.cli policy "Tell me when José gets home"
+    refused: I can't watch for or recognize specific people. Skills can cover objects, states, text, displays, signs and vehicles.
+    (exit code 1)
+
+    $ python -m backend.cli policy "Tell me when the child lock light turns off"
+    ok: no local policy objection (the skill compiler checks again)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -111,12 +111,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 212 tests, all offline; none calls a paid API.
+- `tests/`: 266 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v25 adds the policy and compiler fixes: names in any script, fewer false
-refusals, and the user's correction of a wrong read-back.
+Stage v26 adds the keyframe fixes: photos come out upright and ffmpeg leaves the
+terminal alone.
 
 ## Privacy and policy
 

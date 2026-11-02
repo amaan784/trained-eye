@@ -7,12 +7,19 @@ SkillSpec. The model can also refuse; its refusal reason is shown to the user as
 
 from __future__ import annotations
 
+import re
+
 from pydantic import ValidationError
 
 from backend.meta.client import MetaClient, OutputError, image_part, text_part
-from backend.skills.spec import SkillSpec, Target, policy_check, slugify
+from backend.skills.spec import REFUSALS, SkillSpec, Target, policy_check, slugify
 
-NO_REASON = frozenset({"", "none", "null", "n/a", "na", "-"})
+# Placeholders a model may write in refusal_reason for an accepted skill, compared after
+# lower-casing and turning punctuation into spaces ("N/A." -> "n a", "None." -> "none").
+NO_REASON = frozenset({"", "none", "null", "nil", "na", "n a", "no", "nothing",
+                       "not applicable", "no refusal", "not refused", "none needed"})
+NO_REASON_GIVEN = "The model refused it without giving a reason."
+TEXT_FIELDS = ("sam_prompt", "target_description", "positive", "alert")
 
 COMPILE_SCHEMA = {
     "type": "object",
@@ -49,8 +56,10 @@ Fill every field:
 - alert: what the glasses should say, under 10 words, friendly.
 - cooldown_s: seconds before the same alert may repeat (60 to 3600).
 - confirm_with_cloud: true unless a false alert would be harmless.
+- refusal_reason: null unless refused.
 Refuse (refused=true, a one-sentence refusal_reason, other fields empty) if the request
-would identify or track a specific person by face, voice or other traits; concerns
+would identify or track a specific person by face, voice or other traits, including a
+named person's car, phone or belongings ("when Jake's car pulls in"); concerns
 people's bodies, health, medication or other sensitive traits; monitors anyone
 covertly or relates to a sensitive location; or is about sports performance or
 coaching. Skills may only cover objects, states, text, displays, signs and vehicles."""
@@ -62,18 +71,32 @@ def compile_skill(
     keyframes: list[bytes],
     *,
     name: str | None = None,
+    correction: str | None = None,
 ) -> SkillSpec:
-    """Compile a request. `name`, if given, overrides the model's choice and keys spend."""
+    """Compile a request. `name`, if given, overrides the model's choice and keys spend.
+
+    `correction` is the user's fix for a wrong read-back ("the light on the lid"); it is
+    policy-checked like the request and sent with it, so the compile runs again.
+    """
     skill_name = name or slugify(request)
-    refusal = policy_check(request)
+    correction = " ".join((correction or "").split())[:300] or None
+    refusal = policy_check(request) or (policy_check(correction) if correction else None)
     if refusal:
         return SkillSpec(name=skill_name, request=request, refused=True, refusal_reason=refusal)
 
-    def build(data: dict) -> SkillSpec:
+    def build(data) -> SkillSpec:
+        if not isinstance(data, dict):
+            raise OutputError("compiler output is not a JSON object")
         reason = str(data.get("refusal_reason") or "").strip()
-        if data.get("refused") or reason.lower() not in NO_REASON:
+        if data.get("refused") or not _no_reason(reason):
+            given = reason if not _no_reason(reason) else NO_REASON_GIVEN
             return SkillSpec(name=skill_name, request=request, refused=True,
-                             refusal_reason=(reason or "I can't learn that one.")[:300])
+                             refusal_reason=given[:300])
+        negatives = data.get("negatives")
+        if (any(not isinstance(data.get(k), str) for k in TEXT_FIELDS)
+                or not isinstance(negatives, list)
+                or any(not isinstance(n, str) for n in negatives)):
+            raise OutputError("compiler output is not a valid skill spec: wrong field types")
         try:
             spec = SkillSpec(
                 name=name or slugify(data.get("name") or request),
@@ -86,18 +109,24 @@ def compile_skill(
                 cooldown_s=min(max(int(data["cooldown_s"]), 0), 86_400),
                 confirm_with_cloud=bool(data["confirm_with_cloud"]),
             )
-        except (KeyError, TypeError, ValueError, ValidationError) as err:
+        except (KeyError, OverflowError, TypeError, ValueError, ValidationError) as err:
             raise OutputError(f"compiler output is not a valid skill spec: {err}") from None
-        # The model's own wording gets the same local check as the request.
-        written = " ".join([spec.target.sam_prompt, spec.target.description, spec.positive,
-                            *spec.negatives, spec.alert])
-        refusal = policy_check(written)
+        # What is watched and what fires the alert get the request's local check too. The
+        # description gets the person check only, and near-misses and the alert none: they
+        # mention people and rooms in passing ("someone opens the door mid-cycle").
+        refusal = policy_check(f"{spec.target.sam_prompt}. {spec.positive}")
+        if not refusal and policy_check(spec.target.description) == REFUSALS["person"]:
+            refusal = REFUSALS["person"]
         if refusal:
             return SkillSpec(name=skill_name, request=request, refused=True,
                              refusal_reason=refusal)
         return spec
 
-    content = [text_part(f'Request: "{request}"')] + [image_part(k) for k in keyframes[:3]]
+    content = [text_part(f'Request: "{request}"')]
+    if correction:
+        content.append(text_part(f'Correction from the user (it wins over the request): '
+                                 f'"{correction}"'))
+    content += [image_part(k) for k in keyframes[:3]]
     try:
         result = client.structured(
             client.settings.model("compiler"), content, COMPILE_SCHEMA, name="skill_spec",
@@ -105,11 +134,15 @@ def compile_skill(
         )
     except OutputError as err:
         if str(err).startswith("model refused:"):
-            reason = str(err).removeprefix("model refused:").strip() or "I can't learn that one."
+            reason = str(err).removeprefix("model refused:").strip() or NO_REASON_GIVEN
             return SkillSpec(name=skill_name, request=request, refused=True,
                              refusal_reason=reason[:300])
         raise
     return build(result.data)
+
+
+def _no_reason(reason: str) -> bool:
+    return " ".join(re.sub(r"[\W_]+", " ", reason.lower()).split()) in NO_REASON
 
 
 def _clip(text: str, limit: int) -> str:

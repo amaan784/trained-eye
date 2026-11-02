@@ -15,16 +15,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
+EXIF_ORIENTATION = 0x0112
 
 
 @dataclass
 class Frame:
     index: int
     t_s: float
-    data: bytes  # encoded image exactly as captured
+    data: bytes  # encoded image as captured, upright (an EXIF Orientation turn baked in)
     gray: np.ndarray = field(repr=False)  # small grayscale copy for scoring
 
 
@@ -35,21 +36,38 @@ def _gray(data: bytes, width: int = 320) -> np.ndarray:
         return np.asarray(img.resize((width, height)), dtype=np.float32)
 
 
+def upright(data: bytes) -> bytes:
+    """Bake an EXIF Orientation turn into the pixels, as ffmpeg does for video.
+
+    Phone and glasses photos are often stored sideways with a tag saying how to turn
+    them. Untagged images come back byte for byte, so their cache keys stay the same.
+    """
+    with Image.open(io.BytesIO(data)) as img:
+        if img.getexif().get(EXIF_ORIENTATION, 1) not in range(2, 9):
+            return data
+        turned = ImageOps.exif_transpose(img).convert("RGB")
+    buf = io.BytesIO()
+    turned.save(buf, format="JPEG", quality=95)
+    return buf.getvalue()
+
+
 def load_frames(source: Path | str, fps: float = 3.0) -> list[Frame]:
     source = Path(source)
     if source.is_dir():
         paths = sorted(p for p in source.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES)
-        return [Frame(i, i / fps, p.read_bytes(), _gray(p.read_bytes()))
-                for i, p in enumerate(paths)]
+        datas = [upright(p.read_bytes()) for p in paths]
+        return [Frame(i, i / fps, d, _gray(d)) for i, d in enumerate(datas)]
     if shutil.which("ffmpeg") is None:
         raise RuntimeError("ffmpeg is needed to read video files (brew install ffmpeg)")
     with tempfile.TemporaryDirectory() as tmp:
         subprocess.run(
             # bitexact: no encoder version in the JPEGs, so cache keys survive upgrades
-            ["ffmpeg", "-v", "error", "-i", str(source), "-vf", f"fps={fps}",
+            # -nostdin and no stdin: a backgrounded run must not stop on the terminal, and
+            # answers piped to the prompts must reach them
+            ["ffmpeg", "-nostdin", "-v", "error", "-i", str(source), "-vf", f"fps={fps}",
              "-fflags", "+bitexact", "-flags:v", "+bitexact", "-q:v", "2",
              str(Path(tmp) / "f%05d.jpg")],
-            check=True,
+            stdin=subprocess.DEVNULL, check=True,
         )
         return load_frames(Path(tmp), fps)
 

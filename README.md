@@ -11,26 +11,19 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v25 (M1 review): Fix: policy check and compiler
+## Build stage v26 (M1 review): Fix: keyframes
 
-The local policy check now catches names with accents or internal capitals, titles
-(Dr. Patel), curly apostrophes and invisible characters, and no longer refuses
-everyday requests: child lock lights, baby bottle warmers, bus shelter signs, my
-espresso shot, Roomba gets stuck, Instant Pot comes to pressure, Sunday's paper. The
-compiler re-checks only the model fields that decide what is watched (a near-miss such
-as 'someone opens the door' no longer refuses a washer skill), treats placeholder
-refusal reasons such as 'None.' or 'N/A' as no refusal, rejects wrongly typed output,
-and takes an optional correction from the user, policy-checked like the request.
+Frames from a folder that carry an EXIF Orientation tag (phone and glasses photos are
+often stored sideways) are turned upright once, when they are loaded, so every later
+step and the dataset see them the right way up; untagged frames stay byte for byte.
+ffmpeg now runs with -nostdin and no stdin, so a te teach run in the background no
+longer stops on the terminal, and answers piped to the prompts reach them.
 
 Files added or changed in this stage:
 
-- `backend/skills/compiler.py` (changed): the skill compiler: the request and 3
-  keyframes go to Muse Wonder (structured output), which returns a spec or a refusal
-- `backend/skills/spec.py` (changed): the skill spec (version 1), the local policy
-  check that refuses skills about people, health, covert monitoring or sports, and the
-  plain-English read-back
-- `tests/test_compiler.py` (changed): tests
-- `tests/test_skills.py` (changed): tests
+- `backend/dataengine/keyframes.py` (changed): the keyframe picker: 20 to 30 sharp,
+  distinct frames from the 10 second teaching clip
+- `tests/test_keyframes.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -47,21 +40,14 @@ These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 27%]
-    ........................................................................ [ 54%]
-    ........................................................................ [ 81%]
-    ..................................................                       [100%]
-    266 passed in 3.87s
+    ........................................................................ [ 26%]
+    ........................................................................ [ 53%]
+    ........................................................................ [ 80%]
+    ....................................................                     [100%]
+    268 passed in 3.37s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli policy "Tell me when José gets home"
-    refused: I can't watch for or recognize specific people. Skills can cover objects, states, text, displays, signs and vehicles.
-    (exit code 1)
-
-    $ python -m backend.cli policy "Tell me when the child lock light turns off"
-    ok: no local policy objection (the skill compiler checks again)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -111,12 +97,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 266 tests, all offline; none calls a paid API.
+- `tests/`: 268 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v26 adds the keyframe fixes: photos come out upright and ffmpeg leaves the
-terminal alone.
+Stage v27 adds the data engine fixes: one rejected image or label no longer stops the
+run.
 
 ## Privacy and policy
 

@@ -11,22 +11,21 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v28 (M1 review): Fix: teach flow
+## Build stage v29 (M1 review): Fix: te teach
 
-Your own labels are normalised (keyframes/kf_00_....jpg, Yes, ' NO ' all work) and
-checked before any paid call; an entry that matches no keyframe of this clip stops the
-run with the list of valid names. Keyframes are named kf_<position>_<hash>, so a
-labels file made for another take cannot label the wrong frames, and an earlier take's
-keyframes are removed. A correction of a wrong read-back is sent to the compiler and
-recorded in request.json. The run prints a line per step and progress during SAM, the
-image edits and the labels, flushed so it shows in a log as it happens, plus how many
-images or labels failed.
+te teach checks a --labels file before printing the estimate, prints which training
+mode it runs in, and warns when the estimate is more than is left under the spend
+caps. --audio and --request can no longer be passed together (the text used to be
+ignored), and --correct fixes a wrong read-back; after a 'no' it says how. End of
+input at a prompt counts as no, Ctrl+C and a cap stop say that a rerun continues for
+free, and te api-smoke never caches a reply that fails its check. .env.example lists
+the training switch.
 
 Files added or changed in this stage:
 
-- `backend/teach.py` (changed): the teach flow end to end, cached so a rerun costs
-  nothing
-- `tests/test_teach.py` (changed): tests
+- `.env.example` (changed): template for the keys (copy to .env)
+- `backend/cli.py` (changed): the te command line
+- `tests/test_cli.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -43,14 +42,24 @@ These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 25%]
-    ........................................................................ [ 50%]
-    ........................................................................ [ 76%]
-    ...................................................................      [100%]
-    283 passed in 5.73s
+    ........................................................................ [ 24%]
+    ........................................................................ [ 48%]
+    ........................................................................ [ 72%]
+    ........................................................................ [ 96%]
+    .........                                                                [100%]
+    297 passed in 5.62s
 
     $ ruff check .
     All checks passed!
+
+    $ ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4
+
+    $ python -m backend.cli teach --skill washer_done --clip /tmp/te-demo.mp4 --request "let me know when the washer says done" --estimate-only
+    estimate for washer_done (before cache hits): transcribe $0.00, compile $0.10, sam $0.03, images $3.00, labels $2.05, total $5.18
+    train on model outputs: yes
+
+Video clips are decoded with ffmpeg (on the Mac: brew install ffmpeg). The demo clip
+is ffmpeg's built-in test pattern, written to /tmp, outside the folder.
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -100,12 +109,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 283 tests, all offline; none calls a paid API.
+- `tests/`: 297 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v29 adds the te teach fixes: labels checked before the estimate, a cap warning,
---correct, and clear stops.
+Stage v30 adds the docs for these fixes: the glasses reachability check and the visual
+design rules.
 
 ## Privacy and policy
 

@@ -44,6 +44,20 @@ not an open-source license.
 The rest of the app was written for this project, following how the CameraAccess and
 BirdSpotter samples use the SDK (`ios/README.md` lists which sample each part follows).
 
+## Meta SAM 3 protocol
+
+github.com/meta-models/meta-sam at commit 9348a8a, under Meta's SAM License (not an
+open-source license). `backend/dataengine/sam_text.py` is this project's own reader of the
+segmentation text format that `protocol/sam3.md` defines; no code or test data from that
+repository is copied here, and Meta's `meta-sam-parser` package is not used.
+
+## Inter
+
+github.com/rsms/inter, release 4.1, under the SIL Open Font License 1.1, which allows
+bundling with software. The four static faces (Regular, Medium, SemiBold, Bold) are in
+`ios/TrainedEye/Fonts/`, and the variable web font in `backend/playground/static/fonts/`
+and `backend/labeltool/static/fonts/`, each with the license as `LICENSE.txt`.
+
 ## Axolotl
 
 github.com/axolotl-ai-cloud/axolotl, version 0.19.0: the fine-tuning framework that runs
@@ -64,7 +78,9 @@ Used through the Meta Model API; no `-contributor` variants.
 
 The student is Muse Glimmer 30B (`meta-models/Muse-Glimmer-30B` on Hugging Face, revision
 a4e59da52a7bc87ae7251dd5545c0dd437c44b68, as pinned by the cookbook recipe), fine-tuned
-with QLoRA. Its weights are under the terms on its model card.
+with QLoRA. Its model card at that revision gives the license as Apache-2.0 (read on
+2026-11-02; the text is in `backend/release/BASE_LICENSE.txt` and ships as `LICENSE` with any
+release), with Meta's Muse Glimmer Usage Policy beside it, which any use must follow.
 
 ## Other software
 

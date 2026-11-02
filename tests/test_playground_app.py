@@ -62,8 +62,13 @@ def test_page_and_static_files_load(tmp_path):
         r = client.get("/" + path)
         assert r.status_code == 200 and r.content == (STATIC / path[7:]).read_bytes()
     for f in STATIC.iterdir():  # plain wording: no em or en dashes, no remote loads
+        if f.is_dir():
+            continue
         text = f.read_text(encoding="utf-8")
         assert "—" not in text and "–" not in text and "https://" not in text
+    font = client.get("/static/fonts/InterVariable.woff2")  # bundled, not fetched from a CDN
+    assert font.status_code == 200 and font.content[:4] == b"wOF2"
+    assert client.get("/static/fonts/LICENSE.txt").text.count("SIL Open Font License") >= 1
 
 
 def test_data_apis_read_the_fixture(tmp_path):
@@ -74,7 +79,7 @@ def test_data_apis_read_the_fixture(tmp_path):
     assert client.get("/api/clips/nope").status_code == 404
     (skill,) = client.get("/api/skills").json()["skills"]
     detail = client.get(f"/api/skills/{skill['name']}").json()
-    assert len(detail["wall"]) == 12 and "stub" in detail["roi"]["note"]
+    assert len(detail["wall"]) == 12 and "found no box" in detail["roi"]["note"]
     assert client.get("/api/skills/nope").status_code == 404
     results = client.get("/api/results").json()
     assert results["results_md"] == "# Results\n" and len(results["charts"]) == 1

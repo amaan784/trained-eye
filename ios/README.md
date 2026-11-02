@@ -105,6 +105,10 @@ keeps its own) holds:
 - `NSAppTransportSecurity` `NSAllowsLocalNetworking`, for plain `http` and `ws` to the Mac.
 - `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace`, so saved clips show in
   the Files app.
+- `UIAppFonts`: Inter 4.1's four static faces in `TrainedEye/Fonts/` (SIL Open Font
+  License, `Fonts/LICENSE.txt`). The folder is added with the rest of `TrainedEye/`; check
+  that the four `.ttf` files show under the target's Copy Bundle Resources. Without them
+  the app falls back to the system font.
 
 `TrainedEye.entitlements` has the keychain group both samples declare. CameraAccess also
 has Hotspot Configuration and Access Wi-Fi Information; BirdSpotter streams without them,
@@ -162,9 +166,11 @@ The app uses `GET /health`, `GET /skills`, the WebSocket at `/ws` (protocol 1, w
 In Debug builds, the Connect screen has "Use mock glasses". It pairs DAT's mock "Meta
 Glasses", powers it on, unfolds and dons it, and sets its camera feed, which the mock needs
 before any stream: an HEVC video named `mock_feed.mp4` if the target has one, else the
-iPhone's back camera. The simulator has no camera, so add a `mock_feed.mp4` there, for
-example a clip you recorded, converted with
-`ffmpeg -i clip.mov -c:v libx265 -tag:v hvc1 mock_feed.mp4`. Do not commit it.
+iPhone's back camera. `Resources/mock_feed.mp4` is a 16 second synthetic clip of a washer
+display counting down to "End" (HEVC, made by `python ios/make_mock_feed.py`), so the
+simulator, which has no camera, has a feed. To watch for something else, replace it with a
+clip of your own, converted with `ffmpeg -i clip.mov -c:v libx265 -tag:v hvc1
+mock_feed.mp4`, and do not commit that one: real footage can show people and rooms.
 
 ## Privacy and policy in the app
 
@@ -190,7 +196,7 @@ example a clip you recorded, converted with
 | 7. Teach client and recorder | `Models/TeachModels.swift`, `Network/TeachClient.swift`, `Audio/RequestRecorder.swift` |
 | 8. Teach flow | `Teach/TeachFlow.swift` |
 | 9. App model | `App/AppModel.swift` |
-| 10. Theme and components | `UI/Theme.swift`, `UI/Components.swift` |
+| 10. Theme and components | `UI/Theme.swift`, `UI/Components.swift`, `Fonts/` (Inter) |
 | 11. App entry and project files | `App/TrainedEyeApp.swift`, `../TrainedEye-Info.plist`, `../TrainedEye.entitlements` |
 | 12. Tabs and Connect screen | `UI/RootView.swift`, `UI/ConnectView.swift` |
 | 13. Teach screen | `UI/TeachView.swift` |
@@ -226,9 +232,6 @@ TODOs in the code:
   while the stream is paused.
 - `Audio/RequestRecorder.swift`: check that AVAudioRecorder records from the glasses' HFP
   microphone (CameraAccess uses AVAudioEngine for it).
-- `UI/Theme.swift`: Inter is not bundled (downloading it needs the author's yes); once it
-  is, check its PostScript names.
-- `Glasses/MockGlasses.swift`: add an HEVC `mock_feed.mp4` for the simulator.
 - `Teach/TeachFlow.swift`: the teach capture uses the low resolution (360x640); medium may
   teach better. A running teach session is not picked up again after a relaunch.
 

@@ -209,9 +209,10 @@ PROGRESS.md.
    `make eval` writes `eval/results.md` and the SVG charts.
 12. **M4, after asking:** `te manifests` (commit `manifests/`), `te blur` on every image or
    clip to publish (needs `pip install opencv-python-headless`, an approved download),
-   `te release --run <final> --out <folder>` (the license stays a TODO until the Glimmer
-   model card is checked; `--upload` asks and needs `huggingface_hub`, not yet on the
-   approved list), and `te playground` to try the site locally. Decide before deploying it:
+   `te release --run <final> --out <folder>` (apache-2.0, the base model's license, with
+   its text as `LICENSE` and Meta's Usage Policy linked; `--upload` asks and needs
+   `huggingface_hub`, not yet on the approved list), and `te playground` to try the site
+   locally. Decide before deploying it:
    the ledger's per-skill cap (`TE_SKILL_CAP_USD`, all time) also caps the playground's
    skill "playground", and its training wall shows generated images, which are never
    published, so either serve it from Modal with `data/` on a private volume or turn the

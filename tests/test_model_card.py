@@ -7,7 +7,7 @@ import types
 import pytest
 
 from backend.config import STUDENT_BASE_REVISION, MissingSecret
-from backend.release.model_card import LICENSE_TODO, model_card, prepare_release, upload
+from backend.release.model_card import USAGE_POLICY, model_card, prepare_release, upload
 from backend.training.axolotl import RECIPE
 
 COUNTS = {"train/washer_done/real/no": 18, "train/washer_done/real/yes": 3,
@@ -33,7 +33,9 @@ def test_the_card_says_only_what_its_files_say(tmp_path):
     card = model_card(tmp_path / "README.md", run="final", bundle_manifest=bundle).read_text()
     front = card.split("---\n")[1]
     assert "base_model: meta-models/Muse-Glimmer-30B" in front and "library_name: peft" in front
-    assert "license" not in front and LICENSE_TODO in card and STUDENT_BASE_REVISION in card
+    assert "license: apache-2.0" in front and STUDENT_BASE_REVISION in card
+    assert "as the base model's" in card and "a modification of that model" in card
+    assert USAGE_POLICY in card
     assert "Not evaluated yet" in card and f"| `lora_r` | `{RECIPE['lora_r']}` |" in card
     assert "| washer_done | train | 3 | 18 | 120 | 131 |" in card
     assert "| washer_done | val | 0 | 0 | 9 | 0 |" in card and "| bus_m4 | train | 4 |" in card
@@ -50,7 +52,7 @@ def test_the_card_says_only_what_its_files_say(tmp_path):
     assert "| 1.25 |" in card and "scored: 1, pending: 1" in card
     assert "exp1-real" not in card and "/Users" not in card
     assert "license: apache-2.0" in card and "relation: finetune" in card
-    assert "Not evaluated" not in card and LICENSE_TODO not in card
+    assert "Not evaluated" not in card
     for bad in ({"kind": "gguf"}, {"license_id": "MIT\nbase_model: other"}):
         with pytest.raises(ValueError):
             model_card(tmp_path / "README.md", run="final", bundle_manifest=bundle, **bad)
@@ -61,7 +63,8 @@ def test_the_release_folder_holds_the_card_weights_and_manifests(tmp_path):
     release = prepare_release(tmp_path / "release", run="final", bundle_manifest=bundle,
                               manifests_dir=manifests, weights_dir=weights)
     assert {f["path"] for f in release["files"]} == {
-        "README.md", "adapter_config.json", "adapter_model.safetensors", "manifests/washer_done.jsonl"}
+        "README.md", "LICENSE", "adapter_config.json", "adapter_model.safetensors",
+        "manifests/washer_done.jsonl"}
     assert release["skipped"] == ["README.md", "args.bin", "checkpoint-2"]
     with pytest.raises(ValueError, match="not a release folder"):
         prepare_release(manifests, run="final", bundle_manifest=bundle, manifests_dir=manifests)
@@ -97,7 +100,9 @@ def test_upload_needs_the_authors_yes_and_never_shows_the_token(tmp_path, monkey
     prepare_release(folder, run="final", bundle_manifest=bundle, manifests_dir=manifests)
     with pytest.raises(PermissionError):
         upload(folder, REPO)
-    with pytest.raises(ValueError, match="TODO"):
+    assert (folder / "LICENSE").read_text().lstrip().startswith("Apache License")
+    (folder / "LICENSE").unlink()
+    with pytest.raises(ValueError, match="no LICENSE"):  # the base model's license must ship
         upload(folder, REPO, confirmed=True)
     prepare_release(folder, run="final", bundle_manifest=bundle, manifests_dir=manifests,
                     license_id="apache-2.0")

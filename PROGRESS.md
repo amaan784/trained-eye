@@ -334,9 +334,10 @@ sources disagree with SPEC.md, the sources win.
   time) under the skill name "playground", and its training wall shows generated images,
   which are never published; decide before deploying (HANDOVER.md, item 12). Uploading
   to Hugging Face needs `huggingface_hub`, and face blurring needs
-  `opencv-python-headless` (approved); Inter is not bundled in the app or the pages.
-- SAM output parsing: the first live run stores SAM's raw text (cached); write the parser
-  against it, then the boxes feed crops and the outline visual.
+  `opencv-python-headless` (approved). Inter 4.1 is bundled in the app and the pages.
+- SAM output parsing follows Meta's SAM 3 protocol (meta-models/meta-sam, our own reader in
+  `backend/dataengine/sam_text.py`); the first live run should confirm it reads SAM 3.1's
+  real output (the raw text is stored with every frame, so it can be read again for free).
 - Image token counts are unknown, so estimates assume 1,500 tokens per image; the real
   per-image cost comes from the first run's usage.
 - The teach flow takes keyframes from a video file or a folder of frames; the iOS Teach

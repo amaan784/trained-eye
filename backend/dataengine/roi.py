@@ -1,15 +1,13 @@
 """Region of interest: where the skill's target is in the teaching keyframes (SAM 3.1).
 
 Runs SAM 3.1 on each keyframe with the spec's `target.sam_prompt` (one concept per
-request) and keeps the largest confident match per frame. The boxes later drive crops
-and the "outline" visual.
+request) and keeps the largest confident match per frame. The boxes drive the "outline"
+visual.
 
-SAM's output is streamed special-token text; SPEC.md says to parse it with the
-`meta-sam-parser` package. That package and the docs describing the format could not
-be reached while this was written, so parsing goes through `parse_sam_output`, which
-uses meta_sam_parser when it is installed and otherwise records the raw text with no
-boxes. The raw text is always stored (and the call cached), so boxes can be parsed
-later without paying again.
+SAM's output is special-token text in Meta's SAM 3 protocol. SPEC.md names Meta's
+`meta-sam-parser` package; this project reads the boxes with its own implementation of
+the protocol instead (backend/dataengine/sam_text.py, no dependency). The raw text is
+always stored too (and the call cached), so a run can be parsed again without paying.
 """
 
 from __future__ import annotations
@@ -22,6 +20,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from backend.dataengine import sam_text
 from backend.dataengine.synth import TooManyFailures, skippable, too_many_failures
 from backend.meta.cache import sha256_hex
 from backend.meta.client import MetaAPIError, MetaClient
@@ -32,8 +31,9 @@ MIN_SCORE = 0.5
 
 @dataclass
 class Detection:
-    box: tuple[float, float, float, float]  # x1, y1, x2, y2 in source pixels
-    score: float | None = None
+    box: tuple[float, float, float, float]  # x1, y1, x2, y2 in the keyframe's pixels
+    score: float | None = None  # SAM's confidence; None when it gave none (not zero)
+    object_id: str | None = None
 
     @property
     def area(self) -> float:
@@ -50,16 +50,25 @@ class FrameRoi:
     detections: list[Detection] = field(default_factory=list)
     best: Detection | None = None
     parser: str = "none"
+    problems: list[str] = field(default_factory=list)  # what the parser dropped or ignored
 
 
-def parse_sam_output(text: str) -> tuple[list[Detection], str]:
-    """Return (detections, parser name). Empty if no parser is available."""
-    try:
-        import meta_sam_parser  # noqa: F401
-    except ImportError:
-        return [], "none"
-    # Installed, but its API has not been checked against a real SAM response yet.
-    return [], "unwired"
+PARSER = "sam3-text"
+
+
+def parse_sam_output(text: str, size: tuple[int, int] | None = None
+                     ) -> tuple[list[Detection], str, list[str]]:
+    """(detections, parser name, problems) from SAM's text for one image. With `size`
+    (the keyframe's width and height), boxes SAM gave in another size are scaled to it."""
+    parsed = sam_text.parse(text, "image")
+    detections = []
+    for record in parsed.records:
+        x1, y1, x2, y2 = record.box
+        if size and record.size != tuple(size):
+            sx, sy = size[0] / record.size[0], size[1] / record.size[1]
+            x1, y1, x2, y2 = x1 * sx, y1 * sy, x2 * sx, y2 * sy
+        detections.append(Detection((x1, y1, x2, y2), record.confidence, record.object_id))
+    return detections, PARSER, parsed.errors + parsed.warnings
 
 
 def best_detection(detections: list[Detection], min_score: float = MIN_SCORE) -> Detection | None:
@@ -94,9 +103,9 @@ def locate(client: MetaClient, spec: SkillSpec, keyframes: list[bytes],
             continue
         if progress:
             progress(sam.info.cached, sam.info.cost_usd)
-        detections, parser = parse_sam_output(sam.text)
+        detections, parser, problems = parse_sam_output(sam.text, (width, height))
         results.append(FrameRoi(sha256_hex(image), width, height, sam.text, detections,
-                                best_detection(detections), parser))
+                                best_detection(detections), parser, problems[:20]))
     return results
 
 

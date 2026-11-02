@@ -435,18 +435,25 @@ def sse(*events):
     return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
 
 
+LANE = {"item_id": "msg_1", "output_index": 0, "content_index": 0}
+SAM_LINE = "<0f>0<|box;x1=10;y1=20;x2=299;y2=199;w=640;h=480;c=0.91|><|mask;x=0;y=0;data=2,2,!!!!#Kq|>"
+
+
 def test_sam_streamed(tmp_path):
     rec = Recorder(sse(
-        {"type": "response.output_text.delta", "delta": "<obj>washing machine display"},
-        {"type": "response.output_text.delta", "delta": "<box>10 20 300 200</box></obj>"},
+        {"type": "response.output_text.delta", "delta": SAM_LINE[:40], **LANE},
+        {"type": "response.output_text.delta", "delta": SAM_LINE[40:] + "\n", **LANE},
+        {"type": "response.content_part.done", **LANE,
+         "part": {"type": "output_text", "text": SAM_LINE + "\n"}},
         {"type": "response.completed", "response": {"usage": {"input_tokens": 900}}},
     ))
     client, _ = make_client(tmp_path, rec)
     result = client.sam_image("washing machine display", JPEG, skill="washer_done")
-    assert result.text == "<obj>washing machine display<box>10 20 300 200</box></obj>"
+    assert result.text == SAM_LINE + "\n"
     assert result.info.cost_usd == pytest.approx(0.0025)
     body = json.loads(rec.requests[0].content)
     assert body["model"] == "sam-3.1" and body["stream"] is True
+    assert body["metadata"] == {"include_confidence": "true"}
     assert [p["type"] for p in body["input"][0]["content"]] == ["input_text", "input_image"]
     assert client.sam_image("washing machine display", JPEG, skill="washer_done").info.cached
     [entry] = client.ledger.entries()
@@ -475,7 +482,7 @@ def test_sam_unfinished_stream_is_billed_not_cached(tmp_path, last):
     rec = Recorder(sse(delta, last), sse(delta, last))
     client, _ = make_client(tmp_path, rec)
     for _ in range(2):
-        with pytest.raises(OutputError, match="did not complete"):
+        with pytest.raises(OutputError, match="SAM stream ended with"):
             client.sam_image("pot", JPEG)
     assert len(rec.requests) == 2
     assert all(e["status"] == "output_error" and e["actual_usd"] == 0.0025
@@ -487,8 +494,30 @@ def test_sam_non_streamed_and_empty(tmp_path):
                    {"output": []})
     client, _ = make_client(tmp_path, rec)
     assert client.sam_image("pot", JPEG).text == "<none/>"
-    with pytest.raises(OutputError):
-        client.sam_image("lid", JPEG)
+    assert client.sam_image("lid", JPEG).text == ""  # SAM found nothing: an answer
+
+
+@pytest.mark.parametrize("events, message", [
+    ([{"type": "response.output_text.delta", "delta": "<0f>", **LANE},
+      {"type": "response.output_text.delta", "delta": "0", **LANE, "item_id": "msg_2"},
+      {"type": "response.completed", "response": {}}], "more than one output text lane"),
+    ([{"type": "response.output_text.delta", "delta": "<0f>0", **LANE},
+      {"type": "response.output_text.done", "text": "<0f>9", **LANE},
+      {"type": "response.completed", "response": {}}], "does not match"),
+    ([{"type": "response.refusal.done", "refusal": "no", **LANE}], "refused"),
+    ([{"type": "response.output_text.delta", "delta": "<0f>0", **LANE}], "did not complete"),
+])
+def test_sam_stream_lanes_follow_the_protocol(tmp_path, events, message):
+    client, _ = make_client(tmp_path, Recorder(sse(*events)))
+    with pytest.raises(OutputError, match=message):
+        client.sam_image("pot", JPEG)
+
+
+def test_sam_done_text_alone_is_the_whole_output(tmp_path):
+    rec = Recorder(sse({"type": "response.output_text.done", "text": SAM_LINE, **LANE},
+                       {"type": "response.completed", "response": {"usage": {}}}))
+    client, _ = make_client(tmp_path, rec)
+    assert client.sam_image("pot", JPEG).text == SAM_LINE
 
 
 def test_image_edit_keeps_bytes_exactly(tmp_path):

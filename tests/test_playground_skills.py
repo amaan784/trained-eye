@@ -51,7 +51,7 @@ def test_skill_detail_wall_and_keyframes(tmp_path):
     assert any(not t["kept"] for t in detail["wall"])  # the fake's deliberate mistake
     assert detail["roi"]["with_box"] == 0 and detail["roi"]["frame"] is None
     assert detail["roi"]["frames"] == len(detail["keyframes"])
-    assert "stub" in detail["roi"]["note"]
+    assert "found no box" in detail["roi"]["note"]
     for name in ("missing", "../washer_done", "sam_arrives"):
         assert skills.skill_detail(data_dir, name) is None
 
@@ -79,6 +79,19 @@ def test_outline_on_the_first_frame_with_a_box(tmp_path):
     assert (frame["width"], frame["height"]) == (rois[2]["width"], rois[2]["height"])
     keyframe = data.media_path(data_dir, tmp_path, frame["url"].removeprefix("media/"))[0]
     assert skills.sha256_hex(keyframe.read_bytes()) == rois[2]["keyframe_sha256"]
+
+
+def test_a_skill_taught_before_the_parser_gets_its_box_from_the_stored_text(tmp_path):
+    data_dir = make_skill(tmp_path)
+    folder = data_dir / "skills" / "washer_done"
+    rois = json.loads((folder / "roi.json").read_text())
+    w, h = rois[0]["width"], rois[0]["height"]
+    rois[0]["raw"] = (f"<0f>0<|box;x1=1;y1=2;x2={w - 2};y2={h - 3};w={w};h={h};c=0.7|>"
+                      "<|mask;x=0;y=0;data=2,2,!!!!#Kq|>\n")
+    (folder / "roi.json").write_text(json.dumps(rois))
+    roi = skills.skill_detail(data_dir, "washer_done")["roi"]
+    assert roi["with_box"] == 1 and roi["frame"]["box"] == [1.0, 2.0, w - 1.0, h - 2.0]
+    assert roi["frame"]["score"] == 0.7
 
 
 def test_wall_before_labelling_comes_from_the_manifest(tmp_path):

@@ -9,7 +9,8 @@
 // in Meta's CameraAccess sample.
 //
 
-// TODO: add an HEVC (h.265) mock_feed.mp4 to the target for the simulator.
+// Resources/mock_feed.mp4 (made by ios/make_mock_feed.py: a drawn washer display counting
+// down to "End", HEVC tagged hvc1) is the feed in the simulator, which has no camera.
 
 #if DEBUG
 

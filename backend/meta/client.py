@@ -198,6 +198,52 @@ def parse_sse(body: str) -> list[dict]:
     return [json.loads(e) for e in events if e.strip() and e.strip() != "[DONE]"]
 
 
+def sam_stream_text(events: list[dict]) -> str:
+    """The text of a streamed SAM response's one output-text lane, as Meta's SAM 3
+    protocol (meta-models/meta-sam, protocol/sam3.md) reads it: deltas of one lane (an
+    item_id, output_index, content_index), finished by response.output_text.done or a
+    response.content_part.done with an output_text part, whose text must equal the deltas
+    (or is the whole text when there were none). OutputError for another lane, a
+    mismatch, a refusal, a failure or no completion. Lenient on one point: a response that
+    completes without the done event still gives its deltas. Empty text is a valid answer
+    (SAM found nothing)."""
+    lane, deltas, final, completed = None, [], None, None
+    for event in events:
+        kind = event.get("type", "")
+        if kind == "response.output_text.delta" or kind == "response.output_text.done" or (
+                kind == "response.content_part.done"
+                and (event.get("part") or {}).get("type") == "output_text"):
+            this = (event.get("item_id"), event.get("output_index"), event.get("content_index"))
+            if lane is None:
+                lane = this
+            elif this != lane:
+                raise OutputError("SAM interleaved more than one output text lane")
+            if kind == "response.output_text.delta":
+                if final is not None:
+                    raise OutputError("SAM sent text after finishing its output")
+                deltas.append(event.get("delta") or "")
+                continue
+            text = event.get("text") if kind.endswith("output_text.done") else (
+                (event.get("part") or {}).get("text"))
+            if not isinstance(text, str) or (final is not None and text != final):
+                raise OutputError("SAM finished its output twice with different text")
+            if deltas and text != "".join(deltas):
+                raise OutputError("SAM's finished text does not match what it streamed")
+            final = text
+        elif "refusal" in kind or (kind == "response.content_part.done"
+                                   and (event.get("part") or {}).get("type") == "refusal"):
+            raise OutputError("SAM refused the request")
+        elif kind in ("response.failed", "error", "response.incomplete"):
+            raise OutputError(f"SAM stream ended with {kind}")
+        elif kind == "response.completed":
+            completed = event.get("response") or {}
+    if completed is None:
+        raise OutputError("SAM stream did not complete")
+    if final is not None:
+        return final
+    return "".join(deltas) if lane is not None else responses_text(completed)
+
+
 def responses_text(response: dict) -> str:
     """Concatenate output_text parts from a (non-streamed) Responses API object."""
     texts = []
@@ -562,6 +608,7 @@ class MetaClient:
                 ],
             }],
             "stream": True,
+            "metadata": {"include_confidence": "true"},  # a c= score on each box (protocol)
         }
         price = self.settings.price(model)
 
@@ -572,16 +619,9 @@ class MetaClient:
                     events = parse_sse(resp.text)
                 except json.JSONDecodeError:
                     raise OutputError("SAM stream is not readable") from None
-                text, final, last = [], None, None
-                for event in events:
-                    last = event.get("type")
-                    if last == "response.output_text.delta":
-                        text.append(event.get("delta", ""))
-                    elif last == "response.completed":
-                        final = event.get("response") or {}
-                if final is None:
-                    raise OutputError(f"SAM stream did not complete (last event: {last})")
-                out = "".join(text) or responses_text(final)
+                out = sam_stream_text(events)
+                final = next((e.get("response") or {} for e in events
+                              if e.get("type") == "response.completed"), {})
                 body = {"text": out, "usage": final.get("usage") or {}}
             else:
                 raw = self._json(resp)
@@ -591,9 +631,9 @@ class MetaClient:
             return _with_usage((body, {}), {"images": 1})
 
         def check(r):
-            if not r["text"].strip():
-                raise OutputError("SAM returned no output")
-            return r["text"]
+            if not isinstance(r.get("text"), str):
+                raise OutputError("SAM returned no output text")
+            return r["text"]  # empty: SAM found nothing, which is an answer
 
         _, _, info, text = self._call(
             endpoint=endpoint, model=model, key_request=payload, skill=skill,

@@ -1,8 +1,11 @@
 """The Hugging Face release: the model card, the release folder and the upload.
 
 Every number in the card comes from a file: axolotl.RECIPE, the training bundle's
-manifest.json, and only the eval harness's results.json for results. No license is claimed
-until the author has checked the Glimmer model card and passes one. `upload` imports
+manifest.json, and only the eval harness's results.json for results. The weights take the
+base model's license: the Muse Glimmer model card at the pinned revision (read on
+2026-11-02) says apache-2.0, with Meta's Usage Policy beside it, so the card says so,
+states that the weights are a modification, and the release folder carries the base
+model's LICENSE (BASE_LICENSE.txt, copied from that revision). `upload` imports
 huggingface_hub only when called and refuses without confirmed=True (the author's yes).
 """
 
@@ -26,7 +29,9 @@ DATA_JOBS = ("transcribe", "compiler", "sam", "image", "labeler")
 COLUMNS = (("real", "yes"), ("real", "no"), ("synthetic", "yes"), ("synthetic", "no"))
 METRICS = ("hours", "precision", "recall", "f1", "event_recall_in_window",
            "false_alarms_per_hour", "time_to_alert_median_s", "latency_median_s")
-LICENSE_TODO = "TODO for the author: Apache-2.0 if the Glimmer model card allows it; check the card"
+BASE_LICENSE = "apache-2.0"  # the Muse Glimmer card's license at STUDENT_BASE_REVISION
+BASE_LICENSE_FILE = Path(__file__).with_name("BASE_LICENSE.txt")
+USAGE_POLICY = "https://huggingface.co/meta-models/Muse-Glimmer-30B/blob/main/USAGE_POLICY.md"
 KINDS = {  # title, base_model_relation, front matter, what it is
     "adapter": ("LoRA adapter", "adapter", "library_name: peft\n", "A QLoRA adapter (PEFT) for"),
     "merged": ("merged build", "finetune", "", "The final adapter merged (`merge_and_unload()`) into"),
@@ -176,13 +181,13 @@ def results_section(results: Path | None) -> str:
 
 
 def model_card(out_path: Path, *, run: str, bundle_manifest: Path, kind: str = "adapter",
-               results: Path | None = None, license_id: str | None = None,
+               results: Path | None = None, license_id: str = BASE_LICENSE,
                models: Mapping[str, str] = DEFAULT_MODELS, max_steps: int | None = None) -> Path:
     """Write the model card (README.md with YAML front matter) to out_path. `max_steps` is
     the run's fixed step count (te train --max-steps), if it had one."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
-    if license_id is not None and not LICENSE_ID.fullmatch(license_id):
+    if not LICENSE_ID.fullmatch(license_id or ""):
         raise ValueError(f"license {license_id!r}: use a Hugging Face license id")
     manifest = json.loads(Path(bundle_manifest).read_text())
     title, relation, front, what = KINDS[kind]
@@ -196,14 +201,26 @@ def model_card(out_path: Path, *, run: str, bundle_manifest: Path, kind: str = "
                  "experiments keep the steps the same for every run)")
     Path(out_path).write_text(CARD.format(
         base=base, relation=relation, title=title, what=what,
-        front=front + (f"license: {license_id}\n" if license_id else ""),
+        front=front + f"license: {license_id}\n",
         revision=STUDENT_BASE_REVISION, run=run, skills=", ".join(sorted(manifest["skills"])),
         batch=GLOBAL_BATCH, models=", ".join(f"{job} `{models[job]}`" for job in DATA_JOBS),
         recipe="\n".join(rows), steps=steps, generated=generated, mix=mix,
         data=data_section(manifest), results=results_section(results),
-        license=f"`{license_id}`" if license_id else f"{LICENSE_TODO} (huggingface.co/{base})."),
+        license=license_text(license_id, base)),
         encoding="utf-8")
     return Path(out_path)
+
+
+def license_text(license_id: str, base: str) -> str:
+    """The card's License section: the license, that these weights modify the base model,
+    and Meta's Usage Policy, which applies to any use of Muse Glimmer."""
+    same = (" as the base model's" if license_id == BASE_LICENSE
+            else f"; the base model's is `{BASE_LICENSE}`")
+    return (f"`{license_id}`{same} ({base} at revision `{STUDENT_BASE_REVISION}`; its "
+            "license text is in `LICENSE`). These weights are a modification of that model: "
+            "QLoRA fine-tuning on the data above (for a merged build, that adapter merged "
+            f"into the base). Any use is also subject to Meta's [Muse Glimmer Usage Policy]"
+            f"({USAGE_POLICY}).")
 
 
 def _sha256(path: Path) -> str:
@@ -236,6 +253,7 @@ def prepare_release(out_dir: Path, *, run: str, bundle_manifest: Path, manifests
     for skill in synthetic:
         shutil.copyfile(manifests_dir / f"{skill}.jsonl", out_dir / "manifests" / f"{skill}.jsonl")
     model_card(out_dir / "README.md", run=run, bundle_manifest=bundle_manifest, **card)
+    shutil.copyfile(BASE_LICENSE_FILE, out_dir / "LICENSE")  # Apache-2.0 4(a): ship the text
     release = {"run": run, "kind": card.get("kind", "adapter"), "skipped": skipped,
                "files": [{"path": p.relative_to(out_dir).as_posix(), "bytes": p.stat().st_size,
                           "sha256": _sha256(p)} for p in sorted(out_dir.rglob("*")) if p.is_file()]}
@@ -246,16 +264,17 @@ def prepare_release(out_dir: Path, *, run: str, bundle_manifest: Path, manifests
 def upload(folder: Path, repo_id: str, token_env: str = "HF_TOKEN", *, confirmed: bool = False,
            private: bool = True) -> str:
     """Publish a prepare_release folder to `repo_id` (private unless private=False). Refuses
-    without confirmed=True, while the license is a TODO, or with an image or video in it."""
+    without confirmed=True, without the base model's LICENSE, or with an image or video in
+    it."""
     if not confirmed:
         raise PermissionError("publishing needs the author's yes: nothing was uploaded")
     folder = Path(folder)
     if not REPO_ID.fullmatch(repo_id) or not (folder / "release.json").is_file():
         raise ValueError(f"need a repo id like owner/name and a folder from te release: "
                          f"{repo_id!r}, {folder}")
-    if LICENSE_TODO in (folder / "README.md").read_text(encoding="utf-8"):
-        raise ValueError("the card's license is still a TODO: check the Glimmer model card, "
-                         "then run te release again with --license")
+    if not (folder / "LICENSE").is_file():
+        raise ValueError("the release folder has no LICENSE (the base model's): run te "
+                         "release again")
     if media := sorted(p.name for p in folder.rglob("*") if p.suffix.lower() in MEDIA_SUFFIXES):
         raise ValueError(f"images or video in the release folder ({', '.join(media[:5])}): "
                          "generated images are never published")

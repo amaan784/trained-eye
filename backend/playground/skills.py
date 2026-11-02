@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from backend.dataengine import roi as roi_mod
 from backend.meta.cache import sha256_hex
 from backend.playground.data import FILE, IMAGES, child, number, read_json, read_jsonl
 from backend.skills.spec import NAME_PATTERN, SkillSpec, read_back
@@ -19,8 +20,7 @@ from backend.teach import spread
 WALL_TILES = 48  # the wall shows this many, spread over all of a skill's variations
 EXAMPLE_TILES = 6  # per answer, as in a live run: 6 yes and 6 no
 PROVIDED_PER_SKILL = 3
-ROI_NOTE = ("SAM 3.1's output for these keyframes is stored, but reading boxes out of it "
-            "is not built yet (the parser is a stub), so no outline can be drawn.")
+ROI_NOTE = "SAM 3.1 found no box for these keyframes, so there is no outline to draw."
 
 
 def taught(data_dir: Path) -> list[tuple[Path, SkillSpec]]:
@@ -109,10 +109,21 @@ def box_of(roi: dict) -> list[float] | None:
     return [x1, y1, x2, y2] if ok else None
 
 
+def reparsed(roi: dict) -> dict:
+    """A frame's ROI with its box read again from SAM's stored text when it has none (a
+    skill taught before the parser existed); free, as the text is already saved."""
+    if box_of(roi) or not isinstance(roi.get("raw"), str):
+        return roi
+    width, height = number(roi.get("width")), number(roi.get("height"))
+    size = (int(width), int(height)) if width and height else None
+    best = roi_mod.best_detection(roi_mod.parse_sam_output(roi["raw"], size)[0])
+    return {**roi, "best": {"box": list(best.box), "score": best.score}} if best else roi
+
+
 def outline(folder: Path, keyframes: list[dict], prompt: str) -> dict:
     """SAM's box on the first teaching frame that has one, with how many frames had one."""
     raw = read_json(folder / "roi.json", [])
-    rois = [r for r in raw if isinstance(r, dict)] if isinstance(raw, list) else []
+    rois = [reparsed(r) for r in raw if isinstance(r, dict)] if isinstance(raw, list) else []
     boxed = {r.get("keyframe_sha256"): r for r in rois if box_of(r)}
     info = {"prompt": prompt, "frames": len(rois), "with_box": len(boxed), "frame": None,
             "note": None if boxed else ROI_NOTE}

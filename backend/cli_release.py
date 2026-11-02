@@ -141,8 +141,6 @@ def cmd_release(args) -> int:
         return 2
     print(f"release folder: {shown_path(out)} ({len(release['files'])} files; not included: "
           f"{', '.join(release['skipped']) or 'nothing'})")
-    if not args.license:
-        print("no license yet: check the Glimmer model card, then run again with --license")
     if not args.upload:
         return 0
     if not args.repo:
@@ -210,7 +208,8 @@ def add_parsers(sub) -> None:
     release.add_argument("--weights", help="folder with the adapter or merged model files")
     release.add_argument("--manifests", help="default: manifests/ in the project")
     release.add_argument("--results", help="results.json from te eval")
-    release.add_argument("--license", help="Hugging Face license id, after checking the card")
+    release.add_argument("--license", default="apache-2.0",
+                         help="Hugging Face license id (default: the base model's, apache-2.0)")
     release.add_argument("--upload", action="store_true", help="publish (asks first)")
     release.add_argument("--repo", help="owner/name on Hugging Face")
     release.add_argument("--public", action="store_true", help="a public repo (default private)")

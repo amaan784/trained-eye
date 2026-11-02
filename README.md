@@ -11,20 +11,19 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v15 (M1): Dataset writer
+## Build stage v16 (M1): Region of interest (SAM 3.1)
 
-The Axolotl dataset writer, following Meta's cookbook recipe: OpenAI-style messages,
-user content with the image part first (an absolute path to a PNG) and the text
-second, the assistant answering a plain yes or no. Images are padded to 512x512 with
-black bars, the recipe's default. The prompt template is the build spec's; its system
-turn can be folded into the user text. A manifest records counts and SHA-256 digests,
-and maps every example back to its source and the original image's hash.
+The region-of-interest step: SAM 3.1 on every keyframe with the spec's noun phrase,
+one concept per request. SAM's output format could not be checked while this was
+written, so the raw text is stored (and the call cached) and boxes come from a parser
+hook that returns none for now. The largest confident box per frame is picked once
+boxes exist.
 
 Files added or changed in this stage:
 
-- `backend/dataengine/dataset.py` (new): the Axolotl dataset writer, in Meta's recipe
-  format (image path part, then text; 512x512 padded PNGs)
-- `tests/test_dataset.py` (new): tests
+- `backend/dataengine/roi.py` (new): the region of interest: SAM 3.1 on each keyframe;
+  the raw output is kept and parsing is still to come
+- `tests/test_roi.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -43,8 +42,8 @@ set and no network to Meta); the output under each is what they printed.
     $ python -m pytest
     ........................................................................ [ 41%]
     ........................................................................ [ 83%]
-    ............................                                             [100%]
-    172 passed in 2.45s
+    .............................                                            [100%]
+    173 passed in 2.14s
 
     $ ruff check .
     All checks passed!
@@ -77,16 +76,19 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
+  raw output is kept and parsing is still to come.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `PROGRESS.md`: milestone checklist, decisions, docs-vs-spec differences, open issues
   and spend.
 - `CLAUDE.md`: short setup, commands and conventions.
-- `tests/`: 172 tests, all offline; none calls a paid API.
+- `tests/`: 173 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v16 adds the SAM 3.1 region-of-interest step.
+Stage v17 adds the synthetic set: Muse Image edits of the keyframes with a prompt
+manifest.
 
 ## Privacy and policy
 

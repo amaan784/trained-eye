@@ -98,7 +98,8 @@ class Watcher:
                 continue
             scores[name] = score.p
             row.update(p=round(score.p, 4), over=score.p >= skill.trigger.threshold,
-                       latency_s=round(score.latency_s, 3))
+                       latency_s=(round(score.latency_s, 3)
+                                  if getattr(score, "latency_measured", True) else None))
             fires = skill.trigger.update(score.p, t)
             row["fires"] = fires
             if fires:

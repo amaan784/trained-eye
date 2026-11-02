@@ -9,6 +9,14 @@ Protocol (version 1), one WebSocket per watch session at /ws:
                            or {"type": "error", "seq": 1, "error": "..."} for a bad frame
   phone -> server  text    {"type": "bye"}
 
+Teaching from the phone (backend/teach_api.py): POST /teach/start with the 10 second
+capture, GET /teach/status, POST /teach/answer for the spend and read-back questions,
+each with the SERVER_TOKEN from .env. On shutdown a teach run stops before its next paid
+call and the call in flight is recorded.
+
+GET /skills lists the taught skills for the app's Skills screen:
+{"skills": [{"name", "alert", "cooldown_s", "dataset", "calibrated", "threshold"}]}.
+
 Watch mode: a hello with "watch": ["washer_done", ...] scores every frame for those taught
 skills (backend/watch/watcher.py). The welcome then lists them under "watching", each ack
 carries "scores" ({skill: probability, or null if the student failed}), and an alert is
@@ -23,12 +31,15 @@ and the watcher logs only scores and decisions.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import itertools
 import json
 import logging
+import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 from starlette.applications import Starlette
@@ -72,6 +83,40 @@ async def health(request):
     return JSONResponse({"ok": True, "protocol": PROTOCOL_VERSION})
 
 
+def taught_skills(data_dir: Path) -> list[dict]:
+    """Every taught, not refused skill under data_dir/skills, for the app."""
+    from backend.skills.spec import SkillSpec
+
+    out = []
+    for spec_file in sorted((Path(data_dir) / "skills").glob("*/spec.json")):
+        try:
+            spec = SkillSpec.model_validate_json(spec_file.read_text())
+        except (OSError, ValueError):
+            continue  # a folder, a broken link, unreadable or from an older version
+        if spec.refused:
+            continue
+        folder = spec_file.parent
+        threshold_file = folder / "threshold.json"
+        threshold = None
+        if threshold_file.is_file():
+            try:
+                threshold = float(json.loads(threshold_file.read_text())["threshold"])
+            except (OSError, ValueError, KeyError, TypeError):
+                threshold = None
+            if threshold is not None and not math.isfinite(threshold):
+                threshold = None  # Infinity or NaN cannot go into JSON
+        out.append({"name": spec.name, "alert": spec.alert, "cooldown_s": spec.cooldown_s,
+                    "dataset": (folder / "dataset" / f"{spec.name}-teach.jsonl").is_file(),
+                    "calibrated": threshold is not None, "threshold": threshold})
+    return out
+
+
+def default_data_dir() -> Path:
+    from backend.config import load_settings
+
+    return load_settings().data_dir
+
+
 def default_watcher(names: list[str], session: str):
     """A Watcher for the taught skills `names`, from the settings: the student endpoint
     (TE_STUDENT_URL), Muse Spark for the cloud check, a frame log under data/watch/."""
@@ -93,15 +138,31 @@ def default_watcher(names: list[str], session: str):
         skills.append(load_skill(folder))
     client = MetaClient(settings)
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    return Watcher(skills, OpenAIStudent(settings.student_url, settings.student_model),
+    student = OpenAIStudent(settings.student_url, settings.student_model,
+                            api_key=settings.secrets.get("STUDENT_API_KEY"))
+    return Watcher(skills, student,
                    confirm=lambda image, spec: label_image(client, spec, image),
                    log=FrameLog(settings.data_dir / "watch" / f"{stamp}-{session}.jsonl"))
 
 
-def create_app(watcher_factory: Callable[[list[str], str], object] | None = None) -> Starlette:
+def create_app(watcher_factory: Callable[[list[str], str], object] | None = None, *,
+               data_dir: Callable[[], Path] = default_data_dir,
+               extra_routes: Sequence = (), on_shutdown: Sequence[Callable[[], None]] = ()
+               ) -> Starlette:
     """`watcher_factory(skill names, session)` builds the Watcher for a session that asks
-    to watch; without one, watch requests get an error and frames are only acked."""
+    to watch; without one, watch requests get an error and frames are only acked.
+    `data_dir()` gives the folder GET /skills reads; `extra_routes` are mounted as well
+    (the teach API), and each of `on_shutdown` runs, in a thread, when the server stops."""
     sessions = itertools.count(1)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app):
+        yield
+        for stop in on_shutdown:
+            await run_in_threadpool(stop)
+
+    async def skills(request):
+        return JSONResponse({"skills": await run_in_threadpool(taught_skills, data_dir())})
 
     async def frames(ws: WebSocket) -> None:
         await ws.accept()
@@ -184,7 +245,18 @@ def create_app(watcher_factory: Callable[[list[str], str], object] | None = None
             pass
         log.info("session %s closed after %d frames", session, seq)
 
-    return Starlette(routes=[Route("/health", health), WebSocketRoute("/ws", frames)])
+    return Starlette(routes=[Route("/health", health), Route("/skills", skills),
+                             WebSocketRoute("/ws", frames), *extra_routes], lifespan=lifespan)
 
 
-app = create_app(default_watcher)
+def default_teach_api() -> tuple[list, Callable[[], None]]:
+    """The phone's teach API and its stop(), with the settings and Meta client from .env."""
+    from backend.config import load_settings
+    from backend.meta.client import MetaClient
+    from backend.teach_api import teach_api
+
+    return teach_api(load_settings, MetaClient)
+
+
+_teach_routes, _teach_stop = default_teach_api()
+app = create_app(default_watcher, extra_routes=_teach_routes, on_shutdown=[_teach_stop])

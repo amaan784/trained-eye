@@ -1,0 +1,37 @@
+:root {
+  color-scheme: dark light;
+  --bg: #111214; --panel: #1a1b1f; --line: #2c2e34; --text: #e9e9ec; --muted: #9b9ea6;
+  --accent: #4c8dff; --on-accent: #0b0c0e; --soft: rgba(76, 141, 255, 0.3); --bad: #ff7a7a;
+  font: 15px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f5f7; --panel: #ffffff; --line: #d9dadf; --text: #16171a; --muted: #5c5f67;
+    --accent: #1f5fd6; --on-accent: #ffffff; --soft: rgba(31, 95, 214, 0.22); --bad: #c62828;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+header { display: flex; gap: 16px; align-items: baseline; padding: 14px 24px;
+         border-bottom: 1px solid var(--line); }
+header b { font-weight: 600; }
+.muted { color: var(--muted); }
+main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+         padding: 12px 16px; }
+h2 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+button { font: inherit; color: var(--text); background: var(--panel); cursor: pointer;
+         border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; }
+button:hover { border-color: var(--muted); }
+button.primary, button.on { background: var(--accent); color: var(--on-accent);
+                            border-color: var(--accent); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input { font: inherit; color: var(--text); background: var(--bg); width: 7em;
+        border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+input.bad { border-color: var(--bad); }
+kbd { font: 12px ui-monospace, monospace; padding: 1px 5px; border: 1px solid var(--line);
+      border-radius: 4px; color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+#status { min-height: 1.5em; }
+#status.bad { color: var(--bad); }

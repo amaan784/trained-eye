@@ -10,6 +10,12 @@ probability is read at the answer itself: the last generated token that is "yes"
 "no", with the chance of each taken from that token's top logprobs and renormalised
 over the two. A reply without such a token is an error, never a guess.
 
+Sampling follows Meta's serving notes (meta-oss-cookbook muse-glimmer/inference-server/
+vllm.md): no temperature in the request, so the server uses the checkpoint's published
+settings (it advises against greedy decoding), and reasoning kept short with
+chat_template_kwargs.reasoning_strength "low", as the cookbook's evaluation does. The
+answer token's logprobs are what is read, so a sampled reasoning path changes little.
+
 The endpoint is the author's own model, not a Meta API call, so it is not cached and not
 in the spend ledger; Modal bills for the GPU time instead.
 """
@@ -28,6 +34,7 @@ from backend.dataengine.dataset import SYSTEM_PROMPT, pad_image, user_prompt
 from backend.skills.spec import SkillSpec
 
 ANSWERS = ("yes", "no")
+REASONING = {"chat_template_kwargs": {"reasoning_strength": "low"}}
 
 
 class StudentError(RuntimeError):
@@ -97,11 +104,11 @@ class OpenAIStudent:
         self.max_tokens = max_tokens
         self.top_logprobs = top_logprobs
         self.system_in_user = system_in_user
-        self.extra_body = dict(extra_body or {})
+        self.extra_body = {**REASONING, **(extra_body or {})}
 
     def score(self, image: bytes, spec: SkillSpec) -> Score:
         body = {"model": self.model, "messages": frame_message(image, spec, self.system_in_user),
-                "max_tokens": self.max_tokens, "temperature": 0, "logprobs": True,
+                "max_tokens": self.max_tokens, "logprobs": True,
                 "top_logprobs": self.top_logprobs, **self.extra_body}
         start = time.monotonic()
         try:

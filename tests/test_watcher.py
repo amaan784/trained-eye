@@ -109,6 +109,23 @@ def test_student_errors_are_logged_and_do_not_count(tmp_path):
     assert rows[1]["error"] == "endpoint down" and rows[1]["p"] is None
 
 
+def test_frames_that_were_not_timed_log_no_latency(tmp_path):
+    from types import SimpleNamespace
+
+    calls = []
+
+    class PartlyTimed:  # e.g. Spark as the scorer, whose cached frames are not timed
+        def score(self, image, spec):
+            calls.append(1)
+            return SimpleNamespace(p=0.1, answer="no", latency_s=0.25,
+                                   latency_measured=len(calls) != 2)
+
+    log = FrameLog(tmp_path / "w.jsonl")
+    run(Watcher([watched(spec(confirm=False))], PartlyTimed(), log=log), 3)
+    rows = [json.loads(x) for x in log.path.read_text().splitlines()]
+    assert [r["latency_s"] for r in rows] == [0.25, None, 0.25]
+
+
 def test_each_skill_has_its_own_trigger():
     watcher = Watcher([watched(spec("washer_done", confirm=False)),
                        watched(spec("pot_boils", confirm=False), threshold=0.95)],

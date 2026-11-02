@@ -102,3 +102,17 @@ def test_optimizer_steps_at_global_batch_32():
     from backend.training.axolotl import optimizer_steps
 
     assert [optimizer_steps(n) for n in (1, 32, 33, 300)] == [1, 1, 2, 10]
+
+
+def test_bundle_can_read_the_unfiltered_dataset_folder(tmp_path):
+    skill = teach_dataset(tmp_path / "skills", "washer_done")
+    (skill / "dataset").rename(skill / "dataset-unfiltered")
+    with pytest.raises(ValueError, match="no dataset yet.*te teach for it first"):
+        bundle([skill], tmp_path / "out", "/vol/b")
+    plain = teach_dataset(tmp_path / "skills", "pot_boils")
+    with pytest.raises(ValueError, match="te unfiltered --skill pot_boils first"):
+        bundle([plain], tmp_path / "out", "/vol/b", dataset_dir="dataset-unfiltered")
+    manifest = bundle([skill], tmp_path / "out", "/vol/b", dataset_dir="dataset-unfiltered")
+    assert manifest["dataset_dir"] == "dataset-unfiltered" and manifest["train_examples"]
+    with pytest.raises(ValueError, match="dataset_dir"):
+        bundle([skill], tmp_path / "out", "/vol/b", dataset_dir="../elsewhere")

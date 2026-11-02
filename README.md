@@ -11,22 +11,22 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v49 (M1 review): Fix: te teach messages
+## Build stage v105 (M4): Notes and credits
 
-te teach now refuses a --request of only spaces and negative --positives or
---negatives before it shows the estimate (before, the first was only noticed after the
-spend question, and the second printed a negative estimate). After a stop for too many
-failures it prints the reason first, then the hint, and exits with code 2. A --labels
-file that names a keyframe twice, the second time with an unusable value, now says the
-value is the problem. The keyframe warning says what it checks: fewer than 20.
+HANDOVER.md, PROGRESS.md and CLAUDE.md record what M2 to M4 now have, the steps that
+need the Mac, Modal or footage, the decisions taken and the questions for the author.
+CONTRIBUTIONS.md credits Meta's cookbook recipe and dataset format, the DAT SDK with
+the two copied sample files, Axolotl and the Meta models used.
 
 Files added or changed in this stage:
 
-- `backend/cli.py` (changed): the te command line
-- `backend/teach.py` (changed): the teach flow end to end, cached so a rerun costs
-  nothing
-- `tests/test_cli.py` (changed): tests
-- `tests/test_teach.py` (changed): tests
+- `CLAUDE.md` (changed): short setup, commands and conventions
+- `CONTRIBUTIONS.md` (new): credits, licenses and the copied Meta sample files
+- `HANDOVER.md` (changed): how to pick the project up in a new session: state, the
+  author's rules, open items with exact commands, and the plan for M2 to M5 with the
+  facts from the docs
+- `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
+  open issues and spend
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -39,18 +39,21 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 14%]
-    ........................................................................ [ 28%]
-    ........................................................................ [ 43%]
-    ........................................................................ [ 57%]
-    ........................................................................ [ 72%]
-    ........................................................................ [ 86%]
-    ..................................................................       [100%]
-    498 passed in 14.58s
+    ........................................................................ [ 10%]
+    ........................................................................ [ 20%]
+    ........................................................................ [ 30%]
+    ........................................s............................... [ 40%]
+    ........................................................................ [ 50%]
+    ........................................................................ [ 61%]
+    ........................................................................ [ 71%]
+    ........................................................................ [ 81%]
+    ........................................................................ [ 91%]
+    ...........................................................              [100%]
+    706 passed, 1 skipped in 47.94s
 
     $ ruff check .
     All checks passed!
@@ -72,6 +75,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   recorded from the reported usage.
 - `backend/server.py`: the backend the iPhone app talks to: JPEG frames arrive over a
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
+- `backend/teach_session.py`: a phone teach session: the spend question before any
+  paid call, the read-back, progress lines and timeouts.
+- `backend/teach_upload.py`: the phone's teach upload: a multipart parser, the input
+  checks, the saved capture and the estimate.
+- `backend/teach_api.py`: the teach routes for the phone: /teach/start, /teach/status
+  and /teach/answer, behind SERVER_TOKEN.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
 - `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
@@ -80,6 +89,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   (real, synthetic or mixed, with a validation split and volume paths).
 - `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
   recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
+- `backend/training/export.py`: the Modal app that merges a trained adapter and checks
+  the merged model's answers.
+- `backend/inference/modal_serve.py`: the Modal app that serves the merged model with
+  vLLM behind STUDENT_API_KEY.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -103,6 +116,18 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   OpenAI-compatible endpoint, read at its yes or no answer token.
 - `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
   alert, alert messages and the frame log.
+- `backend/labeltool/clips.py`: the labelling tool for clips: where the condition is
+  true, saved as time ranges.
+- `backend/labeltool/images.py`: the labelling tool for generated images, for
+  Experiment 2.
+- `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
+- `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
+  and the SVG charts.
+- `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
+  its price.
+- `backend/regenerate.py`: the prompt manifests and regenerating images from them.
+- `backend/release/model_card.py`: the Hugging Face model card and release folder.
+- `backend/playground/app.py`: the web playground.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -115,13 +140,14 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 498 tests, all offline; none calls a paid API.
+- `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
+- `CONTRIBUTIONS.md`: credits, licenses and the copied Meta sample files.
+- `tests/`: 706 tests, all offline; none calls a paid API.
 
 ## Next
 
-The rest of M2 on Modal and the Mac: the two-step smoke and the first training run
-(asking first), export and serving, the iOS app, and thresholds from labelled
-validation footage.
+The runs on the Mac and Modal: the first teach, the training smoke and runs, export
+and serving, the first Xcode build, the experiments, then the release and the demo.
 
 ## Privacy and policy
 

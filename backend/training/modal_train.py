@@ -104,7 +104,8 @@ def upload(bundle: Path, run: str) -> str:
 
 
 @app.local_entrypoint()
-def main(bundle: str, run: str, smoke: bool = False, tags: str = "", result: str = "") -> None:
+def main(bundle: str, run: str, smoke: bool = False, tags: str = "", result: str = "",
+         max_steps: int = 0) -> None:
     from backend.training.axolotl import qlora_config
 
     manifest = json.loads((Path(bundle) / "manifest.json").read_text())
@@ -114,6 +115,8 @@ def main(bundle: str, run: str, smoke: bool = False, tags: str = "", result: str
     val = f"{remote}/val.jsonl" if manifest.get("val_examples") else None
     config = qlora_config(run, f"{remote}/train.jsonl", f"{MOUNT}/runs/{run}/out",
                           val_jsonl=val, smoke=smoke)
+    if max_steps and not smoke:  # fixed steps for Experiments 1 to 3 (backend/eval/plan.py)
+        config["max_steps"] = max_steps
     out = train.remote(run, config, [t for t in tags.split(",") if t])
     summary = {k: v for k, v in out.items() if k != "log_tail"}
     print(json.dumps(summary))

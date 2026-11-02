@@ -330,6 +330,19 @@ def test_serve_prints_an_address_the_phone_can_use_and_keeps_server_logs(monkeyp
     assert "ws://<this Mac's Wi-Fi IP>:9000/ws" in capsys.readouterr().out
 
 
+def test_serve_says_whether_the_phone_can_teach(env, monkeypatch, capsys):
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: None)
+    monkeypatch.setenv("SERVER_TOKEN", "")
+    cli.main(["serve"])
+    assert "teaching from the phone: off (set SERVER_TOKEN" in capsys.readouterr().out
+    monkeypatch.setenv("SERVER_TOKEN", "t0ken-never-printed")
+    cli.main(["serve"])
+    out = capsys.readouterr().out
+    assert "teaching from the phone: on" in out and "t0ken-never-printed" not in out
+
+
 def test_server_log_lines_reach_the_console_handler(capsys):
     import logging.config
 
@@ -457,8 +470,8 @@ def test_watch_replays_a_clip_through_the_student(env, monkeypatch, capsys):
     seen = []
 
     class Fake:
-        def __init__(self, url, model):
-            seen.append((url, model))
+        def __init__(self, url, model, api_key=None):
+            seen.append((url, model, api_key))
 
         def score(self, image, spec):
             return student.Score(0.9, "yes", 0.1)
@@ -467,7 +480,7 @@ def test_watch_replays_a_clip_through_the_student(env, monkeypatch, capsys):
     clip = write_clip(env / "clip", n=5)
     assert cli.main(["watch", "--skills", "washer_done", "--clip", str(clip)]) == 0
     out = capsys.readouterr().out
-    assert seen == [("http://127.0.0.1:8080/v1", "trained-eye")]
+    assert seen == [("http://127.0.0.1:8080/v1", "trained-eye", None)]
     assert '2.0 s  washer_done: "Laundry\'s done."' in out and "cloud not checked" in out
     assert "5 frames scored at 1 fps" in out and "no calibrated threshold" in out
     [log] = (env / "data/watch").glob("replay-*-clip.jsonl")
@@ -511,3 +524,128 @@ def test_teach_rejects_a_blank_request_and_negative_counts_before_any_estimate(e
         cli.main([*TEACH, "--clip", clip, "--positives", "-100"])
     assert stop.value.code == 2 and "must be 0 or more" in capsys.readouterr().err
     assert calls == []
+
+
+def test_export_needs_a_bundle_asks_and_reports_the_check(env, monkeypatch, capsys):
+    import ast
+
+    taught(env)
+    assert cli.main(["export", "--run", "exp1-mixed"]) == 2  # no bundle yet
+    (env / "data/train/exp1-mixed").mkdir(parents=True)
+    (env / "data/train/exp1-mixed/manifest.json").write_text("{}")
+    runs = fake_modal(monkeypatch, {"merged_dir": "/vol/runs/exp1-mixed/merged", "examples": 50,
+                                    "agreement": 1.0, "all_agree": True, "bin_files": 0,
+                                    "tensor_names_match": True, "disagreements": []})
+    prompts = answer(monkeypatch, "n")
+    assert cli.main(["export", "--run", "exp1-mixed"]) == 1 and runs == [] and prompts
+    assert cli.main(["export", "--run", "exp1-mixed", "--yes"]) == 0
+    [command] = runs
+    assert command[:3] == ["modal", "run", "backend/training/export.py"]
+    assert "same answer on 100% of 50 examples" in capsys.readouterr().out
+    tree = ast.parse((cli.PROJECT_ROOT / "backend/training/export.py").read_text())
+    timeout = next(eval(compile(ast.Expression(n.value), "export.py", "eval"))  # 3 * 3600
+                   for n in tree.body if isinstance(n, ast.Assign)
+                   and getattr(n.targets[0], "id", "") == "TIMEOUT_S")
+    assert timeout == cli.EXPORT_MAX_HOURS * 3600  # the worst case printed is the real limit
+
+
+def test_serve_student_deploys_with_the_run_and_stops(env, monkeypatch, capsys):
+    calls = []
+
+    def run(command, cwd=None, check=False, env=None, **kw):
+        calls.append((command, (env or {}).get("TE_SERVE_RUN")))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(cli.subprocess, "run", run)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
+    assert cli.main(["serve-student"]) == 2
+    assert cli.main(["serve-student", "--run", "exp1-mixed", "--yes"]) == 0
+    assert cli.main(["serve-student", "--stop"]) == 0
+    assert calls == [(["modal", "deploy", "backend/inference/modal_serve.py"], "exp1-mixed"),
+                     (["modal", "app", "stop", "trained-eye-student"], None)]
+    assert "TE_STUDENT_URL" in capsys.readouterr().out
+
+
+def test_teach_over_fifteen_dollars_asks_even_with_yes(env, monkeypatch, capsys):
+    calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    prompts = answer(monkeypatch, "n")
+    code = cli.main([*TEACH, "--clip", str(write_clip(env / "clip")), "--positives", "600",
+                     "--negatives", "600", "--yes"])
+    assert code == 1 and calls == [] and len(prompts) == 1
+    assert "so it needs your yes even with --yes" in capsys.readouterr().out
+
+
+def test_label_starts_the_clip_or_image_tool_on_localhost(env, monkeypatch, capsys):
+    import uvicorn
+
+    ran = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: ran.append(kw))
+    clip = env / "session3.mp4"
+    clip.write_bytes(b"\x00" * 64)
+    assert cli.main(["label", "--clip", str(clip), "--no-browser"]) == 0
+    assert ran == [{"host": "127.0.0.1", "port": 8766, "log_level": "warning"}]
+    assert "session3.labels.json" in capsys.readouterr().out
+    assert cli.main(["label", "--skill", "nope", "--no-browser"]) == 2
+    assert cli.main(["label", "--skill", "Bad-Name", "--no-browser"]) == 2
+
+
+def test_eval_reports_a_missing_plan_and_scores_an_empty_one(env, capsys):
+    assert cli.main(["eval", "--plan", str(env / "nope.json"), "--out", str(env / "eval")]) == 2
+    (env / "plan.json").write_text('{"evaluations": []}')
+    assert cli.main(["eval", "--plan", str(env / "plan.json"), "--out", str(env / "eval")]) == 0
+    assert "0 of 0 evaluations scored" in capsys.readouterr().out
+    assert (env / "eval/results.md").is_file()
+
+
+def test_watch_with_spark_asks_first_and_only_a_yes_fires(env, monkeypatch, capsys):
+    from backend.eval import spark_scorer
+    from backend.inference import student
+
+    taught(env)
+    replies = []
+
+    class Fake:
+        def __init__(self, client, latency_log=None):
+            pass
+
+        def score(self, image, spec):
+            return student.Score(replies.pop(0), "yes", 0.1)
+
+        def summary(self):
+            return {"frames": 5}
+
+    monkeypatch.setattr(spark_scorer, "SparkScorer", Fake)
+    clip = str(write_clip(env / "clip", n=5))
+    args = ["watch", "--skills", "washer_done", "--clip", clip, "--scorer", "spark"]
+    prompts = answer(monkeypatch, "n")
+    assert cli.main(args) == 1 and len(prompts) == 1
+    assert "Muse Spark on 5 frames x 1 skills" in capsys.readouterr().out
+    log = env / "eval/frames.jsonl"
+    log.parent.mkdir()
+    log.write_text("a line from an earlier run\n")
+    replies[:] = [0.5] * 5  # unsure is not a yes
+    assert cli.main([*args, "--yes", "--log", str(log)]) == 0
+    assert "washer_done:" not in capsys.readouterr().out
+    assert "earlier run" not in log.read_text() and len(log.read_text().splitlines()) == 5
+    replies[:] = [1.0] * 5
+    assert cli.main([*args, "--yes", "--log", str(log)]) == 0
+    assert 'washer_done: "Laundry\'s done."' in capsys.readouterr().out
+
+
+def test_train_with_fixed_steps_prices_them_and_passes_them_on(env, monkeypatch, capsys):
+    from backend.eval.plan import steps_samples
+
+    taught(env)
+    (env / "data/train").mkdir(parents=True)
+    (env / "data/train/smoke-timing.json").write_text(json.dumps(
+        {"seconds": 900.0, "train_runtime": 60.0, "train_samples_per_second": 0.5}))
+    runs = fake_modal(monkeypatch, {"seconds": 990.0, "ok": True})
+    assert cli.main([*TRAIN, "--max-steps", "10", "--yes"]) == 0
+    out = capsys.readouterr().out
+    manifest = json.loads((env / "data/train/exp1-mixed/manifest.json").read_text())
+    samples = steps_samples(10, manifest["train_examples"], manifest.get("val_examples", 0))
+    minutes = round((840 + samples / 0.5) / 60)  # the smoke's setup, then samples at 0.5/s
+    assert f"10 optimizer steps; estimate: about {minutes} min of H100" in out
+    [command] = runs
+    assert command[-2:] == ["--max-steps", "10"]
+    assert "steps:10" in command[command.index("--tags") + 1].split(",")

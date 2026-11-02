@@ -27,14 +27,16 @@ def _order(example_id: str, salt: str) -> str:
     return hashlib.sha256(f"{salt}|{example_id}".encode()).hexdigest()
 
 
-def skill_examples(skill_dir: Path) -> list[tuple[dict, dict]]:
+def skill_examples(skill_dir: Path, dataset_dir: str = "dataset") -> list[tuple[dict, dict]]:
     """(record, index entry) for each example of a skill's teach dataset."""
     skill_dir = Path(skill_dir)
     name = skill_dir.name
-    dataset = skill_dir / "dataset"
+    dataset = skill_dir / dataset_dir
     manifest_path = dataset / f"{name}-teach.manifest.json"
     if not manifest_path.is_file():
-        raise ValueError(f"{name} has no dataset yet: run te teach for it first")
+        step = ("te teach for it first" if dataset_dir == "dataset"
+                else f"te unfiltered --skill {name} first")
+        raise ValueError(f"{name} has no {dataset_dir} yet: run {step}")
     manifest = json.loads(manifest_path.read_text())
     body = (dataset / f"{name}-teach.jsonl").read_text(encoding="utf-8")
     if hashlib.sha256(body.encode("utf-8")).hexdigest() != manifest["jsonl_sha256"]:
@@ -44,8 +46,13 @@ def skill_examples(skill_dir: Path) -> list[tuple[dict, dict]]:
 
 
 def bundle(skill_dirs: list[Path], out_dir: Path, image_root: str, *, variant: str = "mixed",
-           limit: int | None = None, salt: str = "trained-eye") -> dict:
-    """Write the bundle to `out_dir` (replacing it) and return its manifest."""
+           limit: int | None = None, salt: str = "trained-eye",
+           dataset_dir: str = "dataset") -> dict:
+    """Write the bundle to `out_dir` (replacing it) and return its manifest. `dataset_dir`
+    picks the skill's dataset folder: "dataset" from te teach, or "dataset-unfiltered"
+    for Experiment 2's arm without the Spark filter."""
+    if dataset_dir not in ("dataset", "dataset-unfiltered"):
+        raise ValueError("dataset_dir must be dataset or dataset-unfiltered")
     if variant not in VARIANTS:
         raise ValueError(f"variant must be one of {', '.join(VARIANTS)}")
     if not image_root.startswith("/"):
@@ -55,7 +62,7 @@ def bundle(skill_dirs: list[Path], out_dir: Path, image_root: str, *, variant: s
     (out_dir / "images").mkdir(parents=True)
     chosen, sources = [], {}
     for skill_dir in sorted(Path(d) for d in skill_dirs):
-        examples = [(r, e) for r, e in skill_examples(skill_dir)
+        examples = [(r, e) for r, e in skill_examples(skill_dir, dataset_dir)
                     if e["source"] in VARIANTS[variant]]
         examples.sort(key=lambda pair: _order(pair[0]["id"], salt))
         if limit is not None:
@@ -63,7 +70,7 @@ def bundle(skill_dirs: list[Path], out_dir: Path, image_root: str, *, variant: s
         if not examples:
             raise ValueError(f"{skill_dir.name} has no {variant} examples")
         sources[skill_dir.name] = json.loads(
-            (skill_dir / "dataset" / f"{skill_dir.name}-teach.manifest.json").read_text()
+            (skill_dir / dataset_dir / f"{skill_dir.name}-teach.manifest.json").read_text()
         )["jsonl_sha256"]
         chosen += [(skill_dir, r, e) for r, e in examples]
 
@@ -72,7 +79,7 @@ def bundle(skill_dirs: list[Path], out_dir: Path, image_root: str, *, variant: s
     counts: dict[str, int] = {}
     for skill_dir, record, entry in sorted(chosen, key=lambda c: _order(c[1]["id"], salt)):
         image_part = record["messages"][-2]["content"][0]
-        source_png = skill_dir / "dataset" / "images" / Path(image_part["path"]).name
+        source_png = skill_dir / dataset_dir / "images" / Path(image_part["path"]).name
         target = out_dir / "images" / f"{record['id']}.png"
         if not source_png.is_file():
             raise ValueError(f"{skill_dir.name}: missing image {source_png}; run te teach again")
@@ -85,7 +92,8 @@ def bundle(skill_dirs: list[Path], out_dir: Path, image_root: str, *, variant: s
         counts[key] = counts.get(key, 0) + 1
 
     manifest = {"variant": variant, "limit": limit, "image_root": image_root,
-                "skills": sources, "counts": dict(sorted(counts.items()))}
+                "dataset_dir": dataset_dir, "skills": sources,
+                "counts": dict(sorted(counts.items()))}
     for split, lines in splits.items():
         if not lines:
             continue

@@ -135,6 +135,23 @@ training side follows the order a run takes: the bundle and the config, the Moda
 that trains, then the commands that drive both, and the notes last. v49 comes after
 them with the last small fixes from the review of v31 to v38, in te teach.
 
+From v50 on each stage changes 150 to 300 lines, so a large file is a stage on its own
+and its tests can come in the stage after it. The rest of M2 (v50 to v58) builds
+teaching from the phone from the inside out: the session with its two questions, the
+upload and its checks, their tests, the routes, the server that mounts them, the routes'
+tests, then export and serving on Modal and the commands for both. The reviews of the
+teach API, the iOS code and the playground ran before these stages were cut, so their
+fixes are part of the stages that add that code. The iOS app (v59 to v74) goes from the
+data up: settings and the protocol, the network clients, Meta's copied decoder, the
+glasses, the cameras and speech, the teach client and flow, the app model, then the
+screens, the clips and the build instructions. M3 (v75 to v89) starts with the labelling
+tools, since every metric needs labels, then the metrics, the chart pieces, the charts,
+the write-up and the runner that joins them, then each experiment's own code and the
+commands last. M4 (v90 to v105) follows the release: face blurring before anything that
+publishes, the manifests and regeneration, the model card, then the playground from its
+data and caps through the live runs and the page to the app, the commands, and the notes
+and credits last.
+
 ## How to review a stage
 
 Clone the branch next to your repository, then compare any two neighbouring folders:
@@ -166,7 +183,7 @@ description below:
     git commit -m "<summary>" -m "<description>"
 
 Then the same for v2, v3 and so on. Earlier stages never change when later ones are
-added, so carry on from the first stage you have not committed yet (v39 if v1 to v38
+added, so carry on from the first stage you have not committed yet (v50 if v1 to v49
 are already on `main`). `git status` before each commit should show only the files
 listed for that stage. LICENSE and .gitattributes already exist in the repository
 from its first commit, and the stage copies are identical, so v10 changes only its own

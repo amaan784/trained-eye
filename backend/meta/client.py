@@ -293,6 +293,8 @@ class MetaClient:
                 if tally.maybe_billed and tally.guard:
                     tally.guard()
                 self._sleep(self._backoff(attempt, None))
+                if tally.guard:  # the caps again before a new attempt (and a server stop)
+                    tally.guard()
                 continue
             except httpx.TransportError as err:
                 raise MetaAPIError(None, f"request failed: {type(err).__name__} "
@@ -307,6 +309,8 @@ class MetaClient:
                 if tally.maybe_billed and tally.guard:
                     tally.guard()
                 self._sleep(self._backoff(attempt, resp.headers.get("retry-after")))
+                if tally.guard:
+                    tally.guard()
                 continue
             if not resp.is_success:
                 raise MetaAPIError(status, self._redact(resp.text)[:500])

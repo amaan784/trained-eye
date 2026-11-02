@@ -10,6 +10,12 @@
   te train          bundle taught skills and train the student on Modal (asks first)
   te watch          replay a clip through watch mode: scores, alerts and the frame log
   te calibrate      set a skill's threshold from replayed, labelled validation clips
+  te label          mark where a clip's condition is true, or hand-label generated images
+  te eval           score replayed, labelled clips: results.md and the charts (make eval)
+  te export         merge a trained adapter on Modal and check it answers as before (asks)
+  te serve-student  deploy or stop the trained model's endpoint on Modal (asks)
+  te experiments, te unfiltered, te spark-errors, te regress: M3 (backend/cli_experiments.py)
+  te manifests, te regenerate, te blur, te release, te playground: M4 (backend/cli_release.py)
 """
 
 from __future__ import annotations
@@ -121,6 +127,15 @@ def cmd_serve(args) -> int:
         host = lan_address() or "<this Mac's Wi-Fi IP>"
     print(f"Trained Eye backend: ws://{host}:{args.port}/ws  (check: "
           f"http://{host}:{args.port}/health; Ctrl+C to stop)")
+    try:
+        settings = load_settings()
+        teach = "off (set SERVER_TOKEN in .env to turn it on)"
+        if settings.has_secret("SERVER_TOKEN"):
+            settings.secret("SERVER_TOKEN")  # a token with spaces or smart quotes stops here
+            teach = "on (the app needs SERVER_TOKEN)"
+    except ConfigError as err:
+        teach = f"off ({err})"
+    print(f"teaching from the phone: {teach}")
     uvicorn.run("backend.server:app", host=args.host, port=args.port, log_level="info",
                 log_config=server_log_config())
     return 0
@@ -310,8 +325,12 @@ def cmd_teach(args) -> int:
     if args.estimate_only:
         return 0
     settings.secret("MODEL_API_KEY")  # a missing key stops here, before the question
-    if not args.yes and not ask(f"Spend up to about ${parts['total']:.2f} "
-                                f"(at most ${at_most:.2f})?"):
+    over = at_most > ASK_ABOVE_USD
+    if over:
+        print(f"te: this could cost up to ${at_most:.2f}, over ${ASK_ABOVE_USD:.0f}, so it needs "
+              "your yes even with --yes")
+    if (over or not args.yes) and not ask(f"Spend up to about ${parts['total']:.2f} "
+                                          f"(at most ${at_most:.2f})?"):
         return 1
     opts = TeachOptions(skill=args.skill, clip=Path(args.clip),
                         audio=Path(args.audio) if args.audio else None, request=args.request,
@@ -380,7 +399,8 @@ def cmd_train(args) -> int:
             raise ValueError(f"run name {args.run!r}: lower-case letters, digits and -")
         out = settings.data_dir / "train" / args.run
         manifest = bundle([settings.data_dir / "skills" / n for n in names], out,
-                          f"/vol/bundles/{args.run}", variant=args.variant, limit=args.limit)
+                          f"/vol/bundles/{args.run}", variant=args.variant, limit=args.limit,
+                          dataset_dir=args.dataset)
     except ValueError as err:
         print(f"te: {err}", file=sys.stderr)
         return 2
@@ -396,12 +416,16 @@ def cmd_train(args) -> int:
         question = "Run the smoke on Modal?"
     else:
         timing = json.loads(timing_path.read_text()) if timing_path.is_file() else None
-        estimate = train_estimate(train_n + val_n, timing)
+        from backend.eval.plan import steps_samples
+
+        samples = (steps_samples(args.max_steps, train_n, val_n) if args.max_steps
+                   else train_n + val_n)
+        estimate = train_estimate(samples, timing)
         if estimate is None:
             print("te: no smoke timing yet: run the same command with --smoke first, so this "
                   "run can be priced", file=sys.stderr)
             return 2
-        print(f"{optimizer_steps(train_n)} optimizer steps; estimate: about "
+        print(f"{args.max_steps or optimizer_steps(train_n)} optimizer steps; estimate: about "
               f"{estimate['seconds'] / 60:.0f} min of {GPU}, about ${estimate['usd']:.2f} at "
               f"${MODAL_GPU_USD_PER_HOUR[GPU]:.2f} an hour (price not checked; see config.py)")
         question = f"Train {args.run} on Modal for about ${estimate['usd']:.2f}?"
@@ -420,10 +444,14 @@ def cmd_train(args) -> int:
     result_path.unlink(missing_ok=True)
     tags = [f"exp:{args.run.split('-')[0]}", f"skills:{'+'.join(names)}",
             f"mix:{args.variant}", f"examples:{train_n}", "seed:42", f"commit:{git_commit()}"]
+    if args.max_steps and not args.smoke:
+        tags.append(f"steps:{args.max_steps}")
     command = ["modal", "run", "backend/training/modal_train.py", "--bundle", str(out),
                "--run", args.run, "--tags", ",".join(tags), "--result", str(result_path)]
     if args.smoke:
         command.append("--smoke")
+    elif args.max_steps:
+        command += ["--max-steps", str(args.max_steps)]
     code = subprocess.run(command, cwd=PROJECT_ROOT, check=False).returncode
     if code != 0 or not result_path.is_file():
         print(f"te: training failed (exit {code}); the full log is on the Modal volume under "
@@ -446,9 +474,9 @@ def cmd_watch(args) -> int:
     from backend.watch.watcher import FrameLog, Watcher, load_skill
 
     settings = load_settings()
-    if not settings.student_url:
-        print("te: watch needs the trained model's endpoint: set TE_STUDENT_URL",
-              file=sys.stderr)
+    if args.scorer == "student" and not settings.student_url:
+        print("te: watch needs the trained model's endpoint: set TE_STUDENT_URL (or use "
+              "--scorer spark)", file=sys.stderr)
         return 2
     try:
         names = [check_name(n.strip()) for n in args.skills.split(",") if n.strip()]
@@ -469,9 +497,29 @@ def cmd_watch(args) -> int:
     client = make_client(settings)
     confirm = None if args.no_cloud else (lambda image, spec: label_image(client, spec, image))
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    log = FrameLog(settings.data_dir / "watch" / f"replay-{stamp}-{Path(args.clip).stem}.jsonl")
-    watcher = Watcher(skills, OpenAIStudent(settings.student_url, settings.student_model),
-                      confirm=confirm, log=log)
+    if args.log:  # a rerun replays every frame (cached ones are free): start the log afresh
+        Path(args.log).unlink(missing_ok=True)
+    log = FrameLog(Path(args.log) if args.log else
+                   settings.data_dir / "watch" / f"replay-{stamp}-{Path(args.clip).stem}.jsonl")
+    if args.scorer == "spark":  # Experiment 4: Muse Spark judges every frame, paid per frame
+        from backend.eval.plan import spark_usd_per_check
+        from backend.eval.spark_scorer import SparkScorer, default_log
+
+        settings.secret("MODEL_API_KEY")
+        frames = list(frames)
+        cost = len(frames) * len(skills) * spark_usd_per_check(settings)
+        print(f"Muse Spark on {len(frames)} frames x {len(skills)} skills: about ${cost:.2f} "
+              "before cache hits")
+        over = cost > ASK_ABOVE_USD
+        if (over or not args.yes) and not ask("Spend that?"):
+            return 1
+        student = SparkScorer(client, latency_log=default_log(settings.data_dir))
+        for skill in skills:  # Spark answers yes, no or unsure (0.5): only a yes counts
+            skill.trigger.threshold = 1.0
+    else:
+        student = OpenAIStudent(settings.student_url, settings.student_model,
+                                api_key=settings.secrets.get("STUDENT_API_KEY"))
+    watcher = Watcher(skills, student, confirm=confirm, log=log)
     count = 0
     for frame in frames:
         _, alerts = watcher.on_frame(frame.data, t=frame.t_s)
@@ -481,6 +529,8 @@ def cmd_watch(args) -> int:
             print(f"{alert.t:8.1f} s  {alert.skill}: \"{alert.text}\"  "
                   f"(p {alert.p:.2f}, cloud {cloud})")
     print(f"{count} frames scored at {args.fps:g} fps; frame log: {shown_path(log.path)}")
+    if args.scorer == "spark":
+        print(f"Spark: {json.dumps(student.summary())}")
     return 0
 
 
@@ -524,6 +574,146 @@ def cmd_calibrate(args) -> int:
     if minutes < 60:
         print("note: under an hour of footage, so even one false alarm is too many here")
     return 0
+
+
+EXPORT_MAX_HOURS = 3  # backend/training/export.py's TIMEOUT_S: the most an export can bill
+STUDENT_APP = "trained-eye-student"  # backend/inference/modal_serve.py's APP
+
+
+def modal_ready() -> bool:
+    if shutil.which("modal") is None:
+        print('te: the modal command is missing: pip install -e ".[train]", then modal token '
+              "set", file=sys.stderr)
+        return False
+    return True
+
+
+def cmd_export(args) -> int:
+    settings = load_settings()
+    bundle = settings.data_dir / "train" / args.run
+    if not RUN_NAME.fullmatch(args.run) or not (bundle / "manifest.json").is_file():
+        print(f"te: no training bundle for run {args.run!r} in {shown_path(bundle)}",
+              file=sys.stderr)
+        return 2
+    worst = EXPORT_MAX_HOURS * MODAL_GPU_USD_PER_HOUR[GPU]
+    print(f"export {args.run}: merge on one {GPU}, then compare {args.limit} answers "
+          f"({args.reference} base + adapter vs merged). Not timed yet: at most "
+          f"{EXPORT_MAX_HOURS} h, ${worst:.2f} at ${MODAL_GPU_USD_PER_HOUR[GPU]:.2f} an hour "
+          "(price not checked; see config.py)")
+    over = worst > ASK_ABOVE_USD
+    if (over or not args.yes) and not ask("Run the export on Modal?"):
+        return 1
+    if not modal_ready():
+        return 2
+    result_path = bundle.parent / f"{args.run}.export.json"
+    result_path.unlink(missing_ok=True)
+    command = ["modal", "run", "backend/training/export.py", "--run", args.run, "--bundle",
+               str(bundle), "--limit", str(args.limit), "--reference", args.reference,
+               "--result", str(result_path)]
+    code = subprocess.run(command, cwd=PROJECT_ROOT, check=False).returncode
+    if code != 0 or not result_path.is_file():
+        print(f"te: the export failed (exit {code})", file=sys.stderr)
+        return code or 1
+    result = json.loads(result_path.read_text())
+    print(f"merged: {result.get('merged_dir')}; the merged model gave the same answer on "
+          f"{result['agreement']:.0%} of {result['examples']} examples")
+    problems = []
+    if result.get("tensor_names_match") is False:
+        problems.append("its tensor names differ from the base model's")
+    if result.get("bin_files"):
+        problems.append(f"it has {result['bin_files']} .bin files instead of safetensors")
+    if not result.get("all_agree"):
+        problems.append(f"answers differ on {', '.join(result.get('disagreements', [])[:10])}")
+    for problem in problems:
+        print(f"te: check the merged model: {problem}", file=sys.stderr)
+    return 1 if problems else 0
+
+
+def cmd_serve_student(args) -> int:
+    import os
+
+    if args.stop:
+        if not modal_ready():
+            return 2
+        return subprocess.run(["modal", "app", "stop", STUDENT_APP], cwd=PROJECT_ROOT,
+                              check=False).returncode
+    if not args.run or not RUN_NAME.fullmatch(args.run):
+        print("te: pass --run <run> (the merged model under runs/<run>/merged) or --stop",
+              file=sys.stderr)
+        return 2
+    print(f"deploys {STUDENT_APP} serving runs/{args.run}/merged on one {GPU}. A container is "
+          f"billed at ${MODAL_GPU_USD_PER_HOUR[GPU]:.2f} an hour (not checked) while it is up; "
+          "it stops after a few idle minutes, and te serve-student --stop stops it now.")
+    if not args.yes and not ask("Deploy the endpoint?"):
+        return 1
+    if not modal_ready():
+        return 2
+    code = subprocess.run(["modal", "deploy", "backend/inference/modal_serve.py"],
+                          cwd=PROJECT_ROOT, check=False,
+                          env={**os.environ, "TE_SERVE_RUN": args.run}).returncode
+    if code == 0:
+        print("then set TE_STUDENT_URL to the URL modal printed, plus /v1, and STUDENT_API_KEY "
+              'in .env to the value in the Modal Secret "student"')
+    return code
+
+
+def cmd_eval(args) -> int:
+    from backend.eval.report import run_eval
+
+    try:
+        results = run_eval(Path(args.plan), Path(args.out), log_wandb=args.wandb)
+    except (OSError, ValueError) as err:  # pydantic's ValidationError is a ValueError
+        print(f"te: {err}", file=sys.stderr)
+        return 2
+    evals = results["evaluations"]
+    scored = sum(e["status"] == "scored" for e in evals)
+    print(f"{scored} of {len(evals)} evaluations scored ({len(evals) - scored} waiting for "
+          f"clips); report: {shown_path(Path(args.out) / 'results.md')}")
+    if args.wandb:
+        print(f"W&B: {results['wandb']}")
+    return 0
+
+
+def cmd_label(args) -> int:
+    import threading
+    import webbrowser
+
+    import uvicorn
+
+    from backend.skills.spec import check_name
+
+    settings = load_settings()
+    try:
+        if args.clip:
+            from backend.labeltool.clips import create_clip_app
+
+            clip = Path(args.clip)
+            out = Path(args.out) if args.out else clip.with_suffix(".labels.json")
+            app = create_clip_app(clip, out)
+        else:
+            from backend.labeltool.images import create_image_app, sample_images
+
+            root = settings.data_dir / "skills" / check_name(args.skill)
+            out = Path(args.out) if args.out else root / "human_labels.json"
+            images = sample_images(root / "labels.jsonl", args.sample, args.seed)
+            app = create_image_app(images, out)
+    except (OSError, ValueError) as err:
+        print(f"te: {err}", file=sys.stderr)
+        return 2
+    url = f"http://127.0.0.1:{args.port}/"
+    print(f"labelling tool: {url}  (labels: {shown_path(out)}; Ctrl+C to stop)")
+    if not args.no_browser:
+        threading.Timer(1.0, webbrowser.open, [url]).start()
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+    return 0
+
+
+def positive(text: str) -> int:
+    """An argparse type: a whole number, 1 or more."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be 1 or more, got {value}")
+    return value
 
 
 def count(text: str) -> int:
@@ -578,6 +768,10 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--run", required=True, help="run name, e.g. exp1-mixed")
     train.add_argument("--variant", choices=["mixed", "real", "synthetic"], default="mixed")
     train.add_argument("--limit", type=int, help="at most this many examples per skill")
+    train.add_argument("--max-steps", type=count, help="fixed optimizer steps for Experiments 1 "
+                       "to 3 (backend/eval/plan.py)")
+    train.add_argument("--dataset", choices=["dataset", "dataset-unfiltered"], default="dataset",
+                       help="the skill's dataset folder (Experiment 2: dataset-unfiltered)")
     train.add_argument("--smoke", action="store_true", help="the recipe's two-step check")
     train.add_argument("--estimate-only", action="store_true", help="bundle and price only")
     train.add_argument("--yes", action="store_true", help="no question (not over $15)")
@@ -588,6 +782,11 @@ def build_parser() -> argparse.ArgumentParser:
     watch.add_argument("--clip", required=True, help="video file or folder of frames")
     watch.add_argument("--fps", type=float, default=1.0, help="frames scored per second")
     watch.add_argument("--no-cloud", action="store_true", help="skip the Muse Spark check")
+    watch.add_argument("--scorer", choices=["student", "spark"], default="student",
+                       help="who scores each frame: the trained model, or Muse Spark (paid)")
+    watch.add_argument("--log", help="frame log path (the evaluation plan names one per clip)")
+    watch.add_argument("--yes", action="store_true", help="with --scorer spark: no question "
+                       "(not over $15)")
     watch.set_defaults(func=cmd_watch)
 
     cal = sub.add_parser("calibrate", help="set a skill's threshold from validation clips")
@@ -597,6 +796,46 @@ def build_parser() -> argparse.ArgumentParser:
     cal.add_argument("--labels", action="append", required=True,
                      help='JSON {"true": [[start_s, end_s], ...]} for the clip of that log')
     cal.set_defaults(func=cmd_calibrate)
+
+    export = sub.add_parser("export", help="merge a trained adapter on Modal and check it")
+    export.add_argument("--run", required=True, help="the training run, e.g. exp1-mixed")
+    export.add_argument("--reference", choices=["bf16", "nf4"], default="bf16",
+                        help="base precision the merged model is compared against")
+    export.add_argument("--limit", type=positive, default=50, help="examples to compare")
+    export.add_argument("--yes", action="store_true", help="no question (not over $15)")
+    export.set_defaults(func=cmd_export)
+
+    serve_student = sub.add_parser("serve-student", help="deploy or stop the student endpoint")
+    serve_student.add_argument("--run", help="the run whose merged model to serve")
+    serve_student.add_argument("--stop", action="store_true", help="stop the endpoint")
+    serve_student.add_argument("--yes", action="store_true", help="no question")
+    serve_student.set_defaults(func=cmd_serve_student)
+
+    ev = sub.add_parser("eval", help="score replayed, labelled clips: results.md and charts")
+    ev.add_argument("--plan", required=True, help="the evaluation plan (backend/eval/report.py)")
+    ev.add_argument("--out", required=True, help="folder for results.json, results.md, charts")
+    ev.add_argument("--wandb", action="store_true", help="also log to W&B (needs wandb)")
+    ev.set_defaults(func=cmd_eval)
+
+    label = sub.add_parser("label", help="mark where a clip's condition is true, or label images")
+    what = label.add_mutually_exclusive_group(required=True)
+    what.add_argument("--clip", help="a recorded clip, e.g. data/clips/<skill>/session3_test_a.mp4")
+    what.add_argument("--skill", help="hand-label sampled generated images of this skill")
+    label.add_argument("--sample", type=count, default=200, help="with --skill: images to label")
+    label.add_argument("--seed", type=int, default=0, help="with --skill: same seed, same images")
+    label.add_argument("--out", help="labels file; default <clip>.labels.json next to the clip, or "
+                       "data/skills/<skill>/human_labels.json")
+    label.add_argument("--port", type=int, default=8766)
+    label.add_argument("--no-browser", action="store_true", help="print the address only")
+    label.set_defaults(func=cmd_label)
+
+    from backend.cli_experiments import add_parsers as experiment_parsers
+
+    experiment_parsers(sub)
+
+    from backend.cli_release import add_parsers as release_parsers
+
+    release_parsers(sub)
     return parser
 
 

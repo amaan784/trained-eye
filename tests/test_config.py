@@ -163,7 +163,8 @@ def test_secrets_never_shown():
     assert FAKE_KEY not in repr(s)
     text = describe(s)
     assert FAKE_KEY not in text
-    assert "MODEL_API_KEY  set" in text and "WANDB_API_KEY  missing" in text
+    assert "MODEL_API_KEY    set" in text and "WANDB_API_KEY    missing" in text
+    assert "STUDENT_API_KEY  missing" in text
 
 
 def test_empty_values_mean_unset():

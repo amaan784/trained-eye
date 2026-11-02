@@ -1,19 +1,21 @@
 # Version stages
 
-The finished project split into stages v1 to v49, in the order a developer would build
+The finished project split into stages v1 to v105, in the order a developer would build
 it, so it can be reviewed and committed one layer at a time. These folders and this file
 live only on the `build-stages` branch; they are not part of the project itself.
 
 ## Ground rules
 
-- Each stage is one commit and adds or changes at most 5 files compared with the stage
-  before it (v1 has 5 files in total). The README counts.
+- Each stage is one commit. Up to v49 a stage adds or changes at most 5 files compared
+  with the stage before it (v1 has 5 files in total; the README counts). From v50 on, the
+  rule is by size instead: a stage changes 150 to 300 lines compared with the stage
+  before it, counting added plus removed lines and leaving out its README.
 - Stages are cumulative: vN holds everything in v(N-1) plus what stage N adds.
 - No stage deletes or renames a file the previous stage had, so each folder can be copied
   over the repository and committed.
 - Every folder runs on its own: it has its own README, `pyproject.toml` (requirements and
   tool settings), tests and CI workflow, and nothing in it points into another folder.
-- The last folder, v49, is the finished project: byte for byte the same as the
+- The last folder, v105, is the finished project: byte for byte the same as the
   repository root, apart from local-only things (this file, the v folders,
   `stagetools/`, caches, `.env`, `data/`).
 - Folders hold code and docs only: no caches, generated data or secrets.
@@ -71,6 +73,62 @@ live only on the `build-stages` branch; they are not part of the project itself.
 | v47 | M2: te train, te watch, te calibrate | The commands: te train on Modal, te watch to replay a clip, te calibrate for the threshold. | `CLAUDE.md` (changed), `backend/cli.py` (changed), `backend/config.py` (changed), `tests/test_cli.py` (changed), `README.md` (changed) | `python -m backend.cli train --help` | 496 passed |
 | v48 | M2: Docs and notes | The notes for these stages: the review round, what M2 has so far, and the steps that need the Mac or Modal. | `.env.example` (changed), `HANDOVER.md` (changed), `PROGRESS.md` (changed), `docs/recording-protocol.md` (changed), `README.md` (changed) | `python -m backend.cli spend` | 496 passed |
 | v49 | M1 review: Fix: te teach messages | The last small fixes from the review of v31 to v38, in te teach. | `backend/cli.py` (changed), `backend/teach.py` (changed), `tests/test_cli.py` (changed), `tests/test_teach.py` (changed), `README.md` (changed) | `python -m pytest` | 498 passed |
+| v50 | M2: Phone teach session | A teach session for the phone: the spend question before any paid call, then the read-back. | `backend/meta/client.py` (changed), `backend/teach_session.py`, `README.md` (changed) | `python -m pytest` | 498 passed |
+| v51 | M2: Phone teach upload | The phone's teach upload: the capture, its checks and the estimate. | `backend/teach_upload.py`, `README.md` (changed) | `python -m pytest` | 498 passed |
+| v52 | M2: Teach session and upload tests | The tests of the teach session and the upload. | `tests/test_teach_session.py`, `tests/test_teach_upload.py`, `README.md` (changed) | `python -m pytest` | 521 passed |
+| v53 | M2: Phone teach routes | The teach routes the phone calls: start, status and answer, behind a token. | `backend/teach_api.py`, `README.md` (changed) | `python -m pytest` | 521 passed |
+| v54 | M2: Server, keys and sampling | The server mounts the teach routes and lists taught skills; the student gets its key and Meta's sampling. | `.env.example` (changed), `backend/config.py` (changed), `backend/inference/student.py` (changed), `backend/server.py` (changed), `backend/training/prepare.py` (changed), `tests/test_config.py` (changed), `tests/test_server.py` (changed), `tests/test_student.py` (changed), `tests/test_training_prep.py` (changed), `README.md` (changed) | `python -m pytest` | 525 passed |
+| v55 | M2: Phone teach routes tests | The teach routes' tests over HTTP. | `tests/test_teach_api.py`, `README.md` (changed) | `python -m pytest` | 538 passed |
+| v56 | M2: Export on Modal | The export: merge the trained adapter on Modal and check the merged model. | `backend/training/export.py`, `backend/training/export_check.py`, `README.md` (changed) | `python -m pytest` | 538 passed |
+| v57 | M2: Student endpoint on Modal | Serving the merged model with vLLM on Modal, and the export's tests. | `backend/inference/modal_serve.py`, `tests/test_export.py`, `tests/test_modal_serve.py`, `README.md` (changed) | `python -m pytest` | 549 passed |
+| v58 | M2: te export and te serve-student | Te export and te serve-student. | `backend/cli.py` (changed), `tests/test_cli.py` (changed), `README.md` (changed) | `python -m pytest` | 553 passed |
+| v59 | M2: iOS: settings and protocol | The iPhone app starts: its settings and the server's messages. | `ios/TrainedEye/Models/Protocol.swift`, `ios/TrainedEye/Models/Settings.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v60 | M2: iOS: backend and WebSocket clients | The app's clients for the backend and the WebSocket. | `ios/TrainedEye/Network/BackendClient.swift`, `ios/TrainedEye/Network/WatchSocket.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v61 | M2: iOS: Meta's HEVC decoder | Meta's HEVC frame decoder, copied from the CameraAccess sample. | `ios/TrainedEye/Meta/HEVCKeyframe.swift`, `ios/TrainedEye/Meta/LICENSE`, `ios/TrainedEye/Meta/VideoFrameDecoder.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v62 | M2: iOS: glasses connection and mock | The glasses connection and the mock device. | `ios/TrainedEye/Glasses/GlassesConnection.swift`, `ios/TrainedEye/Glasses/MockGlasses.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v63 | M2: iOS: glasses camera | The glasses camera: HEVC at 7 fps, one JPEG a second to the backend. | `ios/TrainedEye/Glasses/GlassesCamera.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v64 | M2: iOS: phone camera and speech | The iPhone camera fallback, the frame throttle and spoken alerts. | `ios/TrainedEye/Audio/Speaker.swift`, `ios/TrainedEye/Camera/FrameThrottle.swift`, `ios/TrainedEye/Camera/PhoneCamera.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v65 | M2: iOS: teach client and recorder | The teach client and the request recorder. | `ios/TrainedEye/Audio/RequestRecorder.swift`, `ios/TrainedEye/Models/TeachModels.swift`, `ios/TrainedEye/Network/TeachClient.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v66 | M2: iOS: teach flow | The teach flow on the phone. | `ios/TrainedEye/Teach/TeachFlow.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v67 | M2: iOS: app model | The app model that ties the pieces together. | `ios/TrainedEye/App/AppModel.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v68 | M2: iOS: theme and components | The app's theme and shared components. | `ios/TrainedEye/UI/Components.swift`, `ios/TrainedEye/UI/Theme.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v69 | M2: iOS: app entry and project files | The app entry, the Info.plist and the entitlements. | `ios/TrainedEye-Info.plist`, `ios/TrainedEye.entitlements`, `ios/TrainedEye/App/TrainedEyeApp.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v70 | M2: iOS: tabs and Connect | The tabs and the Connect screen. | `ios/TrainedEye/UI/ConnectView.swift`, `ios/TrainedEye/UI/RootView.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v71 | M2: iOS: Teach screen | The Teach screen. | `ios/TrainedEye/UI/TeachView.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v72 | M2: iOS: Skills and Watch | The Skills and Watch screens. | `ios/TrainedEye/UI/SkillsView.swift`, `ios/TrainedEye/UI/WatchView.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v73 | M2: iOS: Clips | Clips the user saves explicitly. | `ios/TrainedEye/Clips/ClipStore.swift`, `ios/TrainedEye/UI/ClipsView.swift`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v74 | M2: iOS: README | How to build the app in Xcode. | `ios/README.md`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v75 | M3: Labelling tool: images | The labelling tool for generated images, for Experiment 2. | `backend/labeltool/images.py`, `backend/labeltool/static/images.html`, `backend/labeltool/static/style.css`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v76 | M3: Labelling tool: clips | The labelling tool for clips: where the condition is true. | `backend/labeltool/clips.py`, `backend/labeltool/static/clips.html`, `README.md` (changed) | `python -m pytest` | 553 passed |
+| v77 | M3: Labelling tool tests | The labelling tools' tests. | `tests/test_labeltool_clips.py`, `tests/test_labeltool_images.py`, `README.md` (changed) | `python -m pytest` | 575 passed |
+| v78 | M3: Evaluation metrics | The evaluation metrics. | `backend/eval/metrics.py`, `README.md` (changed) | `python -m pytest` | 575 passed |
+| v79 | M3: Metric tests and chart building blocks | The metrics' tests and the shared SVG pieces for the charts. | `backend/eval/svg.py`, `tests/test_eval_metrics.py`, `README.md` (changed) | `python -m pytest` | 581 passed |
+| v80 | M3: Experiment charts | The experiment charts. | `backend/eval/charts.py`, `tests/test_eval_charts.py`, `tests/test_eval_svg.py`, `README.md` (changed) | `python -m pytest` | 589 passed |
+| v81 | M3: Timeline chart | The live timeline chart. | `backend/eval/timeline.py`, `tests/test_eval_timeline.py`, `README.md` (changed) | `python -m pytest` | 592 passed |
+| v82 | M3: Results write-up | Results.md and the chart files. | `backend/eval/writeup.py`, `tests/test_eval_writeup.py`, `README.md` (changed) | `python -m pytest` | 595 passed |
+| v83 | M3: Evaluation runner | The evaluation plan and te eval's engine. | `backend/eval/report.py`, `tests/test_eval_report.py`, `README.md` (changed) | `python -m pytest` | 598 passed |
+| v84 | M3: Spark as a scorer | Muse Spark as the per-frame scorer, for Experiment 4. | `backend/eval/spark_scorer.py`, `tests/test_spark_scorer.py`, `README.md` (changed) | `python -m pytest` | 606 passed |
+| v85 | M3: Experiment 2 | Spark's error rate and the unfiltered arm, for Experiment 2. | `backend/eval/spark_errors.py`, `tests/test_spark_errors.py`, `README.md` (changed) | `python -m pytest` | 613 passed |
+| v86 | M3: Experiment plan | The experiment plan with fixed steps and prices. | `backend/eval/plan.py`, `tests/test_plan.py`, `README.md` (changed) | `python -m pytest` | 617 passed |
+| v87 | M3: Regression check | The regression check on general questions. | `backend/eval/regression.py`, `tests/test_regression.py`, `README.md` (changed) | `python -m pytest` | 637 passed |
+| v88 | M3: Commands: eval, label, steps, Spark | Te eval, te label, fixed steps in te train and Spark in te watch. | `Makefile`, `backend/cli.py` (changed), `backend/training/modal_train.py` (changed), `backend/watch/watcher.py` (changed), `tests/test_cli.py` (changed), `tests/test_watcher.py` (changed), `README.md` (changed) | `python -m pytest` | 642 passed |
+| v89 | M3: Experiment commands | Te experiments, te unfiltered, te spark-errors and te regress. | `backend/cli.py` (changed), `backend/cli_experiments.py`, `backend/training/prepare.py` (changed), `tests/test_cli_experiments.py`, `tests/test_training_prep.py` (changed), `README.md` (changed) | `python -m pytest` | 647 passed |
+| v90 | M4: Face blurring | Face blurring for anything published. | `backend/release/faces.py`, `tests/test_faces.py`, `README.md` (changed) | `python -m pytest` | 653 passed |
+| v91 | M4: Manifests and regeneration | The prompt manifests and regenerating images from them. | `backend/regenerate.py`, `tests/test_regenerate.py`, `README.md` (changed) | `python -m pytest` | 658 passed |
+| v92 | M4: Model card and release folder | The Hugging Face model card and release folder. | `backend/release/model_card.py`, `README.md` (changed) | `python -m pytest` | 658 passed |
+| v93 | M4: Model card tests | The model card's tests. | `tests/test_model_card.py`, `README.md` (changed) | `python -m pytest` | 663 passed |
+| v94 | M4: Playground: local data | The playground's local data: clips, timelines and results. | `backend/playground/data.py`, `tests/test_playground_data.py`, `README.md` (changed) | `python -m pytest` | 668 passed |
+| v95 | M4: Playground: skills | How each skill was built, for the playground. | `backend/playground/skills.py`, `tests/test_playground_skills.py`, `README.md` (changed) | `python -m pytest` | 675 passed |
+| v96 | M4: Playground: caps | The playground's spend caps. | `backend/playground/budget.py`, `tests/test_playground_budget.py`, `README.md` (changed) | `python -m pytest` | 683 passed |
+| v97 | M4: Playground: teach it yourself | The playground's run accounting and live teaching. | `backend/playground/api.py`, `backend/playground/runs.py`, `README.md` (changed) | `python -m pytest` | 683 passed |
+| v98 | M4: Playground: run and teach tests | The tests of the playground's runs and live teaching. | `tests/test_playground_runs.py`, `tests/test_playground_teach.py`, `README.md` (changed) | `python -m pytest` | 694 passed |
+| v99 | M4: Playground: page and style | The playground page and its style. | `backend/playground/static/index.html`, `backend/playground/static/style.css`, `README.md` (changed) | `python -m pytest` | 694 passed |
+| v100 | M4: Playground: signature visuals | The live timeline and the training wall in the browser. | `backend/playground/static/timeline.js`, `backend/playground/static/wall.js`, `README.md` (changed) | `python -m pytest` | 694 passed |
+| v101 | M4: Playground: page logic | The playground's page logic. | `backend/playground/static/app.js`, `README.md` (changed) | `python -m pytest` | 694 passed |
+| v102 | M4: Playground: app | The playground app itself. | `backend/playground/app.py`, `README.md` (changed) | `python -m pytest` | 694 passed |
+| v103 | M4: Release commands | Te manifests, te regenerate, te blur, te release and te playground. | `backend/cli.py` (changed), `backend/cli_release.py`, `README.md` (changed) | `python -m pytest` | 694 passed |
+| v104 | M4: Playground app and release tests | The tests of the playground app and the release commands. | `tests/test_cli_release.py`, `tests/test_playground_app.py`, `README.md` (changed) | `python -m pytest` | 706 passed |
+| v105 | M4: Notes and credits | The notes for M2 to M4 and the credits. | `CLAUDE.md` (changed), `CONTRIBUTIONS.md`, `HANDOVER.md` (changed), `PROGRESS.md` (changed), `README.md` (changed) | `python -m pytest` | 706 passed |
 
 Every README lists the exact commands and the output they printed when run inside that
 folder.
@@ -119,6 +177,23 @@ training side follows the order a run takes: the bundle and the config, the Moda
 that trains, then the commands that drive both, and the notes last. v49 comes after
 them with the last small fixes from the review of v31 to v38, in te teach.
 
+From v50 on each stage changes 150 to 300 lines, so a large file is a stage on its own
+and its tests can come in the stage after it. The rest of M2 (v50 to v58) builds
+teaching from the phone from the inside out: the session with its two questions, the
+upload and its checks, their tests, the routes, the server that mounts them, the routes'
+tests, then export and serving on Modal and the commands for both. The reviews of the
+teach API, the iOS code and the playground ran before these stages were cut, so their
+fixes are part of the stages that add that code. The iOS app (v59 to v74) goes from the
+data up: settings and the protocol, the network clients, Meta's copied decoder, the
+glasses, the cameras and speech, the teach client and flow, the app model, then the
+screens, the clips and the build instructions. M3 (v75 to v89) starts with the labelling
+tools, since every metric needs labels, then the metrics, the chart pieces, the charts,
+the write-up and the runner that joins them, then each experiment's own code and the
+commands last. M4 (v90 to v105) follows the release: face blurring before anything that
+publishes, the manifests and regeneration, the model card, then the playground from its
+data and caps through the live runs and the page to the app, the commands, and the notes
+and credits last.
+
 ## How to review a stage
 
 Clone the branch next to your repository, then compare any two neighbouring folders:
@@ -150,7 +225,7 @@ description below:
     git commit -m "<summary>" -m "<description>"
 
 Then the same for v2, v3 and so on. Earlier stages never change when later ones are
-added, so carry on from the first stage you have not committed yet (v39 if v1 to v38
+added, so carry on from the first stage you have not committed yet (v50 if v1 to v49
 are already on `main`). `git status` before each commit should show only the files
 listed for that stage. LICENSE and .gitattributes already exist in the repository
 from its first commit, and the stage copies are identical, so v10 changes only its own
@@ -353,6 +428,230 @@ Records the review fixes and the offline half of M2 in HANDOVER.md and PROGRESS.
 
 Checks the normalised request text, adds a non-negative count type for --positives and --negatives, prints the failure reason before the hint, and corrects two messages. Tests cover each.
 
+**v50.** `Add the phone teach session`
+
+Adds TeachSession: the spend and read-back questions, the background run, timeouts, corrections, a stop for server shutdown and a summary.
+
+**v51.** `Add the phone teach upload and its checks`
+
+Adds the multipart parser, the input checks, the saved capture and the estimate.
+
+**v52.** `Test the phone teach session and upload`
+
+Adds tests/test_teach_session.py and tests/test_teach_upload.py.
+
+**v53.** `Add the teach routes for the phone`
+
+Adds the three routes, the token check, the body limits and stop().
+
+**v54.** `Mount the teach routes; add the student key, the server token and sampling`
+
+Mounts the teach API with a shutdown hook, adds GET /skills, the STUDENT_API_KEY and SERVER_TOKEN secrets, the cookbook's sampling for the scorer and a dataset_dir option for the bundle, with tests.
+
+**v55.** `Test the teach routes`
+
+Adds tests/test_teach_api.py.
+
+**v56.** `Add the export of a trained adapter`
+
+Adds the Modal export app and its plain helpers. Its tests come with the next stage.
+
+**v57.** `Add the student endpoint and the export tests`
+
+Adds the vLLM serving app and static tests for it and for the export.
+
+**v58.** `Add te export and te serve-student`
+
+Adds both commands with their questions and messages, the student key in te watch, --dataset in te train, the phone teaching line in te serve and the $15 question in te teach, with tests.
+
+**v59.** `Add the iOS app's settings and protocol types`
+
+Adds Settings.swift and Protocol.swift.
+
+**v60.** `Add the iOS backend and WebSocket clients`
+
+Adds BackendClient.swift and WatchSocket.swift.
+
+**v61.** `Add Meta's HEVC decoder from the DAT sample`
+
+Adds the two copied files and Meta's LICENSE under ios/TrainedEye/Meta/.
+
+**v62.** `Add the iOS glasses connection and mock device`
+
+Adds GlassesConnection.swift and MockGlasses.swift.
+
+**v63.** `Add the iOS glasses camera`
+
+Adds GlassesCamera.swift.
+
+**v64.** `Add the iOS phone camera, throttle and speech`
+
+Adds FrameThrottle.swift, PhoneCamera.swift and Speaker.swift.
+
+**v65.** `Add the iOS teach client and recorder`
+
+Adds TeachModels.swift, TeachClient.swift and RequestRecorder.swift.
+
+**v66.** `Add the iOS teach flow`
+
+Adds TeachFlow.swift.
+
+**v67.** `Add the iOS app model`
+
+Adds AppModel.swift.
+
+**v68.** `Add the iOS theme and components`
+
+Adds Theme.swift and Components.swift.
+
+**v69.** `Add the iOS app entry and project files`
+
+Adds TrainedEyeApp.swift, the Info.plist and the entitlements.
+
+**v70.** `Add the iOS tabs and Connect screen`
+
+Adds RootView.swift and ConnectView.swift.
+
+**v71.** `Add the iOS Teach screen`
+
+Adds TeachView.swift.
+
+**v72.** `Add the iOS Skills and Watch screens`
+
+Adds SkillsView.swift and WatchView.swift.
+
+**v73.** `Add the iOS clips`
+
+Adds ClipStore.swift and ClipsView.swift.
+
+**v74.** `Add the iOS build instructions`
+
+Adds ios/README.md.
+
+**v75.** `Add the image labelling tool`
+
+Adds the image labeller, its page and the shared style sheet.
+
+**v76.** `Add the clip labelling tool`
+
+Adds the clip labeller and its page.
+
+**v77.** `Test the labelling tools`
+
+Adds tests/test_labeltool_images.py and tests/test_labeltool_clips.py.
+
+**v78.** `Add the evaluation metrics`
+
+Adds the metrics.
+
+**v79.** `Test the metrics; add the SVG chart building blocks`
+
+Adds tests/test_eval_metrics.py and svg.py.
+
+**v80.** `Add the experiment charts`
+
+Adds charts.py with tests, and the tests of svg.py.
+
+**v81.** `Add the live timeline chart`
+
+Adds timeline.py with tests.
+
+**v82.** `Add the results write-up`
+
+Adds writeup.py with tests.
+
+**v83.** `Add the evaluation runner`
+
+Adds report.py with tests for the plan format, pending runs and the output.
+
+**v84.** `Add Muse Spark as a per-frame scorer`
+
+Adds SparkScorer with tests.
+
+**v85.** `Add Experiment 2's error rate and unfiltered arm`
+
+Adds spark_errors.py with tests.
+
+**v86.** `Add the experiment plan`
+
+Adds plan.py with tests.
+
+**v87.** `Add the regression check`
+
+Adds regression.py with tests.
+
+**v88.** `Add te eval, te label and the experiment options`
+
+Adds the commands and options, the Makefile and the latency flag in the frame log, with tests.
+
+**v89.** `Add the experiment commands`
+
+Adds the four commands, registered by the te command line, with tests.
+
+**v90.** `Add face blurring`
+
+Adds faces.py with tests; detection tests skip without OpenCV.
+
+**v91.** `Add the prompt manifests and regeneration`
+
+Adds regenerate.py with tests against a fake Meta API.
+
+**v92.** `Add the model card and release folder`
+
+Adds model_card.py.
+
+**v93.** `Test the model card and release folder`
+
+Adds tests/test_model_card.py.
+
+**v94.** `Add the playground's data access`
+
+Adds data.py with tests.
+
+**v95.** `Add the playground's skill pages data`
+
+Adds skills.py with tests.
+
+**v96.** `Add the playground's spend caps`
+
+Adds budget.py with tests.
+
+**v97.** `Add the playground's run accounting and live teaching`
+
+Adds runs.py and api.py.
+
+**v98.** `Test the playground's runs and live teaching`
+
+Adds tests/test_playground_runs.py and tests/test_playground_teach.py.
+
+**v99.** `Add the playground page and style`
+
+Adds index.html and style.css.
+
+**v100.** `Add the playground's timeline and wall`
+
+Adds timeline.js and wall.js.
+
+**v101.** `Add the playground page logic`
+
+Adds app.js.
+
+**v102.** `Add the playground app`
+
+Adds app.py.
+
+**v103.** `Add the release and playground commands`
+
+Adds the five commands, registered by the te command line.
+
+**v104.** `Test the playground app and the release commands`
+
+Adds tests/test_playground_app.py and tests/test_cli_release.py.
+
+**v105.** `Update the notes for M2 to M4 and add the credits`
+
+Updates HANDOVER.md, PROGRESS.md and CLAUDE.md and adds CONTRIBUTIONS.md.
+
 ## Notes
 
 - **Reconstructed stages.** Each milestone was written as one finished tree, and its
@@ -367,8 +666,8 @@ Checks the normalised request text, adds a non-negative count type for --positiv
   `.gitattributes` enter unchanged at v10, so the last folder matches the repository.
 - **Branch-only tools.** `stagetools/` holds the scripts that built and checked these
   folders (see `stagetools/README.md`). Like this file, it lives only on this branch.
-- **Large files.** None. The largest file is `HANDOVER.md` at
-  about 29 KB; the whole of v49 is about 429 KB.
+- **Large files.** None. The largest file is `backend/cli.py` at
+  about 38 KB; the whole of v105 is about 1014 KB.
 - **Untested paths.** The build machine had no API keys, no network access to Meta, and
   no PyPI, so these were not run:
   - live Meta API calls (`te models`, `te api-smoke`); all client tests use
@@ -404,10 +703,11 @@ Checks the normalised request text, adds a non-negative count type for --positiv
 
 A script (kept outside the repository) checked every folder after it was built:
 
-1. v1 has at most 5 files, and each later stage adds or changes at most 5 files compared
-   with the one before (README included).
+1. v1 has at most 5 files; v2 to v49 each add or change at most 5 files compared with
+   the one before (README included); from v50 each changes 150 to 300 lines (README left
+   out).
 2. Every folder contains every file of the folder before it.
-3. v49 matches the repository root byte for byte (local-only things excluded).
+3. v105 matches the repository root byte for byte (local-only things excluded).
 4. Every file a README names, in backticks or as a bare file name, exists in that folder.
 5. No folder holds caches, `.env`, `data/`, build output or secrets.
 6. Inside every folder: `ruff check .` and `python -m pytest` pass, and `backend` imports

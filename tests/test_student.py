@@ -70,7 +70,8 @@ def test_frames_are_sent_as_the_training_examples_were_built(tmp_path):
     assert str(request.url) == "http://mac.local:8080/v1/chat/completions"
     assert request.headers["authorization"] == "Bearer k"
     body = json.loads(request.content)
-    assert body["logprobs"] is True and body["temperature"] == 0
+    assert body["logprobs"] is True and "temperature" not in body  # Meta: never greedy
+    assert body["chat_template_kwargs"] == {"reasoning_strength": "low"}
     system, user = body["messages"]
     assert system == {"role": "system", "content": SYSTEM_PROMPT}
     image_part, text_part = user["content"]

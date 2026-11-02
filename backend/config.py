@@ -16,7 +16,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-SECRET_NAMES = ("MODEL_API_KEY", "HF_TOKEN", "WANDB_API_KEY")
+# STUDENT_API_KEY guards the trained model's Modal endpoint (Modal Secret "student" too);
+# SERVER_TOKEN guards te serve's teach routes (the phone sends it).
+SECRET_NAMES = ("MODEL_API_KEY", "HF_TOKEN", "WANDB_API_KEY", "STUDENT_API_KEY", "SERVER_TOKEN")
 
 # The checkout this code runs from (an editable install or `python -m backend.cli`). A copy
 # installed elsewhere has no pyproject.toml next to backend/ and uses the current folder.

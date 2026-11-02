@@ -212,3 +212,56 @@ def test_the_default_watcher_needs_a_student_endpoint_and_taught_skills(tmp_path
     assert list(watcher.skills) == ["washer_done"]
     assert watcher.log.path.parent == tmp_path / "watch" and watcher.log.path.name.endswith(
         "-s7.jsonl")
+
+
+def test_skills_lists_taught_skills_for_the_app(tmp_path):
+    from backend.skills.spec import SkillSpec, Target
+
+    def taught(name, refused=False, threshold=None):
+        folder = tmp_path / "skills" / name
+        (folder / "dataset").mkdir(parents=True)
+        spec = (SkillSpec(name=name, request="tell me when Sam gets here", refused=True,
+                          refusal_reason="I can't watch for or recognize specific people.")
+                if refused else SkillSpec(
+                    name=name, request="tell me when the washer says End",
+                    target=Target(sam_prompt="washer display", description="the display"),
+                    positive="the display shows End", negatives=["display off"],
+                    alert="Laundry's done."))
+        (folder / "spec.json").write_text(spec.model_dump_json())
+        if threshold is not None:
+            (folder / "threshold.json").write_text(f'{{"threshold": {threshold}}}')
+
+    taught("washer_done", threshold=0.82)
+    taught("pot_boils")
+    taught("sam_arrives", refused=True)
+    (tmp_path / "skills/washer_done/dataset/washer_done-teach.jsonl").write_text("{}\n")
+    (tmp_path / "skills/broken").mkdir()
+    (tmp_path / "skills/broken/spec.json").write_text("not json")
+    (tmp_path / "skills/binary").mkdir()
+    (tmp_path / "skills/binary/spec.json").write_bytes(b"\xff\xfe")  # not UTF-8
+    taught("hot_pan", threshold="NaN")  # JSON reads NaN; it cannot be sent back
+    with TestClient(create_app(data_dir=lambda: tmp_path)) as c:
+        listed = c.get("/skills").json()["skills"]
+    assert listed == [
+        {"name": "hot_pan", "alert": "Laundry's done.", "cooldown_s": 600, "dataset": False,
+         "calibrated": False, "threshold": None},
+        {"name": "pot_boils", "alert": "Laundry's done.", "cooldown_s": 600, "dataset": False,
+         "calibrated": False, "threshold": None},
+        {"name": "washer_done", "alert": "Laundry's done.", "cooldown_s": 600, "dataset": True,
+         "calibrated": True, "threshold": 0.82},
+    ]
+
+
+def test_the_served_app_has_the_phone_teach_routes():
+    from backend.server import app
+
+    paths = {route.path for route in app.routes}
+    assert {"/health", "/skills", "/ws", "/teach/start", "/teach/status",
+            "/teach/answer"} <= paths
+
+
+def test_shutdown_hooks_run_when_the_server_stops():
+    stopped = []
+    with TestClient(create_app(on_shutdown=[lambda: stopped.append("teach")])) as client:
+        assert client.get("/health").status_code == 200 and stopped == []
+    assert stopped == ["teach"]

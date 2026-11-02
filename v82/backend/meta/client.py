@@ -1,0 +1,687 @@
+"""MetaClient: every call to the Meta Model API goes through here.
+
+Each call runs the same steps:
+  1. build the request and its cache key (media is hashed, see cache.py)
+  2. cache hit: return the stored response; no network call, no spend
+  3. estimate the cost and check the spend caps (ledger.py)
+  4. send, retrying 429, 5xx and timeouts with backoff (a 4xx is never retried)
+  5. record the actual cost from the reported usage, check the output, cache it
+
+Spend is counted conservatively: a retried attempt that may have reached the server
+(a read timeout, a 500/502/504) is charged at the estimate, and so is a reply that
+cannot be priced or a call stopped with Ctrl+C. The caps are checked again before each
+such retry. Unusable outputs are charged but never cached, and a cached reply that
+today's checks reject is fetched again. A failed call's error carries what it was
+charged as `cost_usd`.
+
+Request shapes are OpenAI-compatible. Structured output uses Chat Completions with a
+json_schema response_format, as in Meta's cookbook recipes. SAM 3.1 uses the Responses
+API and Muse Image / Voice Transcribe use the images and audio endpoints, as described
+in SPEC.md; those three shapes still need confirming with a live call.
+
+The API key is only ever sent to the configured Meta base URL, and secret values are
+removed from any error text.
+"""
+
+from __future__ import annotations
+
+import base64
+import email.utils
+import io
+import json
+import math
+import random
+import re
+import time
+import wave
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any
+
+import httpx
+
+from backend.config import SECRET_NAMES, Settings, check_model_allowed
+from backend.meta.cache import Cache, cache_key
+from backend.meta.ledger import NO_SKILL, BudgetExceeded, Entry, Ledger, token_cost, unit_cost
+
+RETRY_STATUSES = frozenset({408, 429})
+# Statuses after which the server may already have done (and billed) the work.
+MAYBE_PROCESSED_STATUSES = frozenset({500, 502, 504})
+TRANSIENT_ERRORS = (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)
+NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout)
+IMAGE_TOKENS_GUESS = 1500  # per image, for estimates only; actual cost uses reported usage
+
+
+class MetaAPIError(RuntimeError):
+    cost_usd: float = 0.0  # what the failed call was charged in the ledger
+
+    def __init__(self, status: int | None, message: str):
+        super().__init__(f"Meta API error {status}: {message}" if status else message)
+        self.status = status
+
+
+class OutputError(MetaAPIError):
+    """The call succeeded (and was billed) but the output is unusable."""
+
+    def __init__(self, message: str, finish_reason: str | None = None):
+        super().__init__(None, message)
+        self.finish_reason = finish_reason  # "length": the reply ran out of max_tokens
+
+
+class CacheMiss(LookupError):
+    """A cache-only lookup found nothing; no request was sent."""
+
+
+def sniff_mime(data: bytes) -> str:
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return "audio/wav"
+    return "application/octet-stream"
+
+
+def data_url(data: bytes, mime: str | None = None) -> str:
+    return f"data:{mime or sniff_mime(data)};base64,{base64.b64encode(data).decode('ascii')}"
+
+
+def text_part(text: str) -> dict:
+    return {"type": "text", "text": text}
+
+
+def image_part(image: bytes) -> dict:
+    """A Chat Completions image content part (base64 data URL)."""
+    return {"type": "image_url", "image_url": {"url": data_url(image)}}
+
+
+@dataclass
+class CallInfo:
+    model: str
+    cache_key: str
+    cached: bool
+    cost_usd: float  # spent by this call: 0.0 on a cache hit
+    usage: dict = field(default_factory=dict)
+    billed_usd: float | None = None  # what the response cost when it was made
+
+
+@dataclass
+class StructuredResult:
+    data: Any
+    info: CallInfo
+    reasoning_tokens: int | None = None
+
+
+@dataclass
+class _Tally:
+    """Attempts of one call that may have been processed (and billed) by the server."""
+
+    maybe_billed: int = 0
+    guard: Callable[[], None] | None = None  # re-checks the spend caps before a retry
+
+
+def _messages(input: Any, system: str | None) -> list[dict]:
+    if isinstance(input, str):
+        messages = [{"role": "user", "content": input}]
+    elif isinstance(input, list) and input and all("role" in m for m in input):
+        messages = list(input)
+    elif isinstance(input, list):
+        messages = [{"role": "user", "content": list(input)}]
+    else:
+        raise TypeError("input must be a string, a list of content parts or a list of messages")
+    if system:
+        messages = [{"role": "system", "content": system}, *messages]
+    return messages
+
+
+def _estimate_input_tokens(messages: list[dict]) -> int:
+    images = 0
+    chars = 0
+    for m in messages:
+        content = m.get("content")
+        parts = content if isinstance(content, list) else [{"type": "text", "text": content or ""}]
+        for p in parts:
+            if p.get("type") in ("image_url", "input_image"):
+                images += 1
+            else:
+                chars += len(str(p.get("text", "")))
+    return chars // 3 + 50 + images * IMAGE_TOKENS_GUESS
+
+
+def token_counts(usage: dict) -> tuple[int, int]:
+    """(input, output) tokens, in Chat Completions or Responses naming."""
+    inp = usage.get("prompt_tokens", usage.get("input_tokens"))
+    out = usage.get("completion_tokens", usage.get("output_tokens"))
+    if inp is None and out is None:
+        raise ValueError("usage has no token counts")
+    return int(inp or 0), int(out or 0)
+
+
+def _parse_json_text(text: str) -> Any:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.strip("`")
+        stripped = stripped.removeprefix("json").strip()
+    return json.loads(stripped)
+
+
+# -- media endpoints (Voice Transcribe, SAM 3.1, Muse Image) -------------------
+
+EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+
+
+def wav_duration_s(audio: bytes) -> float | None:
+    try:
+        with wave.open(io.BytesIO(audio)) as w:
+            return w.getnframes() / float(w.getframerate())
+    except (wave.Error, EOFError, ZeroDivisionError):
+        return None
+
+
+def parse_sse(body: str) -> list[dict]:
+    """Parse a server-sent-events body into its JSON data payloads.
+
+    Lines end in CRLF, CR or LF (as the SSE format allows); an empty line ends an event.
+    """
+    events, data = [], []
+    for line in re.split(r"\r\n|\r|\n", body):
+        if not line:
+            if data:
+                events.append("\n".join(data))
+                data = []
+        elif line.startswith("data:"):
+            data.append(line[5:].removeprefix(" "))
+    if data:
+        events.append("\n".join(data))
+    return [json.loads(e) for e in events if e.strip() and e.strip() != "[DONE]"]
+
+
+def responses_text(response: dict) -> str:
+    """Concatenate output_text parts from a (non-streamed) Responses API object."""
+    texts = []
+    for item in response.get("output", []):
+        for part in item.get("content", []) or []:
+            if part.get("type") == "output_text":
+                texts.append(part.get("text", ""))
+    return "".join(texts)
+
+
+@dataclass
+class Transcript:
+    text: str
+    segments: list[dict]
+    duration_s: float
+    info: CallInfo
+
+
+@dataclass
+class SamResult:
+    text: str  # raw special-token output; parsed by the data engine
+    info: CallInfo
+
+
+@dataclass
+class ImageResult:
+    images: list[bytes]  # exactly as returned, provenance metadata intact
+    info: CallInfo
+    revised_prompts: list[str] = field(default_factory=list)
+
+
+class MetaClient:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        transport: httpx.BaseTransport | None = None,
+        cache: Cache | None = None,
+        ledger: Ledger | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+    ):
+        self.settings = settings
+        self.cache = cache or Cache(settings.cache_dir)
+        self.ledger = ledger or Ledger(
+            settings.ledger_path, settings.skill_cap_usd, settings.global_cap_usd
+        )
+        self._sleep = sleep
+        self._http = httpx.Client(
+            base_url=settings.base_url, timeout=settings.timeout_s, transport=transport
+        )
+        # For downloading generated images by URL: never carries the API key, so it may
+        # follow CDN redirects.
+        self._plain = httpx.Client(
+            timeout=settings.timeout_s, transport=transport, follow_redirects=True
+        )
+
+    # -- transport ---------------------------------------------------------
+
+    def _redact(self, text: str) -> str:
+        for name in SECRET_NAMES:
+            value = self.settings.secrets.get(name)
+            if value:
+                text = text.replace(value, "[redacted]")
+        return text
+
+    def _backoff(self, attempt: int, retry_after: str | None) -> float:
+        if retry_after:
+            try:
+                return min(60.0, max(0.0, float(retry_after)))
+            except ValueError:
+                try:
+                    when = email.utils.parsedate_to_datetime(retry_after)
+                    return min(60.0, max(0.0, when.timestamp() - time.time()))
+                except (TypeError, ValueError):
+                    pass
+        base = min(30.0, 2.0**attempt)
+        return base + random.uniform(0, base / 4)
+
+    def _send(self, method: str, path: str, tally: _Tally | None = None,
+              **kwargs) -> httpx.Response:
+        tally = tally or _Tally()
+        headers = {"Authorization": f"Bearer {self.settings.secret('MODEL_API_KEY')}"}
+        retries = self.settings.max_retries
+        for attempt in range(retries + 1):
+            try:
+                resp = self._http.request(method, path, headers=headers, **kwargs)
+            except TRANSIENT_ERRORS as err:
+                if not isinstance(err, NOT_SENT_ERRORS):
+                    tally.maybe_billed += 1
+                if attempt == retries:
+                    raise MetaAPIError(None, f"network error after {attempt + 1} tries: "
+                                       f"{type(err).__name__}") from None
+                if tally.maybe_billed and tally.guard:
+                    tally.guard()
+                self._sleep(self._backoff(attempt, None))
+                if tally.guard:  # the caps again before a new attempt (and a server stop)
+                    tally.guard()
+                continue
+            except httpx.TransportError as err:
+                raise MetaAPIError(None, f"request failed: {type(err).__name__} "
+                                   f"(check TE_BASE_URL)") from None
+            status = resp.status_code
+            if status in RETRY_STATUSES or status >= 500:
+                if status in MAYBE_PROCESSED_STATUSES:
+                    tally.maybe_billed += 1
+                if attempt == retries:
+                    raise MetaAPIError(status, f"gave up after {attempt + 1} tries: "
+                                       f"{self._redact(resp.text)[:300]}")
+                if tally.maybe_billed and tally.guard:
+                    tally.guard()
+                self._sleep(self._backoff(attempt, resp.headers.get("retry-after")))
+                if tally.guard:
+                    tally.guard()
+                continue
+            if not resp.is_success:
+                raise MetaAPIError(status, self._redact(resp.text)[:500])
+            return resp
+        raise AssertionError("unreachable")
+
+    def _json(self, resp: httpx.Response) -> dict:
+        try:
+            body = resp.json()
+        except ValueError:
+            raise MetaAPIError(resp.status_code, "response is not JSON: "
+                               f"{self._redact(resp.text)[:200]!r}") from None
+        if not isinstance(body, dict):
+            raise MetaAPIError(resp.status_code, "response is not a JSON object")
+        return body
+
+    def _call(
+        self,
+        *,
+        endpoint: str,
+        model: str,
+        key_request: Any,
+        skill: str | None,
+        estimate_usd: float,
+        send: Callable[[_Tally], tuple[dict, dict[str, bytes]]],
+        cost: Callable[[dict], float],
+        check: Callable[[dict], Any],
+        cache_only: bool = False,
+    ) -> tuple[dict, dict[str, bytes], CallInfo, Any]:
+        """Shared cache / ledger / send logic.
+
+        `check(response)` returns the parsed output or raises OutputError. Returns
+        (response, blobs, info, parsed). With `cache_only`, a miss raises CacheMiss
+        instead of sending.
+        """
+        check_model_allowed(model)
+        key = cache_key(model, endpoint, key_request)
+        hit = self.cache.get(key)
+        if hit is not None:
+            blobs = {name: self.cache.blob(key, name) for name in hit.get("blobs", [])}
+            info = CallInfo(model, key, True, 0.0, hit.get("usage", {}), hit.get("cost_usd"))
+            try:
+                return hit["response"], blobs, info, check(hit["response"])
+            except OutputError:
+                pass  # cached under older, looser checks: fetch it again
+        if cache_only:
+            raise CacheMiss(key)
+
+        self.settings.secret("MODEL_API_KEY")  # fail before touching the ledger
+        self.ledger.check(estimate_usd, skill)
+        entry = Entry(model, endpoint, estimate_usd, 0.0, skill=skill or NO_SKILL, cache_key=key)
+        tally = _Tally()
+        tally.guard = lambda: self.ledger.check(estimate_usd * (1 + tally.maybe_billed), skill)
+        try:
+            response, blobs = send(tally)
+        except OutputError as err:
+            # Served (so billed) but unreadable.
+            entry.status = "output_error"
+            entry.actual_usd = err.cost_usd = estimate_usd * (1 + tally.maybe_billed)
+            self.ledger.record(entry)
+            raise
+        except (MetaAPIError, BudgetExceeded) as err:
+            entry.status = "error"
+            entry.actual_usd = estimate_usd * tally.maybe_billed
+            if isinstance(err, MetaAPIError):
+                err.cost_usd = entry.actual_usd
+            self.ledger.record(entry)
+            raise
+        except BaseException:
+            # The request went through but handling the reply failed, or Ctrl+C stopped
+            # the call while Meta was working on it: assume it was billed.
+            entry.status = "error"
+            entry.actual_usd = estimate_usd * (1 + tally.maybe_billed)
+            self.ledger.record(entry)
+            raise
+
+        usage = response.get("usage") or {}
+        if not isinstance(usage, dict):
+            usage = {"unreadable": repr(usage)[:100]}
+        try:
+            entry.actual_usd = cost(response) if usage else estimate_usd
+            if not math.isfinite(entry.actual_usd) or entry.actual_usd < 0:
+                raise ValueError("not a cost")  # nan or a negative would switch the caps off
+        except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
+            entry.actual_usd = estimate_usd
+            usage = {**usage, "unpriced": True}
+        if not usage:
+            # No usage reported: record the estimate so spend is never under-counted.
+            usage = {"missing": True}
+        entry.actual_usd += estimate_usd * tally.maybe_billed
+        if tally.maybe_billed:
+            usage = {**usage, "maybe_billed_retries": tally.maybe_billed}
+        entry.usage = usage
+        info = CallInfo(model, key, False, entry.actual_usd, usage, entry.actual_usd)
+        try:
+            parsed = check(response)
+        except BaseException as err:  # served and billed, whatever went wrong reading it
+            entry.status = "output_error"
+            if isinstance(err, MetaAPIError):
+                err.cost_usd = entry.actual_usd
+            self.ledger.record(entry)
+            raise
+        self.ledger.record(entry)
+        self.cache.put(key, {"model": model, "endpoint": endpoint, "response": response,
+                             "usage": usage, "cost_usd": entry.actual_usd}, blobs)
+        return response, blobs, info, parsed
+
+    # -- typed methods -----------------------------------------------------
+
+    def structured(
+        self,
+        model: str,
+        input: Any,
+        schema: dict,
+        *,
+        name: str = "result",
+        system: str | None = None,
+        skill: str | None = None,
+        max_tokens: int = 2048,
+        reasoning_effort: str | None = None,
+        validate: Callable[[Any], None] | None = None,
+        cache_only: bool = False,
+    ) -> StructuredResult:
+        """JSON output constrained by `schema`, via Chat Completions.
+
+        `validate(data)` may raise OutputError for output that parses but is unusable;
+        such output is billed like any other but never cached. With `cache_only`, only the
+        cache is asked (CacheMiss if the reply is not there).
+        """
+        endpoint = "/chat/completions"
+        messages = _messages(input, system)
+        payload = {
+            "model": model,
+            "messages": messages,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": name, "schema": schema, "strict": True},
+            },
+            "max_tokens": max_tokens,
+            "reasoning_effort": reasoning_effort,
+        }
+        payload = {k: v for k, v in payload.items() if v is not None}
+        price = self.settings.price(model)
+        estimate = token_cost(price, _estimate_input_tokens(messages), max_tokens)
+
+        def send(tally):
+            return self._json(self._send("POST", endpoint, tally, json=payload)), {}
+
+        def cost(r):
+            return token_cost(price, *token_counts(r["usage"]))
+
+        def check(r):
+            choices = r.get("choices")
+            choice = choices[0] if isinstance(choices, list) and choices else {}
+            choice = choice if isinstance(choice, dict) else {}
+            message = choice.get("message")
+            message = message if isinstance(message, dict) else {}
+            content = message.get("content") or ""
+            reason = choice.get("finish_reason")
+            reason = reason if isinstance(reason, str) else None
+            if message.get("refusal"):
+                raise OutputError(f"model refused: {message['refusal']}")
+            if not isinstance(content, str):
+                raise OutputError(f"output content is not text ({type(content).__name__})")
+            if not content.strip():
+                hint = " (raise max_tokens: reasoning used the budget)" if reason == "length" else ""
+                raise OutputError(f"empty output, finish_reason={reason}{hint}", reason)
+            try:
+                data = _parse_json_text(content)
+            except json.JSONDecodeError:
+                raise OutputError(f"output is not JSON, finish_reason={reason}: "
+                                  f"{content[:200]!r}", reason) from None
+            if validate is not None:
+                validate(data)
+            return data
+
+        _, _, info, data = self._call(endpoint=endpoint, model=model, key_request=payload,
+                                      skill=skill, estimate_usd=estimate, send=send, cost=cost,
+                                      check=check, cache_only=cache_only)
+        details = info.usage.get("completion_tokens_details")
+        reasoning = details.get("reasoning_tokens") if isinstance(details, dict) else None
+        return StructuredResult(data, info, reasoning)
+
+    def list_models(self) -> list[str]:
+        """Model IDs the key can use. Free; not cached or recorded."""
+        body = self._json(self._send("GET", "/models"))
+        return sorted(m.get("id", "") for m in body.get("data", []) if isinstance(m, dict))
+
+    # -- media endpoints -----------------------------------------------------
+
+    def transcribe(
+        self,
+        audio: bytes,
+        *,
+        filename: str = "request.wav",
+        skill: str | None = None,
+        duration_s: float | None = None,
+    ) -> Transcript:
+        """Speech to text with Muse Voice Transcribe (file endpoint)."""
+        endpoint = "/audio/transcriptions"
+        model = self.settings.model("transcribe")
+        duration = duration_s if duration_s is not None else wav_duration_s(audio)
+        if duration is None:
+            raise ValueError("pass duration_s for non-WAV audio so the cost can be estimated")
+        price = self.settings.price(model)
+        estimate = unit_cost(price, audio_s=duration)
+
+        def send(tally):
+            files = {"file": (filename, audio, sniff_mime(audio))}
+            resp = self._send("POST", endpoint, tally, data={"model": model}, files=files)
+            return _with_usage((self._json(resp), {}), {"audio_s": duration})
+
+        def cost(r):
+            return unit_cost(price, audio_s=float(r.get("duration") or duration))
+
+        def check(r):
+            text = r.get("text")
+            if not isinstance(text, str) or not text.strip():
+                raise OutputError("the recording transcribed to no words: check the audio, "
+                                  "or pass the request as text with --request")
+            return text
+
+        response, _, info, text = self._call(
+            endpoint=endpoint, model=model, key_request={"file": audio}, skill=skill,
+            estimate_usd=estimate, send=send, cost=cost, check=check,
+        )
+        try:
+            seconds = float(response.get("duration") or duration)
+        except (TypeError, ValueError):
+            seconds = duration
+        return Transcript(
+            text=text,
+            segments=response.get("segments") or [],
+            duration_s=seconds,
+            info=info,
+        )
+
+    def sam_image(self, prompt: str, image: bytes, *, skill: str | None = None) -> SamResult:
+        """SAM 3.1 on one image with one noun-phrase concept (Responses API, streamed)."""
+        endpoint = "/responses"
+        model = self.settings.model("sam")
+        payload = {
+            "model": model,
+            "input": [{
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": prompt},
+                    {"type": "input_image", "image_url": data_url(image)},
+                ],
+            }],
+            "stream": True,
+        }
+        price = self.settings.price(model)
+
+        def send(tally):
+            resp = self._send("POST", endpoint, tally, json=payload)
+            if resp.headers.get("content-type", "").startswith("text/event-stream"):
+                try:
+                    events = parse_sse(resp.text)
+                except json.JSONDecodeError:
+                    raise OutputError("SAM stream is not readable") from None
+                text, final, last = [], None, None
+                for event in events:
+                    last = event.get("type")
+                    if last == "response.output_text.delta":
+                        text.append(event.get("delta", ""))
+                    elif last == "response.completed":
+                        final = event.get("response") or {}
+                if final is None:
+                    raise OutputError(f"SAM stream did not complete (last event: {last})")
+                out = "".join(text) or responses_text(final)
+                body = {"text": out, "usage": final.get("usage") or {}}
+            else:
+                raw = self._json(resp)
+                if raw.get("status") not in (None, "completed"):
+                    raise OutputError(f"SAM response status {raw.get('status')}")
+                body = {"text": responses_text(raw), "usage": raw.get("usage") or {}}
+            return _with_usage((body, {}), {"images": 1})
+
+        def check(r):
+            if not r["text"].strip():
+                raise OutputError("SAM returned no output")
+            return r["text"]
+
+        _, _, info, text = self._call(
+            endpoint=endpoint, model=model, key_request=payload, skill=skill,
+            estimate_usd=unit_cost(price, images=1), send=send,
+            cost=lambda r: unit_cost(price, images=1), check=check,
+        )
+        return SamResult(text, info)
+
+    def image_edit(
+        self, image: bytes, prompt: str, *, skill: str | None = None, n: int = 1,
+        size: str | None = None,
+    ) -> ImageResult:
+        """Muse Image edit of a real keyframe."""
+        return self._images("/images/edits", prompt, [image], skill=skill, n=n, size=size)
+
+    def image_generate(
+        self, prompt: str, refs: list[bytes] = (), *, skill: str | None = None, n: int = 1,
+        size: str | None = None,
+    ) -> ImageResult:
+        """Muse Image generation. Reference images, if any, go through the edits endpoint."""
+        endpoint = "/images/edits" if refs else "/images/generations"
+        return self._images(endpoint, prompt, list(refs), skill=skill, n=n, size=size)
+
+    def _images(self, endpoint: str, prompt: str, images: list[bytes], *, skill: str | None,
+                n: int, size: str | None) -> ImageResult:
+        model = self.settings.model("image")
+        price = self.settings.price(model)
+        fields = {"model": model, "prompt": prompt, "n": n, "size": size}
+        fields = {k: v for k, v in fields.items() if v is not None}
+
+        def send(tally):
+            if images:
+                name = "image" if len(images) == 1 else "image[]"
+                files = [(name, (f"ref{i}.{EXTENSIONS.get(sniff_mime(img), 'bin')}", img,
+                                 sniff_mime(img))) for i, img in enumerate(images)]
+                resp = self._send("POST", endpoint, tally, files=files,
+                                  data={k: str(v) for k, v in fields.items()})
+            else:
+                resp = self._send("POST", endpoint, tally, json=fields)
+            body = self._json(resp)
+            blobs: dict[str, bytes] = {}
+            kept = []
+            for i, item in enumerate(body.get("data") or []):
+                if item.get("b64_json"):
+                    raw = base64.b64decode(item["b64_json"])
+                elif item.get("url"):
+                    raw = self._download(item["url"])
+                else:
+                    continue
+                blob = f"{i}.{EXTENSIONS.get(sniff_mime(raw), 'bin')}"
+                blobs[blob] = raw
+                kept.append({k: v for k, v in item.items() if k != "b64_json"} | {"blob": blob})
+            body = {**body, "data": kept}
+            return _with_usage((body, blobs), {"images": len(blobs)})
+
+        def check(r):
+            if not r.get("data"):
+                raise OutputError("no images returned")
+            return r["data"]
+
+        # A reply without usable images is still billed for the n images asked for.
+        _, blobs, info, items = self._call(
+            endpoint=endpoint, model=model, key_request={**fields, "images": images},
+            skill=skill, estimate_usd=unit_cost(price, images=n), send=send,
+            cost=lambda r: unit_cost(price, images=len(r.get("data") or []) or n), check=check,
+        )
+        ordered = [blobs[item["blob"]] for item in items]
+        prompts = [item.get("revised_prompt", "") for item in items]
+        return ImageResult(ordered, info, [p for p in prompts if p])
+
+    def _download(self, url: str, tries: int = 2) -> bytes:
+        """A generated image by URL. The edit is billed already, so a failed download is
+        an unusable output (OutputError), not a crash."""
+        for attempt in range(tries):
+            try:
+                resp = self._plain.get(url)
+                resp.raise_for_status()
+                return resp.content
+            except httpx.HTTPError as err:
+                if attempt == tries - 1:
+                    raise OutputError(f"image download failed: {type(err).__name__}") from None
+                self._sleep(1.0)
+        raise AssertionError("unreachable")
+
+
+def _with_usage(result: tuple[dict, dict], fallback: dict) -> tuple[dict, dict]:
+    """Unit-priced endpoints may not report usage; fill in what we billed for."""
+    response, blobs = result
+    if not response.get("usage"):
+        response = {**response, "usage": fallback}
+    return response, blobs

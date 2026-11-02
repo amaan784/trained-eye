@@ -1,16 +1,18 @@
 # Progress
 
 The source of truth between sessions. Updated at the end of every milestone.
-Last update: 2026-10-31, the review fixes after M1 (v23 to v40, v49) and the offline parts of M2 (v41 to v48).
+Last update: 2026-11-02, the code for M2 to M4 (v50 to v105), tested offline only.
 
 ## Status
 
-M0 and M1 code are done and tested offline (498 tests, none calls a paid API). A full
-review after M1 (bugs, version compatibility, functionality against SPEC.md, the UI)
-found 27 confirmed problems in F1 to F29, fixed in stages v23 to v30. The rest, F30 to
-F62, and a second check of those fixes are fixed in stages v31 to v38, and a review of
-those in v39, v40 and v49 (see "Review after M1" below). The parts of M2 that need neither
-the Mac nor Modal are stages v41 to v48; training, serving and the iOS app come next.
+M0 and M1 code are done and tested offline. M2 to M4 are written and tested offline too
+(stages v50 to v105; 707 tests in all, none calls a paid API, one skips without OpenCV);
+none of it has run against Meta, Modal or a phone yet, and the iOS app has never been
+compiled. A full review after M1 (bugs, version compatibility, functionality against
+SPEC.md, the UI) found 27 confirmed problems in F1 to F29, fixed in stages v23 to v30. The
+rest, F30 to F62, and a second check of those fixes are fixed in stages v31 to v38, and a
+review of those in v39, v40 and v49 (see "Review after M1" below). The parts of M2 that
+need neither the Mac nor Modal are stages v41 to v48.
 HANDOVER.md explains how to pick the project up; SETUP.md covers setup. What is still
 open needs the Mac, the keys, the glasses or new footage:
 
@@ -123,21 +125,61 @@ open needs the Mac, the keys, the glasses or new footage:
 - [x] Modal training app with the recipe's pins; `te train` (smoke first, then a run
   priced from the smoke, asking always over $15) and `te watch` (replay a clip)
 - [ ] The two-step smoke and the first real run on Modal (asks first)
-- [ ] Export (merge) and serving on the Mac or Modal, then `TE_STUDENT_URL`
-- [ ] The iOS app (needs Xcode on the Mac)
+- [x] Export code: `te export` merges on Modal and compares 50 answers (not run yet)
+- [x] Serving code: `te serve-student` deploys vLLM on Modal behind STUDENT_API_KEY (not run
+  yet; the cookbook has no Mac path for a fine-tuned Glimmer)
+- [x] Teaching from the phone: `/teach/start`, `/teach/status`, `/teach/answer` (they need
+  `SERVER_TOKEN`), and `GET /skills` for the app
+- [x] The iOS app's code in `ios/` (never compiled: needs Xcode on the Mac)
+- [ ] The first real export and endpoint, then `TE_STUDENT_URL`; the first Xcode build
 - [x] `te calibrate`: a skill's threshold from replayed validation clips and their true
   time ranges
 - [ ] Thresholds from real labelled validation footage (needs footage and M3's labels)
 
 ### M3, Sat to Sun: all skills and experiments
 
-- [ ] Other two skills, labeling tool, eval harness
-- [ ] Experiments 1 to 4, charts, `eval/results.md`
+- [x] Labelling tool: `te label --clip` (true time ranges) and `te label --skill` (200
+  generated images for Experiment 2)
+- [x] Evaluation harness: `te eval` and `make eval` (frame and event metrics, false alarms
+  per hour, time to alert, latency, cost per hour, `eval/results.md`, SVG charts)
+- [x] Experiment code: the plan with fixed steps and prices (`te experiments`), the
+  unfiltered arm (`te unfiltered`), Spark's error rate (`te spark-errors`), Spark as the
+  per-frame scorer (`te watch --scorer spark`), the regression check (`te regress`)
+- [ ] Other two skills (needs footage), the experiment runs, real `eval/results.md`
 
 ### M4, Mon Nov 2: release
 
+- [x] Playground code: clips with the live timeline, how each skill was built, teach it
+  yourself with per-visitor and per-day caps, results (`te playground`; not deployed)
+- [x] Release code: `te manifests`, `te regenerate`, `te blur`, `te release` (upload asks)
+- [x] `CONTRIBUTIONS.md`
 - [ ] Playground deployed; Hugging Face release (after asking); public W&B report
-- [ ] README with results, `CONTRIBUTIONS.md`
+- [ ] README with results (needs the experiment runs)
+
+### Review of M2 to M4, Mon Nov 2
+
+Three reviews (the teach API, the iOS code, the playground) reproduced each defect with
+fakes, and a second round with a skeptic per finding checked those fixes and the stage
+cut; the fixes are in the stages that add that code (v50 to v105).
+
+- [x] Teach API: the routes need `SERVER_TOKEN`; a frame longer than 4:1 is refused (it
+  would take gigabytes once scaled); answers have a 64 KB limit; odd `step` and endless
+  `audio_s` values are a 400, and so are counts over 100000; a token with spaces or smart
+  quotes is a 503 that says so; a run that fails early closes its question; on shutdown
+  the next paid call is refused, a rate-limit backoff ends at once, the one in flight is
+  recorded, and the Meta client checks the caps before every retry
+- [x] iOS: the mock picks its feed before it is worn; one watch frame in flight at a
+  time, and a backend that stops answering frames gets a fresh connection; a refused
+  glasses start is not reported as watching; three teach frames a second on an even
+  schedule; the permission step does not count against the first-frame wait, and a
+  refused permission ends it; the LED and concurrency notes say only what was checked
+- [x] Playground: never trust every proxy (`--forwarded-allow-ips "*"` is refused); an
+  IPv6 visitor counts by their /64; the body size is checked as it streams; runs share
+  one in-flight total for the ledger's caps; live runs take JSON from the page itself
+  only, and the page cannot be framed; deeply nested JSON is a 400 on Python 3.11 too;
+  a budget file that cannot be saved no longer blocks the visitor; odd `since` values
+  read as 0; the wall clears between runs, counts unsure apart, and alert labels do not
+  collide
 
 ### M5, Tue Nov 3: demo
 
@@ -218,6 +260,19 @@ open needs the Mac, the keys, the glasses or new footage:
   for its cooldown. If Muse Spark says no, the skill waits a minute instead; if the check
   fails, the alert goes out marked unconfirmed (missing the washer is worse than one
   unchecked alert). Frames are never written; the log holds times, scores and decisions.
+- **Student sampling follows Meta's serving notes:** no temperature in the request (the
+  cookbook advises against greedy decoding for Glimmer) and reasoning_strength low; the
+  answer token's logprobs are read either way.
+- **Experiments keep the steps fixed:** every run of Experiments 1 to 3 trains the same
+  number of optimizer steps (enough for 300 images per skill at the recipe's batch of
+  32), so the image-count curve measures data, not steps (backend/eval/plan.py).
+- **Charts are SVG**, written by hand (matplotlib could not be installed), with the light
+  and dark styles inside each file.
+- **Phone teach captures are kept** under `data/teach/` (gitignored) so a run can be
+  repeated from the Mac; watch frames are still never stored.
+- **The teach routes need a token** (`SERVER_TOKEN` in `.env`, typed once into the app):
+  `te serve` listens on the whole network, and without it anyone there could agree to a
+  phone run's spend. `/ws` and `/skills` stay open, as in M1.
 - **Training config as JSON:** the Axolotl config is Meta's recipe written as JSON (YAML
   reads it), with only the paths, the W&B names and gradient accumulation changed.
 - **Provenance:** generated images are stored exactly as returned; the padded dataset PNGs
@@ -275,6 +330,11 @@ sources disagree with SPEC.md, the sources win.
   organizers with the training question).
 - The dataset JSONL holds absolute image paths (the recipe's format); M2 writes it again
   under the Modal volume mount.
+- For the author: the playground's spend also counts against `TE_SKILL_CAP_USD` (all
+  time) under the skill name "playground", and its training wall shows generated images,
+  which are never published; decide before deploying (HANDOVER.md, item 12). Uploading
+  to Hugging Face needs `huggingface_hub`, and face blurring needs
+  `opencv-python-headless` (approved); Inter is not bundled in the app or the pages.
 - SAM output parsing: the first live run stores SAM's raw text (cached); write the parser
   against it, then the boxes feed crops and the outline visual.
 - Image token counts are unknown, so estimates assume 1,500 tokens per image; the real

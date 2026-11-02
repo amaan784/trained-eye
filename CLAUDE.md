@@ -17,6 +17,7 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
     ruff check .
     te spend                         # Meta API spend from data/ledger.jsonl
     te serve                         # backend; prints the ws:// address for the phone
+                                     # (phone teaching needs SERVER_TOKEN in .env)
     te ws-selftest                   # synthetic frames through the WebSocket, in process
     te api-smoke                     # one tiny paid Muse Spark call (needs MODEL_API_KEY)
     te policy "<request>"            # local policy check, free
@@ -31,6 +32,17 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
                                      # replay a clip through watch mode (needs TE_STUDENT_URL)
     te calibrate --skill washer_done --log <frame log> --labels <true ranges json>
                                      # threshold from labelled validation clips
+    te export --run exp1-mixed       # merge the adapter on Modal and check it (asks)
+    te serve-student --run exp1-mixed  # the trained model on Modal (asks); --stop stops it
+    te label --clip <clip>           # mark where the condition is true (writes <clip>.labels.json)
+    te label --skill washer_done --sample 200   # hand-label generated images (Experiment 2)
+    te experiments --skills washer_done [--write-plan]  # every training run with its price
+    te unfiltered / te spark-errors  # Experiment 2: the unfiltered arm, Spark's error rate
+    te watch ... --scorer spark      # Experiment 4: Muse Spark on every frame (paid; asks)
+    te regress                       # the regression check on general questions
+    make eval                        # te eval: eval/results.md and the SVG charts
+    te manifests / te regenerate / te blur / te release   # M4 release (upload asks)
+    te playground                    # the web playground, locally
     modal run backend/training/wandb_smoke.py   # one W&B run from Modal
 
 ## Conventions
@@ -53,3 +65,5 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
   synthetic images with manifest.jsonl, labels.jsonl, label_stats.json, dataset/.
 - Meta cookbook: github.com/meta-models/meta-oss-cookbook (muse-glimmer/post-training).
 - DAT iOS SDK: github.com/facebook/meta-wearables-dat-ios (samples/CameraAccess).
+- ios/README.md: how to build the iPhone app in Xcode (never compiled yet).
+- CONTRIBUTIONS.md: credits, licenses and the copied Meta sample files.

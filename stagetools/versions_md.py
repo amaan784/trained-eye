@@ -68,8 +68,10 @@ live only on the `build-stages` branch; they are not part of the project itself.
 
 ## Ground rules
 
-- Each stage is one commit and adds or changes at most 5 files compared with the stage
-  before it (v1 has 5 files in total). The README counts.
+- Each stage is one commit. Up to v49 a stage adds or changes at most 5 files compared
+  with the stage before it (v1 has 5 files in total; the README counts). From v50 on, the
+  rule is by size instead: a stage changes 150 to 300 lines compared with the stage
+  before it, counting added plus removed lines and leaving out its README.
 - Stages are cumulative: vN holds everything in v(N-1) plus what stage N adds.
 - No stage deletes or renames a file the previous stage had, so each folder can be copied
   over the repository and committed.
@@ -223,8 +225,9 @@ you can push it.
 
 A script (kept outside the repository) checked every folder after it was built:
 
-1. v1 has at most 5 files, and each later stage adds or changes at most 5 files compared
-   with the one before (README included).
+1. v1 has at most 5 files; v2 to v49 each add or change at most 5 files compared with
+   the one before (README included); from v50 each changes 150 to 300 lines (README left
+   out).
 2. Every folder contains every file of the folder before it.
 3. v{last} matches the repository root byte for byte (local-only things excluded).
 4. Every file a README names, in backticks or as a bare file name, exists in that folder.

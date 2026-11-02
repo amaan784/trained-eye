@@ -3,7 +3,9 @@
 Usage: python check_stages.py <repo_root> [--run]
 
 Checks:
-  1. v1 has at most 5 files; every later stage adds or changes at most 5 files.
+  1. v1 has at most 5 files; stages v2 to v49 add or change at most 5 files; from v50 on
+     (the author's newer rule) a stage changes 150 to 300 lines against the one before
+     it, counting added plus removed lines and leaving out its README.
   2. every stage contains every file of the previous stage (no deletes or renames).
   3. the last stage matches the root byte for byte (local-only paths excluded).
   4. every file path a stage README names exists in that stage.
@@ -16,6 +18,7 @@ backend's namespace path, and every stage then fails the import-location check.
 
 from __future__ import annotations
 
+import difflib
 import filecmp
 import json
 import os
@@ -81,6 +84,31 @@ def same(a: Path, b: Path) -> bool:
     return filecmp.cmp(a, b, shallow=False)
 
 
+LINE_RULE_FROM = 50  # stages before this were built under the 5-file rule
+MIN_LINES, MAX_LINES = 150, 300
+
+
+def lines_of(path: Path | None) -> list[str]:
+    if path is None:
+        return []
+    try:
+        return path.read_text(encoding="utf-8").splitlines()
+    except UnicodeDecodeError:  # a binary file counts as one changed line
+        return [path.read_bytes().hex()[:64]]
+
+
+def changed_lines(prev: dict[str, Path], cur: dict[str, Path], changed: list[str]) -> int:
+    """Added plus removed lines over the changed files, README.md left out."""
+    total = 0
+    for rel in changed:
+        if rel == "README.md":
+            continue
+        diff = difflib.unified_diff(lines_of(prev.get(rel)), lines_of(cur.get(rel)), lineterm="",
+                                    n=0)
+        total += sum(1 for line in diff if line[:1] in "+-" and line[:3] not in ("+++", "---"))
+    return total
+
+
 PATH_TOKEN = re.compile(r"`([A-Za-z0-9_.\-/]+\.[A-Za-z0-9]+)`")
 
 
@@ -123,7 +151,14 @@ def main() -> int:
             if missing:
                 problems.append(f"{stage.name}: drops files from previous stage: {missing}")
             changed = sorted(r for r in cur if r not in prev or not same(cur[r], prev[r]))
-            if len(changed) > 5:
+            number = int(STAGE_RE.match(stage.name).group(1))
+            if number >= LINE_RULE_FROM:
+                count = changed_lines(prev, cur, changed)
+                print(f"{stage.name}: {count} lines changed (README left out)")
+                if not MIN_LINES <= count <= MAX_LINES:
+                    problems.append(f"{stage.name}: changes {count} lines "
+                                    f"({MIN_LINES} to {MAX_LINES} allowed)")
+            elif len(changed) > 5:
                 problems.append(f"{stage.name}: adds or changes {len(changed)} files (max 5)")
         added = [r for r in changed if prev is None or r not in prev]
         modified = [r for r in changed if prev is not None and r in prev]

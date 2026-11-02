@@ -12,7 +12,7 @@ root, with a Python that has the project's dependencies, pytest and ruff (see SE
 | `specs/stages_*.py` | README and VERSIONS.md text for each stage: layer, what it adds, the commands its README runs, commit summary and description |
 | `render_readmes.py` | Runs each stage's README commands inside that folder with no keys or `TE_*` settings, and writes the README around the measured output; the last stage's README is also written to the root |
 | `versions_md.py` | Writes VERSIONS.md from the stage metadata and `measured.json` |
-| `check_stages.py` | Checks the rules: at most 5 files per stage, every folder contains the previous one, the last folder matches the root, README file mentions exist, no caches or secrets, and (with `--run`) ruff and pytest pass inside every folder |
+| `check_stages.py` | Checks the rules: at most 5 files per stage up to v49, 150 to 300 changed lines per stage from v50 (README left out), every folder contains the previous one, the last folder matches the root, README file mentions exist, no caches or secrets, and (with `--run`) ruff and pytest pass inside every folder |
 | `measured.json` | The measured README command outputs for every stage, used by VERSIONS.md |
 
 ## Adding the stages for a new milestone
@@ -20,8 +20,9 @@ root, with a Python that has the project's dependencies, pytest and ruff (see SE
 1. Finish the milestone at the root, with tests passing.
 2. Write `specs/peel_<milestone>.py`: `BASE` is the newest existing stage, `FIRST` and
    `LAST` the new stage numbers, and `PEEL[k]` undoes what stage k adds (files to remove,
-   files to restore from `v<BASE>`, and exact edits). Keep every stage at 5 files or fewer,
-   README included, and order the layers foundations first, docs and UI last.
+   files to restore from `v<BASE>`, and exact edits). Keep every stage from v50 at 150 to
+   300 changed lines (added plus removed, README left out; v1 to v49 were cut at 5 files
+   or fewer, README included), and order the layers foundations first, docs and UI last.
 3. Write `specs/stages_<milestone>.py` with the text for each new stage (copy the shape
    of `stages_m1.py`; it imports the shared intro, policy text and file descriptions).
 4. Build, render, write VERSIONS.md and check:

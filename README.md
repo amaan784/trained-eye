@@ -11,28 +11,29 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v41 (M2): Teach checks, worst case and crops
+## Build stage v42 (M2): te train on Modal
 
-te teach now checks everything it needs before any money is mentioned: the skill name,
-a --request of at most 500 characters that the policy allows, the audio and clip
-files, a clip outside the skill's own folder with usable frames, and --labels with no
-repeated key, naming only this clip's keyframes. With training on model outputs off,
-your labels must say both yes and no, or the keyframes are saved for labelling and
-nothing is spent. The estimate prices images at the tokens the ledger measured and
-shows the worst case, every label asked again with the larger budget; past $15 it asks
-even with --yes, and a missing MODEL_API_KEY stops before the question. te spend adds
-the Modal total. In backend/teach.py, each keyframe SAM found a box in adds a crop
-labelled like it, a new spec removes the old dataset, the labels so far are saved when
-labelling stops, and a dataset with only one answer stops instead of being written.
-The crop test comes in v73, with Experiment 2's unfiltered set.
+backend/cli_train.py adds te train, which bundles taught skills and trains the student
+with the Modal training app. --smoke runs the recipe's two-step check on one H100 and
+saves its timing. A real run is priced from that timing, the smoke's setup time plus
+the examples at its measured samples per second at config.py's H100 price, and asks
+past $15 even with --yes, but that path reads backend/eval/plan.py, so it works from
+v74, where its tests come. A job that would pass the Modal credit asks even with
+--yes, and so does --wandb-artifacts, after saying what becomes visible on W&B. Each
+run is tagged with its experiment, skills, mix, data hash and commit, its status file
+in data/train says running and then done or failed, and its GPU time goes into the
+Modal ledger, also when it fails or is interrupted. --detach leaves the run going in
+Modal and --collect fetches its result from the volume later; --preflight runs the
+processor check on a CPU. The training app's test now checks the volume name te train
+uses.
 
 Files added or changed in this stage:
 
 - `backend/cli.py` (changed): the te command line
-- `backend/teach.py` (changed): the teach flow end to end, cached so a rerun costs
-  nothing
-- `tests/test_cli.py` (changed): tests
-- `tests/test_teach.py` (changed): tests
+- `backend/cli_train.py` (new): te train: the smoke, the priced run, detach and
+  collect, the preflight
+- `tests/test_cli_train.py` (new): tests
+- `tests/test_modal_train.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -51,39 +52,55 @@ set and no network to Meta); the output under each is what they printed.
     $ python -m pytest
     ........................................................................ [ 10%]
     ........................................................................ [ 21%]
-    ........................................................................ [ 32%]
-    ........................................................................ [ 43%]
+    ........................................................................ [ 31%]
+    ........................................................................ [ 42%]
     ........................................................................ [ 53%]
-    ........................................................................ [ 64%]
-    ........................................................................ [ 75%]
-    ........................................................................ [ 86%]
-    ........................................................................ [ 97%]
-    ....................                                                     [100%]
-    668 passed in 21.49s
+    ........................................................................ [ 63%]
+    ........................................................................ [ 74%]
+    ........................................................................ [ 84%]
+    ........................................................................ [ 95%]
+    ...............................                                          [100%]
+    679 passed in 31.54s
 
     $ ruff check .
     All checks passed!
 
-    $ python -m backend.cli teach --help
-    usage: te teach [-h] --skill SKILL --clip CLIP [--audio AUDIO |
-                    --request REQUEST] [--correct CORRECT] [--positives POSITIVES]
-                    [--negatives NEGATIVES] [--labels LABELS] [--estimate-only]
-                    [--yes]
+    $ python -m backend.cli train --help
+    usage: te train [-h] [--skills SKILLS] [--run RUN]
+                    [--variant {mixed,real,synthetic}] [--limit LIMIT]
+                    [--max-steps MAX_STEPS]
+                    [--dataset {dataset,dataset-unfiltered}] [--smoke]
+                    [--preflight] [--detach] [--collect RUN]
+                    [--wandb-entity WANDB_ENTITY] [--wandb-artifacts]
+                    [--estimate-only] [--yes]
 
     options:
       -h, --help            show this help message and exit
-      --skill SKILL         skill name, e.g. washer_done
-      --clip CLIP           video file or folder of JPEG frames
-      --audio AUDIO         the spoken request (wav, m4a, ...)
-      --request REQUEST     the request as text, instead of --audio
-      --correct CORRECT     fix a wrong read-back, e.g. "the light on the lid"
-      --positives POSITIVES
-      --negatives NEGATIVES
-      --labels LABELS       JSON of your own keyframe labels
-                            {"kf_00_1a2b3c4d.jpg": "yes" or "no"}, names as in
-                            data/skills/<skill>/keyframes/
-      --estimate-only       print the cost estimate
-      --yes                 skip both confirmations
+      --skills SKILLS       comma-separated, e.g. washer_done (needed but with
+                            --collect)
+      --run RUN             run name, e.g. exp1-mixed (needed but with --collect)
+      --variant {mixed,real,synthetic}
+      --limit LIMIT         at most this many examples per skill
+      --max-steps MAX_STEPS
+                            fixed optimizer steps for Experiments 1 to 3
+                            (backend/eval/plan.py)
+      --dataset {dataset,dataset-unfiltered}
+                            the skill's dataset folder (Experiment 2: dataset-
+                            unfiltered)
+      --smoke               the recipe's two-step check
+      --preflight           instead of training: render a few examples with the
+                            pinned processor on Modal (CPU): lengths, the system
+                            turn, the yes/no target
+      --detach              modal run --detach: the run goes on if this Mac sleeps
+                            or disconnects (then te train --collect)
+      --collect RUN         fetch a detached run's result from the Modal volume
+                            and print it as te train does
+      --wandb-entity WANDB_ENTITY
+                            the W&B team for the run (default: your own account)
+      --wandb-artifacts     also upload the bundle and the adapter as W&B
+                            Artifacts (asks first, even with --yes)
+      --estimate-only       bundle and price only
+      --yes                 no question (not over $15)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -97,6 +114,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -147,13 +166,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 668 tests, all offline; none calls a paid API.
+- `tests/`: 679 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v42 adds te train: the bundle, the two-step smoke on Modal, detached runs
-collected later, the processor preflight, and the real run's pricing from the smoke,
-which needs v74's experiment plan.
+Stage v43 adds the teach session behind teaching from the phone: run_teach in a
+background thread, the spend question first, read-back corrections, timeouts and a
+clean stop.
 
 ## Privacy and policy
 

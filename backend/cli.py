@@ -1,4 +1,7 @@
-"""The `te` command line.
+"""The `te` command line. The M0 and M1 commands (te spend to te teach) are here, with the
+helpers the other modules share; build_parser also registers the commands of the modules
+named below.
+
   te spend          print Meta API spend from the ledger, and Modal GPU spend
   te models         list the models your MODEL_API_KEY can use (free)
   te api-smoke      one tiny paid Muse Spark call through the cache and ledger
@@ -6,6 +9,8 @@
   te ws-selftest    stream synthetic frames through the WebSocket, in process
   te policy         check a request against the local policy rules (free, offline)
   te teach          teach a skill: request + 10 s clip -> spec, generated data, labels, dataset
+  te train          bundle taught skills and train the student on Modal (asks first)
+                    (backend/cli_train.py)
 """
 
 from __future__ import annotations
@@ -18,7 +23,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-from backend.config import ASK_ABOVE_USD, ConfigError, load_settings
+# The cli_* modules take their settings imports from here, so PROJECT_ROOT and ASK_ABOVE_USD
+# are the values they had when backend.cli was loaded, as for the commands in this module.
+from backend.config import (  # noqa: F401 - some are used only by the cli_* modules
+    ASK_ABOVE_USD,
+    MODAL_GPU_USD_PER_HOUR,
+    PROJECT_ROOT,
+    ConfigError,
+    load_settings,
+    shown_path,
+)
 from backend.meta.client import MetaAPIError, MetaClient, OutputError
 from backend.meta.ledger import BudgetExceeded, Ledger, format_report, token_cost
 from backend.training import gpu_ledger
@@ -311,6 +325,14 @@ def cmd_teach(args) -> int:
     return 0
 
 
+def modal_ready() -> bool:
+    if shutil.which("modal") is None:
+        print('te: the modal command is missing: pip install -e ".[train]", then modal token '
+              "set", file=sys.stderr)
+        return False
+    return True
+
+
 def count(text: str) -> int:
     """An argparse type: a whole number, 0 or more."""
     value = int(text)
@@ -357,6 +379,10 @@ def build_parser() -> argparse.ArgumentParser:
     teach.add_argument("--estimate-only", action="store_true", help="print the cost estimate")
     teach.add_argument("--yes", action="store_true", help="skip both confirmations")
     teach.set_defaults(func=cmd_teach)
+
+    from backend.cli_train import add_parsers as train_parsers
+
+    train_parsers(sub)
     return parser
 
 

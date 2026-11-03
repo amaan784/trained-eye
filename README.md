@@ -11,25 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v49 (M2): iOS: settings and the protocol
+## Build stage v50 (M2): iOS: backend and WebSocket clients
 
-The iPhone app starts here. ios/TrainedEye/Models/Settings.swift keeps what the app
-remembers between launches in UserDefaults: the backend address
-(http://192.168.1.20:8765 until one is typed), the skills switched on for watching and
-which camera to use (by default the glasses, else the iPhone). The server token, which
-the teach routes need, goes to the keychain, readable only on this phone after the
-first unlock. The address may be http, https, ws or wss; the settings turn it into the
-HTTP base and the WebSocket address at /ws, and say whether it is on the local network
-(a private IPv4 address or a .local name) or taken to be a tunnel.
-ios/TrainedEye/Models/Protocol.swift has the WebSocket protocol's messages (the hello,
-the welcome, acks with scores, alerts and errors), the /health and /skills replies,
-and the status line the Skills screen shows for each skill. The training and served
-fields are read leniently, so an older backend still decodes.
+ios/TrainedEye/Network/BackendClient.swift makes the plain HTTP calls to te serve: GET
+/health and GET /skills with a 10 second timeout, and the request helpers the teach
+calls use later. Every request carries the server token as a Bearer header when one is
+set, and a status outside 200 to 299 becomes an error with the backend's own message.
+ios/TrainedEye/Network/WatchSocket.swift speaks the watch protocol: a hello naming the
+camera, the watched skills and a pace of one frame a second, then each JPEG frame as a
+binary message, and it reads the welcome, the acks with each skill's score, the alerts
+and the errors. One frame is in flight at a time, so a frame that would have to wait
+is dropped rather than queued. A dropped connection is opened again after 1, 2, 4, 8,
+then 15 seconds, each time as a new server session. After the welcome a ping goes
+every 20 seconds; no pong within 10 seconds, or no ack for 90 seconds, drops the
+socket and reconnects.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Models/Protocol.swift` (new):
-- `ios/TrainedEye/Models/Settings.swift` (new):
+- `ios/TrainedEye/Network/BackendClient.swift` (new):
+- `ios/TrainedEye/Network/WatchSocket.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -57,7 +57,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 31.45s
+    755 passed in 30.76s
 
     $ ruff check .
     All checks passed!
@@ -142,8 +142,9 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v50 adds the app's two clients: plain HTTP calls to te serve with the server
-token, and the watch WebSocket with one frame in flight, reconnects and a keepalive.
+Stage v51 adds the HEVC frame decoder and keyframe check from Meta's CameraAccess
+sample, copied unchanged with Meta's LICENSE, and the teach API's messages as Swift
+types.
 
 ## Privacy and policy
 

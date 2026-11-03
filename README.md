@@ -11,27 +11,28 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v40 (M2): The Modal training app
+## Build stage v41 (M2): Teach checks, worst case and crops
 
-backend/training/modal_train.py trains the student on Modal with Meta's Axolotl
-recipe. The container follows the recipe's setup (meta-oss-cookbook b30ca2c): Python
-3.12, CUDA 13.0, torch 2.12.1, Axolotl 0.19.0, flash-attn 2.8.3 and Cut Cross Entropy
-at the pinned commit, built for the H100. Bundles, runs and the Hugging Face cache
-live on the Modal volume trained-eye, so the 30B base is downloaded once;
-WANDB_API_KEY and HF_TOKEN come only from the Modal Secrets wandb and huggingface.
---smoke runs the recipe's two-step check, whose seconds per step price the real run.
-Every run writes result.json on the volume, so a detached run can be collected later.
-W&B gets the run's tags, the bundle summary and, only when asked, the bundle and
-adapter as artifacts. --preflight runs no training: a CPU function loads the pinned
-processor and renders examples with preflight.py. Nothing here runs in the tests,
-which read the file's syntax tree; the te train check comes with te train.
+te teach now checks everything it needs before any money is mentioned: the skill name,
+a --request of at most 500 characters that the policy allows, the audio and clip
+files, a clip outside the skill's own folder with usable frames, and --labels with no
+repeated key, naming only this clip's keyframes. With training on model outputs off,
+your labels must say both yes and no, or the keyframes are saved for labelling and
+nothing is spent. The estimate prices images at the tokens the ledger measured and
+shows the worst case, every label asked again with the larger budget; past $15 it asks
+even with --yes, and a missing MODEL_API_KEY stops before the question. te spend adds
+the Modal total. In backend/teach.py, each keyframe SAM found a box in adds a crop
+labelled like it, a new spec removes the old dataset, the labels so far are saved when
+labelling stops, and a dataset with only one answer stops instead of being written.
+The crop test comes in v73, with Experiment 2's unfiltered set.
 
 Files added or changed in this stage:
 
-- `backend/training/modal_train.py` (new): the Modal app that trains on one H100 with
-  the recipe's pins, the trained-eye volume and the wandb and huggingface Secrets
-- `tests/test_modal_train.py` (new): tests
-- `tests/test_training_preflight.py` (changed): tests
+- `backend/cli.py` (changed): the te command line
+- `backend/teach.py` (changed): the teach flow end to end, cached so a rerun costs
+  nothing
+- `tests/test_cli.py` (changed): tests
+- `tests/test_teach.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -48,19 +49,41 @@ These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 11%]
-    ........................................................................ [ 22%]
-    ........................................................................ [ 33%]
-    ........................................................................ [ 45%]
-    ........................................................................ [ 56%]
-    ........................................................................ [ 67%]
-    ........................................................................ [ 78%]
-    ........................................................................ [ 90%]
-    ..............................................................           [100%]
-    638 passed in 15.61s
+    ........................................................................ [ 10%]
+    ........................................................................ [ 21%]
+    ........................................................................ [ 32%]
+    ........................................................................ [ 43%]
+    ........................................................................ [ 53%]
+    ........................................................................ [ 64%]
+    ........................................................................ [ 75%]
+    ........................................................................ [ 86%]
+    ........................................................................ [ 97%]
+    ....................                                                     [100%]
+    668 passed in 21.49s
 
     $ ruff check .
     All checks passed!
+
+    $ python -m backend.cli teach --help
+    usage: te teach [-h] --skill SKILL --clip CLIP [--audio AUDIO |
+                    --request REQUEST] [--correct CORRECT] [--positives POSITIVES]
+                    [--negatives NEGATIVES] [--labels LABELS] [--estimate-only]
+                    [--yes]
+
+    options:
+      -h, --help            show this help message and exit
+      --skill SKILL         skill name, e.g. washer_done
+      --clip CLIP           video file or folder of JPEG frames
+      --audio AUDIO         the spoken request (wav, m4a, ...)
+      --request REQUEST     the request as text, instead of --audio
+      --correct CORRECT     fix a wrong read-back, e.g. "the light on the lid"
+      --positives POSITIVES
+      --negatives NEGATIVES
+      --labels LABELS       JSON of your own keyframe labels
+                            {"kf_00_1a2b3c4d.jpg": "yes" or "no"}, names as in
+                            data/skills/<skill>/keyframes/
+      --estimate-only       print the cost estimate
+      --yes                 skip both confirmations
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -124,11 +147,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 638 tests, all offline; none calls a paid API.
+- `tests/`: 668 tests, all offline; none calls a paid API.
 
 ## Next
 
-The next stages add the teach flow with SAM crops and te teach, then te train.
+Stage v42 adds te train: the bundle, the two-step smoke on Modal, detached runs
+collected later, the processor preflight, and the real run's pricing from the smoke,
+which needs v74's experiment plan.
 
 ## Privacy and policy
 

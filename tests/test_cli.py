@@ -1,8 +1,11 @@
-"""CLI tests for the commands that talk to the Meta API. The client is swapped for one
-backed by httpx.MockTransport, so nothing is sent or billed."""
+"""CLI tests for the commands in backend/cli.py (te spend, models, api-smoke, serve,
+ws-selftest, teach), and the fixtures and helpers the other CLI tests import from here. The
+client is swapped for one backed by httpx.MockTransport, so nothing is sent or billed."""
 
 import io
 import json
+import subprocess
+from pathlib import Path
 
 import httpx
 import pytest
@@ -231,3 +234,155 @@ def test_api_smoke_bad_reply_is_not_cached(env, monkeypatch, capsys, bad):
     assert "unexpected smoke reply" in capsys.readouterr().err
     assert cli.main(["api-smoke"]) == 0
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize("problem, message", [
+    ("missing clip", "no clip at"),
+    ("empty folder", "no usable frames"),
+    ("unreadable frame", "is not a readable image"),
+    ("missing audio", "no audio file at"),
+    ("long request", "over the 500 allowed"),
+    ("repeated label", "more than once"),
+])
+def test_teach_checks_its_inputs_before_any_estimate(env, monkeypatch, capsys, problem, message):
+    calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    clip = write_clip(env / "clip")
+    args = ["teach", "--skill", "washer_done", "--clip", str(clip), "--request",
+            "let me know when the washer says done"]
+    if problem == "missing clip":
+        args[4] = str(env / "nope.mp4")
+    elif problem == "empty folder":
+        (env / "empty").mkdir()
+        args[4] = str(env / "empty")
+    elif problem == "unreadable frame":
+        (clip / "f999.jpg").write_bytes(b"half a file")
+    elif problem == "missing audio":
+        args[5:7] = ["--audio", str(env / "nope.wav")]
+    elif problem == "long request":
+        args[6] = "tell me when the pot boils " * 20
+    else:
+        (env / "labels.json").write_text('{"kf_00_1a2b3c4d.jpg": "yes", '
+                                         '"kf_00_1a2b3c4d.jpg": "no"}')
+        args += ["--labels", str(env / "labels.json")]
+    code = cli.main(args)
+    captured = capsys.readouterr()
+    assert code == 2 and calls == [] and message in captured.err
+    assert "estimate" not in captured.out
+
+
+def test_teach_without_a_key_stops_before_the_question(env, monkeypatch, capsys):
+    calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    monkeypatch.delenv("MODEL_API_KEY")
+    prompts = answer(monkeypatch)
+    assert cli.main([*TEACH, "--clip", str(write_clip(env / "clip"))]) == 2
+    assert prompts == [] and calls == [] and "MODEL_API_KEY" in capsys.readouterr().err
+
+
+def test_teach_fallback_without_labels_stops_before_the_question(env, monkeypatch, capsys):
+    calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    monkeypatch.setenv("TE_TRAIN_ON_MODEL_OUTPUTS", "0")
+    prompts = answer(monkeypatch)
+    assert cli.main([*TEACH, "--clip", str(write_clip(env / "clip"))]) == 1
+    out = capsys.readouterr().out
+    assert prompts == [] and calls == [] and "needs your own labels" in out
+    assert list((env / "data/skills/washer_done/keyframes").glob("kf_*.jpg"))  # to label
+
+
+def test_teach_shows_the_worst_case_and_asks_with_it(env, monkeypatch, capsys):
+    use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    prompts = answer(monkeypatch, "n")
+    assert cli.main([*TEACH, "--clip", str(write_clip(env / "clip"))]) == 1
+    out = capsys.readouterr().out
+    assert "at most $" in out and "at_most" not in out
+    assert "(at most $" in prompts[0]
+
+
+def test_teach_after_too_many_failures_says_a_rerun_pays_again(env, monkeypatch, capsys):
+    def handler(request):
+        if request.url.path.endswith("/chat/completions"):
+            return spec_only(request)
+        return httpx.Response(400, json={"error": "rejected"})  # every SAM call and edit
+
+    use_transport(monkeypatch, handler)
+    assert cli.main([*TEACH, "--clip", str(write_clip(env / "clip")), "--yes"]) == 2
+    err = capsys.readouterr().err
+    assert "paid for again on a rerun" in err and "failed so far" in err
+    assert "without paying for them twice" not in err
+
+
+def test_teach_prompt_with_stdin_closed_is_a_clean_no(env, monkeypatch, capsys):
+    use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    monkeypatch.setattr("sys.stdin", None)
+    assert cli.main([*TEACH, "--clip", str(write_clip(env / "clip"))]) == 1
+
+
+def taught(env, skill="washer_done", n=40):
+    from backend.cli import synthetic_jpeg
+    from backend.dataengine.dataset import Example, write_dataset
+    from backend.skills.spec import SkillSpec, Target
+
+    root = env / "data/skills" / skill
+    examples = [Example(f"{skill}-{'real' if i < 10 else 'synt'}-{i:03d}",
+                        synthetic_jpeg(i, size=(64, 48)), "yes" if i % 2 else "no",
+                        "real" if i < 10 else "synthetic", skill, "the display shows End",
+                        ["display off"]) for i in range(n)]
+    write_dataset(examples, root / "dataset", f"{skill}-teach")
+    (root / "spec.json").write_text(SkillSpec(
+        name=skill, request="tell me when the washer says End",
+        target=Target(sam_prompt="washer display", description="the display"),
+        positive="the display shows End", negatives=["display off"],
+        alert="Laundry's done.", confirm_with_cloud=False).model_dump_json())
+    return root
+
+
+def fake_modal(monkeypatch, result=None, code=0):
+    runs = []
+
+    def run(command, cwd=None, check=False, **kw):
+        if command[0] != "modal":
+            return subprocess.CompletedProcess(command, 0, stdout="abc1234\n", stderr="")
+        runs.append(command)
+        path = command[command.index("--result") + 1]
+        if result is not None:
+            Path(path).write_text(json.dumps(result))
+        return subprocess.CompletedProcess(command, code)
+
+    monkeypatch.setattr(cli.subprocess, "run", run)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
+    return runs
+
+
+TRAIN = ["train", "--skills", "washer_done", "--run", "exp1-mixed"]
+
+
+def test_teach_rejects_a_blank_request_and_negative_counts_before_any_estimate(env, monkeypatch,
+                                                                               capsys):
+    calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    clip = str(write_clip(env / "clip"))
+    assert cli.main(["teach", "--skill", "washer_done", "--clip", clip, "--request", "   "]) == 2
+    captured = capsys.readouterr()
+    assert "pass --audio or --request" in captured.err and "estimate" not in captured.out
+    with pytest.raises(SystemExit) as stop:
+        cli.main([*TEACH, "--clip", clip, "--positives", "-100"])
+    assert stop.value.code == 2 and "must be 0 or more" in capsys.readouterr().err
+    assert calls == []
+
+
+def test_teach_over_fifteen_dollars_asks_even_with_yes(env, monkeypatch, capsys):
+    calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    prompts = answer(monkeypatch, "n")
+    code = cli.main([*TEACH, "--clip", str(write_clip(env / "clip")), "--positives", "600",
+                     "--negatives", "600", "--yes"])
+    assert code == 1 and calls == [] and len(prompts) == 1
+    assert "so it needs your yes even with --yes" in capsys.readouterr().out
+
+
+def test_spend_prints_the_modal_total(env, capsys):
+    from backend.training import gpu_ledger
+
+    gpu_ledger.record(env / "data", "train", "exp1-mixed", 3600)
+    assert cli.main(["spend"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("Meta API spend")
+    assert ("Modal GPU spend (data/modal_ledger.jsonl, at config prices): $3.95 of $150 credit"
+            in out)

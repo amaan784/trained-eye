@@ -11,32 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v75 (M3): The experiment commands and eval/plan.json
+## Build stage v76 (M3): Replay engine and the W&B report
 
-backend/cli_experiments.py adds five commands, registered by backend/cli.py. te
-experiments --skills prints every training run with its price and what it still needs;
---write-plan also writes eval/plan.json, never over an existing one unless --force. te
-unfiltered writes Experiment 2's arm without the Spark filter, te clips turns a
-skill's labelled session clips into dataset-clips/ and says what it left out, and te
-spark-errors saves Spark's error rate against the hand labels; all three are free. te
-regress asks a base and a fine-tuned endpoint the questions with the student's
-sampling and saves eval/regression.json and regression.md. backend/eval/plan_file.py
-builds the plan te eval reads: one evaluation per run and skill, plus Experiment 4's
-three judges, each with its test clips (or a placeholder named as the protocol says,
-pending until recorded), their frame logs and labels, the run whose replays they read,
-the prices and the skill's spoken alert. Each run the student replays also gets its
-session 2 clips under calibration. The held-back te clips test comes back here.
+backend/eval/replay.py is the engine of te replay, which comes in v77. plan_jobs()
+takes a run's clips from eval/plan.json, its validation clips first and then the test
+clips of every evaluation whose run it is, each log once, and plan_scorer() says
+whether the student or Muse Spark scores them. warm_up() sends one frame every 15 s
+until a cold endpoint answers or the deadline passes (900 s is te replay's default),
+and gives up at once on a client error such as a wrong key. replay_clip() replays one
+clip through a fresh Watcher into <log>.partial and renames it to the log only when at
+least one frame scored, so an interrupted replay stays pending.
+backend/eval/wandb_report.py plans the W&B report "Trained Eye: experiments": one
+section per experiment with its text from results.md, the training runs' loss panels
+found by their exp tags, and the eval run's table and charts. It is saved only as a
+draft, only after a yes, and the key is never shown. replay.py's tests arrive in v77
+with te replay.
 
 Files added or changed in this stage:
 
-- `backend/cli.py` (changed): the te command line
-- `backend/cli_experiments.py` (new): te experiments, te unfiltered, te clips, te
-  spark-errors and te regress
-- `backend/eval/plan_file.py` (new): eval/plan.json: the runs, clips and logs make
-  eval reads
-- `tests/test_cli_experiments.py` (new): tests
-- `tests/test_plan_file.py` (new): tests
-- `tests/test_realclips.py` (changed): tests
+- `backend/eval/replay.py` (new):
+- `backend/eval/wandb_report.py` (new):
+- `tests/test_wandb_report.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -60,38 +55,16 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 40%]
     ........................................................................ [ 48%]
     ........................................................................ [ 56%]
-    ........................................................................ [ 65%]
-    ........................................................................ [ 73%]
-    ........................................................................ [ 81%]
-    ........................................................................ [ 89%]
-    ........................................................................ [ 97%]
-    ......................                                                   [100%]
-    886 passed in 54.18s
+    ........................................................................ [ 64%]
+    ........................................................................ [ 72%]
+    ........................................................................ [ 80%]
+    ........................................................................ [ 88%]
+    ........................................................................ [ 96%]
+    ............................                                             [100%]
+    892 passed in 53.00s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli experiments --help
-    usage: te experiments [-h] --skills SKILLS [--write-plan] [--force]
-                          [--endpoint-hours ENDPOINT_HOURS]
-
-    options:
-      -h, --help            show this help message and exit
-      --skills SKILLS       comma-separated, e.g. washer_done
-      --write-plan          also write eval/plan.json
-      --force               replace an existing eval/plan.json
-      --endpoint-hours ENDPOINT_HOURS
-                            hours of serving to price per evaluated model
-                            (default: backend/eval/plan.py's
-                            DEFAULT_ENDPOINT_HOURS)
-
-    $ python -m backend.cli clips --help
-    usage: te clips [-h] --skill SKILL [--clips CLIPS]
-
-    options:
-      -h, --help     show this help message and exit
-      --skill SKILL
-      --clips CLIPS  the clip folder (default data/clips/<skill>)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -184,12 +157,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 886 tests, all offline; none calls a paid API.
+- `tests/`: 892 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v76 adds the replay engine that fills the plan's frame logs (warm-up, validation
-clips, then test clips) and the W&B report built from results.md.
+Stage v77 adds te replay: a run's pending clips of eval/plan.json replayed into the
+plan's logs, its threshold calibrated on its own validation clips before the test
+clips.
 
 ## Privacy and policy
 

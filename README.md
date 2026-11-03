@@ -11,26 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v83 (M4): The release commands
+## Build stage v84 (M4): Playground: clips, results and media
 
-backend/cli_release.py holds the M4 release commands, and backend/cli.py registers
-them. te manifests copies the prompt manifests into manifests/ for committing. te
-regenerate prints the plan and the estimate, stops there with --estimate-only, and
-asks before spending; over $15 it asks even with --yes. te blur takes an image folder
-or a video, with --boxes for faces the detector missed, and ends with a reminder to
-look at every frame. te fetch-weights downloads a run's adapter or merged build into
-data/weights/<run>/<kind>, where te release looks by default. te release assembles the
-folder, with --keyframes <skill>=<folder> for blurred keyframes, and uploads only with
---upload, a repo and a yes, private unless --public. te release-test-set builds the
-dataset folder and uploads only to a private dataset repo. te release-collection and
-te wandb-report (a draft report that only the author can see) ask before making
-anything.
+The web playground starts with backend/playground/data.py, which reads local results
+when a page asks and never calls Meta or writes a file. A clip is a folder
+data/playground/clips/<name>/ with the frame log te watch writes, the video and
+optional labels; clip_timeline turns it into each skill's threshold, [t, p] points and
+alerts, each alert with the spoken text from the log or else from the skill's spec.
+results() lists the evaluation's SVG charts and results.md. media_path is the only way
+to a file: clip videos, keyframes, generated variations, the provided keyframes and
+the charts, each a plain name inside its folder. The public copy serves no generated
+image and no original keyframe, keyframes only from a te blur folder's sources.json,
+and a video only when its blur record matches it. .gitignore now leaves out
+eval/clips/ and eval/galleries/, as both hold real footage.
 
 Files added or changed in this stage:
 
-- `backend/cli.py` (changed): the te command line
-- `backend/cli_release.py` (new): the M4 release commands
-- `tests/test_cli_release.py` (new): tests
+- `.gitignore` (changed): keeps secrets, local data and outputs out of git
+- `backend/playground/data.py` (new):
+- `tests/test_playground_data.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -55,56 +54,16 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 45%]
     ........................................................................ [ 52%]
     ........................................................................ [ 60%]
-    ........................................................................ [ 68%]
+    ........................................................................ [ 67%]
     ........................................................................ [ 75%]
-    ........................................................................ [ 83%]
+    ........................................................................ [ 82%]
     ........................................................................ [ 90%]
-    ........................................................................ [ 98%]
-    ...............                                                          [100%]
-    950 passed, 1 skipped in 71.20s (0:01:11)
+    ........................................................................ [ 97%]
+    ......................                                                   [100%]
+    957 passed, 1 skipped in 66.84s (0:01:06)
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli blur --help
-    usage: te blur [-h] --src SRC --dst DST [--fps FPS] [--boxes BOXES]
-
-    options:
-      -h, --help     show this help message and exit
-      --src SRC      a folder of images or a video file
-      --dst DST      another folder, or the output video
-      --fps FPS      video only
-      --boxes BOXES  JSON of boxes the detector missed: for a folder {"<file>":
-                     [[left, top, right, bottom], ...]}, for a video [{"start_s":
-                     .., "end_s": .., "box": [left, top, right, bottom]}, ...]
-
-    $ python -m backend.cli release --help
-    usage: te release [-h] --run RUN --out OUT [--kind {adapter,merged}]
-                      [--weights WEIGHTS] [--keyframes SKILL=FOLDER]
-                      [--manifests MANIFESTS] [--results RESULTS]
-                      [--license LICENSE] [--upload] [--repo REPO] [--public]
-                      [--yes]
-
-    options:
-      -h, --help            show this help message and exit
-      --run RUN             the training run, e.g. final
-      --out OUT             the release folder to write
-      --kind {adapter,merged}
-      --weights WEIGHTS     folder with the adapter or merged model files
-                            (default: data/weights/<run>/<kind> from te fetch-
-                            weights)
-      --keyframes SKILL=FOLDER
-                            a skill's face-blurred keyframes (a te blur output
-                            folder), for te regenerate; once per skill
-      --manifests MANIFESTS
-                            default: manifests/ in the project
-      --results RESULTS     results.json from te eval
-      --license LICENSE     Hugging Face license id (default: the base model's,
-                            apache-2.0)
-      --upload              publish (asks first)
-      --repo REPO           owner/name on Hugging Face
-      --public              a public repo (default private)
-      --yes                 the author's OK, no question
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -203,12 +162,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 950 tests, all offline; none calls a paid API.
+- `tests/`: 957 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v84 adds the playground's read-only data: recorded clips with their frame logs,
-the evaluation's charts, and the media files a page may link to, with a public mode.
+Stage v85 adds how each taught skill was built, for the playground: the read-back, the
+keyframes, SAM's box on a teaching frame, the labelled training wall and the keyframes
+a visitor may pick.
 
 ## Privacy and policy
 

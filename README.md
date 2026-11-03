@@ -11,26 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v86 (M4): Playground: spend caps and metered runs
+## Build stage v87 (M4): Playground: teach it yourself
 
-Two pieces keep the playground's live Meta calls within limits.
-backend/playground/budget.py caps spend per visitor and per day (UTC). A visitor
-counts by their visitor id and by their address (an IPv6 address by its /64), the
-address kept only as a salted hash; each counts against the cap on its own, so a new
-id does not reset it. A run's estimate is reserved first and may grow while the caps
-allow; when the run ends, the recorded spend replaces it, and the totals of the last 7
-days are saved in a JSON file meant for a single process. backend/playground/runs.py
-prices a run before cache hits (one compile, then an image edit and a label for each
-of 6 positives and 6 near-misses), wraps the client's ledger so each call must fit in
-the run's reservation together with its other calls in flight, and holds the Job the
-page polls. A call that would pass a cap is never sent.
+backend/playground/api.py runs teach it yourself. Teacher.start takes a condition of
+at most 300 characters and a provided keyframe, turns "the kettle light turns off"
+into "Tell me when the kettle light turns off" and runs the local policy check, so a
+refusal costs nothing. Without a Meta key, or with a cap reached, it answers with a
+message and the precomputed examples. Otherwise it reserves the run's estimate, allows
+one run at a time per visitor and 4 at once in all, and works in a thread the page
+polls: Muse Wonder compiles the skill, Muse Image makes 6 edits that show the
+condition and 6 near-misses, and Muse Spark labels each one. Every call goes through
+MetaClient under the skill name playground, and a cap stops the run before its next
+call. Each image is returned as a data URL of Muse Image's own bytes, so the only copy
+on disk is the client's call cache. backend/playground/publish.py lists what the
+public copy may hold for a deploy; it is tested through te playground --deploy in
+stage v92.
 
 Files added or changed in this stage:
 
-- `backend/playground/budget.py` (new):
-- `backend/playground/runs.py` (new):
-- `tests/test_playground_budget.py` (new): tests
-- `tests/test_playground_runs.py` (new): tests
+- `backend/playground/api.py` (new):
+- `backend/playground/publish.py` (new):
+- `tests/test_playground_teach.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -53,15 +54,15 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 29%]
     ............................................s........................... [ 36%]
     ........................................................................ [ 43%]
-    ........................................................................ [ 51%]
+    ........................................................................ [ 50%]
     ........................................................................ [ 58%]
     ........................................................................ [ 65%]
-    ........................................................................ [ 73%]
+    ........................................................................ [ 72%]
     ........................................................................ [ 80%]
     ........................................................................ [ 87%]
-    ........................................................................ [ 95%]
-    ...............................................                          [100%]
-    982 passed, 1 skipped in 71.13s (0:01:11)
+    ........................................................................ [ 94%]
+    .....................................................                    [100%]
+    988 passed, 1 skipped in 80.89s (0:01:20)
 
     $ ruff check .
     All checks passed!
@@ -163,13 +164,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 982 tests, all offline; none calls a paid API.
+- `tests/`: 988 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v87 adds teach it yourself: a visitor's condition checked by the local policy
-for free, then compiled, with 6 edits of a provided keyframe that show it and 6
-near-misses, labelled live within the caps.
+Stage v88 adds the playground page, with its clips, skills, teach it yourself, results
+and privacy sections, the stylesheet with dark and light themes, and the bundled Inter
+font.
 
 ## Privacy and policy
 

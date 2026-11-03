@@ -68,10 +68,12 @@ live only on the `build-stages` branch; they are not part of the project itself.
 
 ## Ground rules
 
-- Each stage is one commit. Up to v49 a stage adds or changes at most 5 files compared
-  with the stage before it (v1 has 5 files in total; the README counts). From v50 on, the
-  rule is by size instead: a stage changes 150 to 300 lines compared with the stage
-  before it, counting added plus removed lines and leaving out its README.
+- Each stage is one commit. Up to v30 a stage adds or changes at most 5 files compared
+  with the stage before it (v1 has 5 files in total; the README counts). From v31 on, the
+  rule is by size instead: a stage changes 200 to 400 lines of code compared with the
+  stage before it, counting added plus removed lines. Its tests, docs, license texts and
+  binary files (fonts, the mock video) ride along with the code and are not counted, nor
+  is its README.
 - Stages are cumulative: vN holds everything in v(N-1) plus what stage N adds.
 - No stage deletes or renames a file the previous stage had, so each folder can be copied
   over the repository and committed.
@@ -121,36 +123,36 @@ engine, the teach flow, te teach, then the docs. Each changes only files the ear
 stages already have, so `git diff --no-index` against the stage before shows exactly
 one fix.
 
-v31 to v38 hold the second half of that review (F30 to F62) and the faults a second
-check found in the v23 to v30 fixes themselves, in the same order: the API client,
-settings and the spend report, the policy check and compiler, keyframes and generated
-images, labels and SAM, the teach flow with te teach, CI and setup, then the docs.
-v39 and v40 hold what a review of v31 to v38 found: the client and settings, then the
-policy check and compiler.
+From v31 on each stage adds finished files whole, 200 to 400 lines of code, so a file
+is written once in its final form, with the later fixes to it already in. v31 to v40
+come first because the rest stands on them: the settings and the spend ledger every
+later stage reads, the policy check before anything that compiles a skill, the Meta
+client the data engine calls, SAM's boxes, then the watch trigger and the student
+scorer, the training run records, the watcher, and the training bundle, preflight and
+Modal app in the order a run takes.
 
-M2 (v41 to v48) holds the parts of the milestone that need neither the Mac nor Modal.
-Watch mode is built from the decision outwards: when a skill fires, how a frame is
-scored, the watcher that joins them, then the server that serves it to the phone. The
-training side follows the order a run takes: the bundle and the config, the Modal app
-that trains, then the commands that drive both, and the notes last. v49 comes after
-them with the last small fixes from the review of v31 to v38, in te teach.
+The rest of M2 (v41 to v63) follows: the teach flow and te teach, te train, then
+teaching from the phone from the inside out (the session with its two questions, the
+upload and the routes, the server that mounts them), te watch, export and serving on
+Modal with their commands. The iOS app (v49 to v63) goes from the data up: settings and
+the protocol, the network clients, Meta's copied decoder, the glasses and their camera,
+the iPhone camera and speech, the request recorder, the teach client and flow, the app
+model, then the look, the app entry and the screens, and the clips with the build
+instructions last. It is never compiled here, so its stages have no tests of their own.
 
-From v50 on each stage changes 150 to 300 lines, so a large file is a stage on its own
-and its tests can come in the stage after it. The rest of M2 (v50 to v58) builds
-teaching from the phone from the inside out: the session with its two questions, the
-upload and its checks, their tests, the routes, the server that mounts them, the routes'
-tests, then export and serving on Modal and the commands for both. The reviews of the
-teach API, the iOS code and the playground ran before these stages were cut, so their
-fixes are part of the stages that add that code. The iOS app (v59 to v74) goes from the
-data up: settings and the protocol, the network clients, Meta's copied decoder, the
-glasses, the cameras and speech, the teach client and flow, the app model, then the
-screens, the clips and the build instructions. M3 (v75 to v89) starts with the labelling
-tools, since every metric needs labels, then the metrics, the chart pieces, the charts,
-the write-up and the runner that joins them, then each experiment's own code and the
-commands last. M4 (v90 to v105) follows the release: face blurring before anything that
-publishes, the manifests and regeneration, the model card, then the playground from its
-data and caps through the live runs and the page to the app, the commands, and the notes
-and credits last.
+M3 (v64 to v77) starts with the labelling tools, since every metric needs labels, then
+the metrics and chart pieces, the charts, Spark as a scorer and the regression check,
+the write-up, the failure galleries and the runner that joins them, te eval, then each
+experiment's own code: Spark's error rate with the session clips, the experiment plan,
+the plan file with te experiments, the replay engine with the W&B report, and te replay.
+M4 (v78 to v92) follows the release: face blurring before anything that publishes, the
+model card, the release folder, regeneration and the weights, the test set and the
+release commands, then the playground from its data and caps through the live runs and
+the page to the app, its commands, and the notes and credits last.
+
+A file whose later parts need a later module arrives in parts: backend/cli.py gets each
+command module's registration with the stage that adds that module, and a few tests
+arrive with the stage whose module they need (each stage's README says which).
 
 ## How to review a stage
 
@@ -183,8 +185,7 @@ description below:
     git commit -m "<summary>" -m "<description>"
 
 Then the same for v2, v3 and so on. Earlier stages never change when later ones are
-added, so carry on from the first stage you have not committed yet (v50 if v1 to v49
-are already on `main`). `git status` before each commit should show only the files
+added, so carry on from the first stage you have not committed yet. `git status` before each commit should show only the files
 listed for that stage. LICENSE and .gitattributes already exist in the repository
 from its first commit, and the stage copies are identical, so v10 changes only its own
 files. After the last stage, `main` matches the root of the `build-stages` branch, and
@@ -198,8 +199,13 @@ you can push it.
   exact blocks such as the media part of the client), working backwards. No code outside
   a layer was rewritten. M1's stages were peeled from the finished M1 tree, and peeling
   v12 once more gives v11 byte for byte (README aside), so M1 sits exactly on M0; the
-  same holds for v22 on v21, v23 on v22, v31 on v30 and v39 on v38. Each folder was then tested as its own
-  project. The READMEs were written per stage, from commands run inside each folder.
+  same holds for v22 on v21 and v23 on v22. From v31 on the stages were built forward
+  instead, from v30: each adds finished files whole, and a file that arrives in parts is
+  the finished file with its later parts left out (`stagetools/forward.py` with
+  `stagetools/specs/forward_v41.py` from v41; `stagetools/specs/pushed_main.md` lists
+  what v31 to v40 hold). The last folder was checked to equal the repository root. Each
+  folder was then tested as its own project. The READMEs were written per stage, from
+  commands run inside each folder.
 - **Files from the first commit.** `.gitignore` enters at v2 as the original Python
   template plus Trained Eye's own entries. `LICENSE` (MIT, the original) and
   `.gitattributes` enter unchanged at v10, so the last folder matches the repository.
@@ -235,16 +241,18 @@ you can push it.
     on real glasses yet.
   - the teach flow against the real API (M1): every test uses a fake Meta API, so the
     first real washer run on the Mac is the first time Muse Wonder, SAM, Muse Image and
-    Spark see these prompts. SAM's output is stored but not parsed yet.
+    Spark see these prompts. SAM's text is read for its boxes (masks are not decoded).
+  - the iPhone app: never compiled (no Swift toolchain on the build machine); it needs
+    Xcode and the glasses (ios/README.md lists the checks).
   - ffmpeg on the Mac: video decoding was tested with ffmpeg on Linux.
 
 ## How the folders were checked
 
 A script (kept outside the repository) checked every folder after it was built:
 
-1. v1 has at most 5 files; v2 to v49 each add or change at most 5 files compared with
-   the one before (README included); from v50 each changes 150 to 300 lines (README left
-   out).
+1. v1 has at most 5 files; v2 to v30 each add or change at most 5 files compared with
+   the one before (README included); from v31 each changes 200 to 400 lines of code
+   (tests, docs, license texts, binaries and the README left out).
 2. Every folder contains every file of the folder before it.
 3. v{last} matches the repository root byte for byte (local-only things excluded).
 4. Every file a README names, in backticks or as a bare file name, exists in that folder.
@@ -254,8 +262,9 @@ A script (kept outside the repository) checked every folder after it was built:
 7. Every README command was run inside its folder with no keys or `TE_*` settings in the
    environment; the outputs in the READMEs are pasted from those runs.
 8. From v4 on, the `te` entry point in `pyproject.toml` was called inside each folder.
-   For each later milestone, peeling its first stage once more was checked to give the
-   stage before it exactly (v12 to v11, v22 to v21, v23 to v22, v31 to v30, v39 to v38).
+   For M1 and the reviews after it, peeling the first stage once more was checked to give
+   the stage before it exactly (v12 to v11, v22 to v21, v23 to v22); from v41 the forward
+   build was checked to give v40 back for every file that arrives in parts.
 9. The READMEs and this file contain no emoji or em dashes.
 """
     (ROOT / "VERSIONS.md").write_text(text, encoding="utf-8")

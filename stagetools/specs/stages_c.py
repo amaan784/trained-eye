@@ -322,4 +322,5 @@ if os.environ.get("TE_RENDER_STAGES"):
     STAGES = {k: v for k, v in ALL.items() if _a <= k <= _b}
 _last = max(STAGES)
 NEXT_M0_DONE = (f"Stage v{_last + 1} adds {ALL[_last + 1]['next']}" if _last + 1 in ALL else
-                "The next stages add the teach flow with SAM crops and te teach, then te train.")
+                "This is the last stage: the folder is the finished project, the same as the "
+                "repository root.")

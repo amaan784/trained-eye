@@ -11,25 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v70 (M3): Failure galleries for Experiment 1
+## Build stage v71 (M3): The evaluation plan and report
 
-backend/eval/gallery.py writes Experiment 1's failure galleries next to results.md.
-For each scored Experiment 1 evaluation it picks the worst false alarms (frames
-labelled false that scored over the threshold, highest p first) and the worst misses
-(frames inside a true range that stayed under it, lowest p first), at least 5 s apart
-so one long mistake does not fill the row. Each frame is read again from its clip at
-the logged time, at the frame rate taken from the log's frame step, and saved as a
-JPEG thumbnail at most 240 pixels a side; each clip is read once, however many
-evaluations replayed it. Each run gets one HTML page with the time, p and threshold
-under every frame. Without the clip, or without ffmpeg for a video, the page lists the
-frames without pictures. The frames may show faces, so galleries/ holds its own
-.gitignore, nothing goes to W&B, and the page says to run te blur before publishing
-any frame. Its tests come in v71 with the evaluation runner, as they run galleries
-through run_eval.
+backend/eval/report.py is what te eval and make eval will run. The plan is a JSON file
+of evaluations, each with a unique name, its experiment (1 to 4), skill and variant,
+one or more pairs of a te watch frame log and the clip's human labels, the student's
+GPU price (none for the Mac), the price of a Spark check or of a per-frame scorer, and
+for Experiment 3 the synthetic images and what they cost. An evaluation whose log or
+labels do not exist yet is pending, so the plan can come before the clips. run_eval()
+scores the rest, records the thresholds each evaluation's logs were scored at and
+where they came from, pools Experiment 4's judges over the skills, reads Spark's error
+rate, label agreement and the regression result when given, and writes results.json,
+results.md, the charts and the galleries. With log_wandb, and wandb installed, it logs
+every number, the table and the charts to one W&B run in the trained-eye project, and
+the key is never shown. The gallery tests held back from v70 come back here.
 
 Files added or changed in this stage:
 
-- `backend/eval/gallery.py` (new):
+- `backend/eval/report.py` (new): the evaluation runner: the plan, results.json,
+  results.md and the SVG charts
+- `tests/test_eval_gallery.py` (new): tests
+- `tests/test_eval_report.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -48,17 +50,17 @@ set and no network to Meta); the output under each is what they printed.
     $ python -m pytest
     ........................................................................ [  8%]
     ........................................................................ [ 17%]
-    ........................................................................ [ 26%]
+    ........................................................................ [ 25%]
     ........................................................................ [ 34%]
     ........................................................................ [ 43%]
-    ........................................................................ [ 52%]
+    ........................................................................ [ 51%]
     ........................................................................ [ 60%]
-    ........................................................................ [ 69%]
-    ........................................................................ [ 78%]
+    ........................................................................ [ 68%]
+    ........................................................................ [ 77%]
     ........................................................................ [ 86%]
-    ........................................................................ [ 95%]
-    ....................................                                     [100%]
-    828 passed in 50.40s
+    ........................................................................ [ 94%]
+    .............................................                            [100%]
+    837 passed in 33.84s
 
     $ ruff check .
     All checks passed!
@@ -132,6 +134,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/labeltool/images.py`: the labelling tool for generated images, for
   Experiment 2.
 - `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
+- `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
+  and the SVG charts.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -145,13 +149,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 828 tests, all offline; none calls a paid API.
+- `tests/`: 837 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v71 adds the evaluation report: a JSON plan of evaluations scored into
-results.json, results.md, the charts and the galleries, with W&B logging only when
-asked.
+Stage v72 adds te eval and te label on the command line, make eval, and the README
+results block written from results.json only.
 
 ## Privacy and policy
 

@@ -11,27 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v66 (M3): Evaluation metrics and the chart style
+## Build stage v67 (M3): Evaluation charts and the live timeline
 
-backend/eval/metrics.py scores watch mode from te watch's frame logs and the human
-labels of each clip. Per skill, over one or more clips, a frame says yes when it
-scored at or over the threshold the watcher used, and it is true when its time falls
-inside a labelled range: that gives frame precision, recall, F1 and accuracy. Each
-labelled range is one event, caught within the window when its first alert comes at
-most 5 s after it starts, or caught at all when any alert falls inside it. It also
-counts false alarms per hour, time to alert, the median and 90th percentile latency,
-student errors, and dollars per hour in three parts: the student's GPU, the Muse Spark
-checks and any per-frame scorer. backend/eval/svg.py holds what every chart shares:
-one accent colour and a grey, Inter with the system sans as fallback, light colours
-with dark ones under prefers-color-scheme, dot markers with a hover title, and all
-text escaped.
+backend/eval/charts.py draws the experiment charts as SVG with the pieces in svg.py.
+grouped_bars() shows one group per variant and one or two series from 0 to 1, the
+first in the accent colour and the second in grey, with each value written on its bar
+and n/a where one is missing (Experiments 1 and 2). line_chart() plots F1 against the
+number of synthetic images on a log scale, with a note such as the generation cost
+under each point (Experiment 3), and scatter() places each judge by its F1 and its
+dollars per hour, the points marked highlight (the fine-tuned one) in the accent
+colour and points without numbers listed under the chart (Experiment 4).
+backend/eval/timeline.py draws one skill's frames from a frame log: the
+yes-probability as a line with gaps where the student failed, the threshold dashed,
+the labelled true ranges shaded, and each alert as a dot with the words the glasses
+spoke, its label on one of two rows so two close alerts do not overlap.
 
 Files added or changed in this stage:
 
-- `backend/eval/metrics.py` (new): evaluation metrics from watch frame logs and labels
-- `backend/eval/svg.py` (new):
-- `tests/test_eval_metrics.py` (new): tests
-- `tests/test_eval_svg.py` (new): tests
+- `backend/eval/charts.py` (new):
+- `backend/eval/timeline.py` (new):
+- `tests/test_eval_charts.py` (new): tests
+- `tests/test_eval_timeline.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -54,12 +54,13 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 36%]
     ........................................................................ [ 45%]
     ........................................................................ [ 54%]
-    ........................................................................ [ 64%]
-    ........................................................................ [ 73%]
-    ........................................................................ [ 82%]
-    ........................................................................ [ 91%]
-    ..................................................................       [100%]
-    786 passed in 37.64s
+    ........................................................................ [ 63%]
+    ........................................................................ [ 72%]
+    ........................................................................ [ 81%]
+    ........................................................................ [ 90%]
+    ........................................................................ [ 99%]
+    ..                                                                       [100%]
+    794 passed in 38.14s
 
     $ ruff check .
     All checks passed!
@@ -146,13 +147,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 786 tests, all offline; none calls a paid API.
+- `tests/`: 794 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v67 adds the evaluation charts drawn as SVG by hand: grouped bars, F1 against
-the number of synthetic images, F1 against dollars per hour, and the live timeline of
-one clip.
+Stage v68 adds the regression check of the base model against the fine-tuned one on
+general visual questions, and Muse Spark as a per-frame scorer for Experiment 4.
 
 ## Privacy and policy
 

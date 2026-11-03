@@ -11,33 +11,32 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v33 (M2): Meta calls: client, labels and image edits
+## Build stage v34 (M2): Keyframes, SAM boxes and the dataset
 
-A call stopped with Ctrl+C, or one whose reply fails after the request went through,
-is charged as billed. An empty transcript is billed but not cached, a cached reply
-that today's checks reject is fetched again, a generated image whose download fails
-twice becomes an output error the data engine can skip, and a reply without usable
-images is charged for the images asked for. The caps are checked again before every
-retry. Failed calls carry what they cost and the finish reason, structured calls can
-ask the cache alone, and each entry records the images and text tokens sent. SAM 3.1
-calls ask for confidences and read the streamed reply by the lane rules of Meta's SAM
-3 protocol: a refusal or a failed or incomplete response is an error, and an empty
-answer is valid. Labels can come from the cache alone, and the synthetic set stops
-with TooManyFailures when too many edits fail.
+backend/dataengine/sam_text.py reads SAM 3.1's output text. It is our own
+implementation of the grammar in Meta's SAM 3 protocol (protocol/sam3.md in
+meta-models/meta-sam): frame markers, object ids, box and mask tokens, inclusive boxes
+made half-open, confidences from 0 to 1, and the protocol's rules for unknown fields,
+malformed segments and prose lines. Mask payloads are checked but not decoded, since
+the region of interest needs only the box. roi.py uses it: boxes are scaled to the
+keyframe, problems are kept with each frame, and each box gives a crop with a 25%
+margin, at least 64 pixels a side. Frames from a folder are turned by their EXIF
+orientation and HEIC frames are refused with a message, and each dataset entry records
+where its image came from.
 
 Files added or changed in this stage:
 
-- `backend/dataengine/labels.py` (changed): Muse Spark labels for every image, the
-  filter that keeps generated images only when Spark agrees, and agreement stats
-- `backend/dataengine/synth.py` (changed): the synthetic set: a deterministic plan of
-  Muse Image edits of the keyframes (positives, hard negatives, nuisance variation),
-  saved untouched with a manifest
-- `backend/meta/client.py` (changed): MetaClient, the only way the code calls Meta's
-  API: cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and
-  spend recorded from the reported usage
-- `tests/test_client.py` (changed): tests
-- `tests/test_labels.py` (changed): tests
-- `tests/test_synth.py` (changed): tests
+- `backend/dataengine/dataset.py` (changed): the Axolotl dataset writer, in Meta's
+  recipe format (image path part, then text; 512x512 padded PNGs)
+- `backend/dataengine/keyframes.py` (changed): the keyframe picker: 20 to 30 sharp,
+  distinct frames from the 10 second teaching clip
+- `backend/dataengine/roi.py` (changed): the region of interest: SAM 3.1 on each
+  keyframe, its boxes scaled to the keyframe, and a crop around each box for the dataset
+- `backend/dataengine/sam_text.py` (new): our reader of SAM 3.1's output text, written
+  from the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences
+- `tests/test_keyframes.py` (changed): tests
+- `tests/test_roi.py` (changed): tests
+- `tests/test_sam_text.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -54,15 +53,15 @@ These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 27%]
-    ........................................................................ [ 41%]
-    ........................................................................ [ 55%]
-    ........................................................................ [ 69%]
-    ........................................................................ [ 83%]
-    ........................................................................ [ 97%]
-    ............                                                             [100%]
-    516 passed in 10.97s
+    ........................................................................ [ 12%]
+    ........................................................................ [ 25%]
+    ........................................................................ [ 38%]
+    ........................................................................ [ 50%]
+    ........................................................................ [ 63%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 89%]
+    .............................................................            [100%]
+    565 passed in 8.89s
 
     $ ruff check .
     All checks passed!
@@ -95,6 +94,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
 - `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
   boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
@@ -115,12 +116,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 516 tests, all offline; none calls a paid API.
+- `tests/`: 565 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v34 adds our reader of SAM 3.1's text format, with boxes and crops for every
-keyframe.
+Stage v35 adds the watch trigger (3 of the last 4 frames over the threshold, then the
+cooldown) and the student scorer on an OpenAI-compatible endpoint.
 
 ## Privacy and policy
 

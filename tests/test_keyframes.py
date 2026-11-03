@@ -110,6 +110,47 @@ def test_folder_frames_with_exif_orientation_are_turned_upright(tmp_path):
     assert frames[1].data == (tmp_path / "clip/b.jpg").read_bytes()  # untagged: untouched
 
 
+@pytest.mark.parametrize("orientation", range(2, 9))
+def test_every_exif_orientation_turns_like_pillow_does(tmp_path, orientation):
+    from PIL import ImageOps
+
+    stored = Image.new("RGB", (40, 24), (0, 0, 0))
+    stored.paste((255, 0, 0), (0, 0, 20, 12))  # one red corner shows any turn or flip
+    exif = Image.Exif()
+    exif[0x0112] = orientation
+    (tmp_path / "clip").mkdir()
+    stored.save(tmp_path / "clip/a.png", exif=exif)
+    [frame] = load_frames(tmp_path / "clip")
+    with Image.open(tmp_path / "clip/a.png") as original:
+        expected = ImageOps.exif_transpose(original).convert("RGB")
+    with Image.open(io.BytesIO(frame.data)) as img:
+        assert img.size == expected.size
+        corners = [(1, 1), (img.width - 2, 1), (1, img.height - 2),
+                   (img.width - 2, img.height - 2)]
+        assert [img.getpixel(c)[0] > 128 for c in corners] == [
+            expected.getpixel(c)[0] > 128 for c in corners]
+
+
+def test_frame_folders_skip_hidden_files_and_read_webp(tmp_path):
+    clip = write_frames(tmp_path / "clip", [scene(1), scene(2)])
+    (clip / "._frame_000.jpg").write_bytes(b"\x00\x05\x16\x07AppleDouble")  # macOS, on exFAT
+    Image.open(io.BytesIO(scene(3))).save(clip / "frame_002.webp")
+    (clip / "notes.txt").write_text("take 2")
+    frames = load_frames(clip)
+    assert len(frames) == 3 and frames[2].data[8:12] == b"WEBP"
+
+
+def test_unreadable_or_heic_frames_say_what_is_wrong(tmp_path):
+    clip = write_frames(tmp_path / "clip", [scene(1)])
+    (clip / "frame_001.jpg").write_bytes(b"not an image")
+    with pytest.raises(ValueError, match="frame_001.jpg is not a readable image"):
+        load_frames(clip)
+    (tmp_path / "heic").mkdir()
+    (tmp_path / "heic/IMG_0001.HEIC").write_bytes(b"\x00\x00\x00\x18ftypheic")
+    with pytest.raises(ValueError, match="HEIC"):
+        load_frames(tmp_path / "heic")
+
+
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
 def test_video_decode_leaves_stdin_alone(tmp_path):
     frames = write_frames(tmp_path / "src", [scene(i % 3) for i in range(6)])

@@ -11,24 +11,23 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v89 (M4): Playground: the timeline and the wall
+## Build stage v90 (M4): Playground: the page script
 
-Two scripts for the page, in backend/playground/static/. timeline.js draws one skill's
-timeline for a clip as SVG: the student's yes-probability for each scored frame as a
-line, broken where the student gave no score, the threshold dashed, the true ranges
-shaded, and each alert marked with its spoken text, on two rows to keep the labels
-apart. A playhead follows the video, hovering shows a frame's score, a click seeks, a
-sentence below reads the score against the threshold, and a banner shows what was
-spoken for 5 seconds after each alert. wall.js draws the training wall: generated
-variations flip in one after another, each tagged with Muse Spark's label; the ones
-Spark disagreed with fade and are marked rejected, and each image's alt text says what
-it was made to show. Wall.add adds tiles one at a time for a live run, and
-Wall.summary counts them in a sentence. The page's script uses both in the next stage.
+backend/playground/static/app.js runs the page, and every URL it asks for is relative,
+so the site also works under a path prefix. It lists the clips and opens one with its
+video and a button per skill that draws that skill's timeline, redrawn when the window
+is resized. For a skill it shows the read-back, the keyframe strip, SAM 3.1's box
+drawn over the teaching frame with how many keyframes had one, and the training wall
+with Spark's agreement, or the public copy's note in its place. Teach it yourself
+loads the status (the estimate, the caps and what the visitor and the day have left),
+offers the keyframes, posts the condition and then polls the run every 1200 ms, adding
+each variation to the wall as it arrives and ending with what the run cost. A refusal
+says it cost nothing; with no key or the budget used up, the page shows the
+precomputed examples instead. The results section shows the charts and results.md.
 
 Files added or changed in this stage:
 
-- `backend/playground/static/timeline.js` (new):
-- `backend/playground/static/wall.js` (new):
+- `backend/playground/static/app.js` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -59,7 +58,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 87%]
     ........................................................................ [ 94%]
     .....................................................                    [100%]
-    988 passed, 1 skipped in 78.16s (0:01:18)
+    988 passed, 1 skipped in 72.82s (0:01:12)
 
     $ ruff check .
     All checks passed!
@@ -165,9 +164,9 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v90 adds the page script that ties the playground together: the clip and skill
-pickers, SAM's outline, a live teach run followed as it goes, the cost and the caps,
-and the results.
+Stage v91 adds the playground app: one page and a JSON API over the local results, a
+visitor cookie for the budget, live runs refused from other sites, and a public copy
+for the open web.
 
 ## Privacy and policy
 

@@ -11,25 +11,30 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v58 (M2): iOS: the app model
+## Build stage v59 (M2): iOS: theme, components and the Inter fonts
 
-ios/TrainedEye/App/AppModel.swift ties the parts together. It starts the camera the
-setting asks for (by default the glasses when they are available, else the iPhone,
-with DAT's mock glasses standing in for the glasses in Debug builds) and sends its
-frames to the WebSocket while watching, or to the teach flow while capturing; a teach
-capture is refused while watching. Watching uses one frame a second and the glasses'
-low resolution; the teach capture asks for medium resolution and three frames a
-second, and waits up to 20 seconds for the first frame, not counting the permission
-step. An alert is spoken on the glasses and shown. The last 10 frames are held in
-memory for Save clip, and nothing is written unless the user taps it. Each stay in the
-background while watching is counted (frames from the camera, sent, acked and repeats
-skipped) for the screen-locked check on the glasses. Changing the watched skills says
-hello again, and the skills list comes from GET /skills. Save clip uses ClipStore,
-which comes in v63.
+ios/TrainedEye/UI/Theme.swift sets the app's look in one place: a near-black ground,
+one raised surface, two greys for text and one accent colour for live states, the main
+action and the camera-on indicator, with flat shapes and no gradients. Text is set in
+Inter 4.1, whose four static faces (Regular, Medium, SemiBold and Bold) come in
+ios/TrainedEye/Fonts/ with their SIL Open Font License as LICENSE.txt; when a face is
+missing from the target, the system font in the same text style and weight is used.
+ThemeModifier applies the tokens once at the root, in a dark colour scheme, as in
+Meta's BirdSpotter sample; the app entry of v60 puts it there.
+ios/TrainedEye/UI/Components.swift has the building blocks every screen uses: a
+scrolling screen with its title, a flat card with an optional heading, a filled and an
+outlined button style, a status dot, a label and value row, a notice line for help or
+errors, and the preview of the newest frame.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/App/AppModel.swift` (new):
+- `ios/TrainedEye/Fonts/Inter-Bold.ttf` (new):
+- `ios/TrainedEye/Fonts/Inter-Medium.ttf` (new):
+- `ios/TrainedEye/Fonts/Inter-Regular.ttf` (new):
+- `ios/TrainedEye/Fonts/Inter-SemiBold.ttf` (new):
+- `ios/TrainedEye/Fonts/LICENSE.txt` (new):
+- `ios/TrainedEye/UI/Components.swift` (new):
+- `ios/TrainedEye/UI/Theme.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -57,7 +62,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 31.29s
+    755 passed in 31.22s
 
     $ ruff check .
     All checks passed!
@@ -142,8 +147,9 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v59 adds the app's look: a dark, minimal theme with one accent colour in Inter
-4.1, and the cards, buttons and rows every screen uses.
+Stage v60 adds the app entry that configures the DAT SDK, the five tabs under a
+camera-on bar, and the Info.plist and entitlements, with the SDK's analytics and crash
+reporting off.
 
 ## Privacy and policy
 

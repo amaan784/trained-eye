@@ -23,6 +23,8 @@ named below.
   te clips          labelled session 1 and 2 clips as training and validation frames (free)
   te experiments, te unfiltered, te spark-errors, te regress: M3
                     (te clips too: backend/cli_experiments.py)
+  te replay         replay a run's pending clips of eval/plan.json into the plan's logs
+                    (backend/cli_replay.py)
 """
 
 from __future__ import annotations
@@ -465,6 +467,10 @@ def build_parser() -> argparse.ArgumentParser:
     from backend.cli_experiments import add_parsers as experiment_parsers
 
     experiment_parsers(sub)
+
+    from backend.cli_replay import add_parsers as replay_parsers
+
+    replay_parsers(sub)
     return parser
 
 

@@ -11,32 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v34 (M2): Keyframes, SAM boxes and the dataset
+## Build stage v35 (M2): Watch trigger and the student scorer
 
-backend/dataengine/sam_text.py reads SAM 3.1's output text. It is our own
-implementation of the grammar in Meta's SAM 3 protocol (protocol/sam3.md in
-meta-models/meta-sam): frame markers, object ids, box and mask tokens, inclusive boxes
-made half-open, confidences from 0 to 1, and the protocol's rules for unknown fields,
-malformed segments and prose lines. Mask payloads are checked but not decoded, since
-the region of interest needs only the box. roi.py uses it: boxes are scaled to the
-keyframe, problems are kept with each frame, and each box gives a crop with a 25%
-margin, at least 64 pixels a side. Frames from a folder are turned by their EXIF
-orientation and HEIC frames are refused with a message, and each dataset entry records
-where its image came from.
+The first two parts of watch mode. backend/watch/trigger.py decides when a skill
+fires: at least 3 of its last 4 frames at or over the threshold, frames more than 10
+seconds apart not counted together, then the skill's cooldown; calibrate() picks the
+lowest threshold that gives at most one false alarm an hour on labelled validation
+clips. backend/inference/student.py scores a frame with the trained model on an
+OpenAI-compatible endpoint (vLLM on Modal or llama-server on the Mac), sent exactly as
+the training examples were built. The probability is read at the answer token, the
+last yes or no, from its top logprobs; a reply without one, or one cut off at the
+reply budget, is an error, never a guess. Sampling follows Meta's serving notes.
 
 Files added or changed in this stage:
 
-- `backend/dataengine/dataset.py` (changed): the Axolotl dataset writer, in Meta's
-  recipe format (image path part, then text; 512x512 padded PNGs)
-- `backend/dataengine/keyframes.py` (changed): the keyframe picker: 20 to 30 sharp,
-  distinct frames from the 10 second teaching clip
-- `backend/dataengine/roi.py` (changed): the region of interest: SAM 3.1 on each
-  keyframe, its boxes scaled to the keyframe, and a crop around each box for the dataset
-- `backend/dataengine/sam_text.py` (new): our reader of SAM 3.1's output text, written
-  from the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences
-- `tests/test_keyframes.py` (changed): tests
-- `tests/test_roi.py` (changed): tests
-- `tests/test_sam_text.py` (new): tests
+- `backend/inference/student.py` (new): scores a frame with the trained model on an
+  OpenAI-compatible endpoint, read at its yes or no answer token
+- `backend/watch/trigger.py` (new): when a skill fires: 3 of the last 4 frames over
+  the threshold, then the cooldown; the threshold calibration on labelled clips
+- `tests/test_config.py` (changed): tests
+- `tests/test_student.py` (new): tests
+- `tests/test_trigger.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -54,14 +49,15 @@ set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
     ........................................................................ [ 12%]
-    ........................................................................ [ 25%]
-    ........................................................................ [ 38%]
-    ........................................................................ [ 50%]
-    ........................................................................ [ 63%]
-    ........................................................................ [ 76%]
-    ........................................................................ [ 89%]
-    .............................................................            [100%]
-    565 passed in 8.89s
+    ........................................................................ [ 24%]
+    ........................................................................ [ 36%]
+    ........................................................................ [ 48%]
+    ........................................................................ [ 61%]
+    ........................................................................ [ 73%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 97%]
+    ............                                                             [100%]
+    588 passed in 8.57s
 
     $ ruff check .
     All checks passed!
@@ -104,6 +100,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/dataengine/labels.py`: Muse Spark labels for every image, the filter that
   keeps generated images only when Spark agrees, and agreement stats.
 - `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
+- `backend/watch/trigger.py`: when a skill fires: 3 of the last 4 frames over the
+  threshold, then the cooldown; the threshold calibration on labelled clips.
+- `backend/inference/student.py`: scores a frame with the trained model on an
+  OpenAI-compatible endpoint, read at its yes or no answer token.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -116,12 +116,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 565 tests, all offline; none calls a paid API.
+- `tests/`: 588 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v35 adds the watch trigger (3 of the last 4 frames over the threshold, then the
-cooldown) and the student scorer on an OpenAI-compatible endpoint.
+Stage v36 adds the training run records (running, done or failed, and which run is
+served) and the Modal spend ledger with its check against the $150 credit.
 
 ## Privacy and policy
 

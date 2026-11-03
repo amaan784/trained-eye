@@ -216,3 +216,20 @@ def test_the_system_in_user_switch(raw, expected):
 def test_unknown_system_in_user_values_are_config_errors(raw):
     with pytest.raises(ConfigError, match="TE_SYSTEM_IN_USER must be 1 or 0"):
         load_settings(env={"TE_SYSTEM_IN_USER": raw}, env_file=None)
+
+
+def test_the_student_reply_budget():
+    import inspect
+
+    from backend.inference.student import OpenAIStudent
+
+    s = load_settings(env={}, env_file=None)
+    default = inspect.signature(OpenAIStudent).parameters["max_tokens"].default
+    assert s.student_max_tokens == default == 512  # the setting's default is the student's
+    assert "at most 512 tokens a reply" in describe(s)
+    s = load_settings(env={"TE_STUDENT_MAX_TOKENS": "2048"}, env_file=None)
+    assert s.student_max_tokens == 2048
+    for raw in ("0", "-5", "lots", "1.5"):
+        with pytest.raises(ConfigError, match="TE_STUDENT_MAX_TOKENS must be a whole number, "
+                           f"1 or more, got '{raw}'"):
+            load_settings(env={"TE_STUDENT_MAX_TOKENS": raw}, env_file=None)

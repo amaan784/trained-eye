@@ -11,26 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v69 (M3): The results write-up
+## Build stage v70 (M3): Failure galleries for Experiment 1
 
-backend/eval/writeup.py turns the scored evaluations into the charts and results.md
-that run_eval, in v71, writes. write_charts() saves the SVG charts: grouped bars for
-Experiments 1 and 2, a line chart per skill for Experiment 3, the cost scatter for
-Experiment 4 and a live timeline for each clip that asks for one. render() returns the
-text of results.md: one section per experiment with its charts, a table of accuracy
-(precision, recall, F1, events caught, false alarms per hour, time to alert, and the
-threshold with where it came from) and one of speed and cost. An experiment with no
-evaluations says so, and evaluations waiting for clips are listed as pending.
-Experiment 2 also gets Muse Spark's error rate against the hand labels and the
-filter's agreement, Experiment 4 its judges pooled over the skills, and after the
-experiments come the regression check, or a note that it has not run, and links to the
-failure galleries, each when run_eval passes it in. Every number comes from the
-computation passed in; n/a means there was nothing to compute it from.
+backend/eval/gallery.py writes Experiment 1's failure galleries next to results.md.
+For each scored Experiment 1 evaluation it picks the worst false alarms (frames
+labelled false that scored over the threshold, highest p first) and the worst misses
+(frames inside a true range that stayed under it, lowest p first), at least 5 s apart
+so one long mistake does not fill the row. Each frame is read again from its clip at
+the logged time, at the frame rate taken from the log's frame step, and saved as a
+JPEG thumbnail at most 240 pixels a side; each clip is read once, however many
+evaluations replayed it. Each run gets one HTML page with the time, p and threshold
+under every frame. Without the clip, or without ffmpeg for a video, the page lists the
+frames without pictures. The frames may show faces, so galleries/ holds its own
+.gitignore, nothing goes to W&B, and the page says to run te blur before publishing
+any frame. Its tests come in v71 with the evaluation runner, as they run galleries
+through run_eval.
 
 Files added or changed in this stage:
 
-- `backend/eval/writeup.py` (new):
-- `tests/test_eval_writeup.py` (new): tests
+- `backend/eval/gallery.py` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -59,7 +58,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 86%]
     ........................................................................ [ 95%]
     ....................................                                     [100%]
-    828 passed in 31.84s
+    828 passed in 50.40s
 
     $ ruff check .
     All checks passed!
@@ -150,8 +149,9 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v70 adds the failure galleries of Experiment 1: each run's worst false alarms
-and misses as small frames of the recorded clips, on a page that stays on this Mac.
+Stage v71 adds the evaluation report: a JSON plan of evaluations scored into
+results.json, results.md, the charts and the galleries, with W&B logging only when
+asked.
 
 ## Privacy and policy
 

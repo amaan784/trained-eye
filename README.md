@@ -11,26 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v78 (M4): Face blurring
+## Build stage v79 (M4): The Hugging Face model card
 
-backend/release/faces.py blurs faces in anything published. blur_boxes blurs given
-boxes with Pillow alone, first shrinking each box to 8 pixels across its shorter side,
-so the detail is gone and not only softened. detect_faces uses the Haar cascades
-OpenCV ships (frontal, and profile facing either way) and imports OpenCV only when
-called, naming opencv-python-headless in its error. The cascades miss small, dark,
-tilted or covered faces, so manual boxes, per image file or per stretch of a video,
-are added to the detector's, and a box that misses the picture or falls on no frame is
-refused before anything is written. Every output is rebuilt from the pixels alone:
-EXIF, XMP and ICC are left out and an EXIF rotation is applied first. It is for real
-footage only, as Muse Image outputs keep their provenance. blur_folder writes
-sources.json (each original's SHA-256 to its blurred file), and blur_video runs
-ffmpeg, drops the audio and the container metadata, and writes a blur record with the
-hashes of the source and the output.
+backend/release/model_card.py writes the model card: README.md with its front matter,
+then the training, data, evaluation, uses, limitations, privacy and license sections.
+Every number comes from a file: the recipe's values from axolotl.RECIPE, the examples
+per skill, split, source and answer from the bundle's manifest.json, and results only
+from the scored evaluations in te eval's results.json, copied as they are with that
+file's SHA-256; without results the card says it is not evaluated yet. A run with a
+fixed step count says so. The card is written for the LoRA adapter or the merged build
+and says whether the bundle has generated images: they are never included, only the
+prompt manifests, and it names the skills that ship face-blurred keyframes for te
+regenerate. The license is the base model's, apache-2.0 from the Muse Glimmer card at
+the pinned revision, with a statement that the weights are a modification and a link
+to Meta's Usage Policy. The release folder and the upload come in the next stage.
 
 Files added or changed in this stage:
 
-- `backend/release/faces.py` (new):
-- `tests/test_faces.py` (new): tests
+- `backend/release/model_card.py` (new): the Hugging Face model card
+- `tests/test_model_card.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -55,12 +54,12 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 46%]
     ........................................................................ [ 54%]
     ........................................................................ [ 62%]
-    ........................................................................ [ 70%]
+    ........................................................................ [ 69%]
     ........................................................................ [ 77%]
     ........................................................................ [ 85%]
     ........................................................................ [ 93%]
-    ............................................................             [100%]
-    923 passed, 1 skipped in 69.67s (0:01:09)
+    ..............................................................           [100%]
+    925 passed, 1 skipped in 61.63s (0:01:01)
 
     $ ruff check .
     All checks passed!
@@ -144,6 +143,7 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   its price.
 - `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
   reads.
+- `backend/release/model_card.py`: the Hugging Face model card.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -157,12 +157,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 923 tests, all offline; none calls a paid API.
+- `tests/`: 925 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v79 adds the Hugging Face model card, written only from the recipe, the bundle
-manifest and the eval results, under the base model's apache-2.0 license.
+Stage v80 adds the release folder (the card, the weights, the prompt manifests and the
+base model's LICENSE), the guarded Hugging Face upload and the collection of release
+repos.
 
 ## Privacy and policy
 

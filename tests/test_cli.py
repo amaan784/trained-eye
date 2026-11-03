@@ -316,6 +316,42 @@ def test_teach_prompt_with_stdin_closed_is_a_clean_no(env, monkeypatch, capsys):
     assert cli.main([*TEACH, "--clip", str(write_clip(env / "clip"))]) == 1
 
 
+def test_serve_prints_an_address_the_phone_can_use_and_keeps_server_logs(monkeypatch, capsys):
+    import uvicorn
+
+    ran = {}
+    monkeypatch.setattr(cli, "lan_address", lambda: "192.168.1.23")
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: ran.update(kw))
+    assert cli.main(["serve"]) == 0
+    assert "ws://192.168.1.23:8765/ws" in capsys.readouterr().out
+    assert ran["host"] == "0.0.0.0"
+    assert ran["log_config"]["loggers"]["trained_eye"]["level"] == "INFO"
+    monkeypatch.setattr(cli, "lan_address", lambda: None)
+    cli.main(["serve", "--port", "9000"])
+    assert "ws://<this Mac's Wi-Fi IP>:9000/ws" in capsys.readouterr().out
+
+
+def test_serve_says_whether_the_phone_can_teach(env, monkeypatch, capsys):
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: None)
+    monkeypatch.setenv("SERVER_TOKEN", "")
+    cli.main(["serve"])
+    assert "teaching from the phone: off (set SERVER_TOKEN" in capsys.readouterr().out
+    monkeypatch.setenv("SERVER_TOKEN", "t0ken-never-printed")
+    cli.main(["serve"])
+    out = capsys.readouterr().out
+    assert "teaching from the phone: on" in out and "t0ken-never-printed" not in out
+
+
+def test_server_log_lines_reach_the_console_handler(capsys):
+    import logging.config
+
+    logging.config.dictConfig(cli.server_log_config())
+    logging.getLogger("trained_eye.server").info("session opened")
+    assert "session opened" in capsys.readouterr().err
+
+
 def taught(env, skill="washer_done", n=40):
     from backend.cli import synthetic_jpeg
     from backend.dataengine.dataset import Example, write_dataset

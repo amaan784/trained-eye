@@ -16,9 +16,11 @@ named below.
 from __future__ import annotations
 
 import argparse
+import copy
 import io
 import json
 import shutil
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -93,11 +95,47 @@ def cmd_api_smoke(args) -> int:
     return 0
 
 
+def lan_address() -> str | None:
+    """This machine's address on the local network, as the phone would reach it. No
+    packet is sent: connecting a UDP socket only picks the outgoing interface."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))
+            address = s.getsockname()[0]
+    except OSError:
+        return None
+    return None if address.startswith("127.") or address == "0.0.0.0" else address
+
+
+def server_log_config() -> dict:
+    """uvicorn's logging, plus the server's own lines (session opened, frames, closed)."""
+    import uvicorn.config
+
+    config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
+    config["loggers"]["trained_eye"] = {"handlers": ["default"], "level": "INFO",
+                                        "propagate": False}
+    return config
+
+
 def cmd_serve(args) -> int:
     import uvicorn
 
-    print(f"Trained Eye backend: ws://{args.host}:{args.port}/ws  (Ctrl+C to stop)")
-    uvicorn.run("backend.server:app", host=args.host, port=args.port, log_level="info")
+    host = args.host
+    if host in ("0.0.0.0", "::"):
+        host = lan_address() or "<this Mac's Wi-Fi IP>"
+    print(f"Trained Eye backend: ws://{host}:{args.port}/ws  (check: "
+          f"http://{host}:{args.port}/health; Ctrl+C to stop)")
+    try:
+        settings = load_settings()
+        teach = "off (set SERVER_TOKEN in .env to turn it on)"
+        if settings.has_secret("SERVER_TOKEN"):
+            settings.secret("SERVER_TOKEN")  # a token with spaces or smart quotes stops here
+            teach = "on (the app needs SERVER_TOKEN)"
+    except ConfigError as err:
+        teach = f"off ({err})"
+    print(f"teaching from the phone: {teach}")
+    uvicorn.run("backend.server:app", host=args.host, port=args.port, log_level="info",
+                log_config=server_log_config())
     return 0
 
 

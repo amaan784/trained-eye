@@ -11,30 +11,28 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v44 (M2): The phone's teach API
+## Build stage v45 (M2): Watch mode and teaching on the server
 
-backend/teach_api.py has the routes the phone teaches through: POST /teach/start with
-the skill, the spoken request or its text, and the JPEG frames of the 10 second
-capture as multipart form data, GET /teach/status, and POST /teach/answer for the two
-questions. Every route needs SERVER_TOKEN from .env as a Bearer token: without it the
-answer is 401, and with no token set on the Mac, 503. One session runs at a time, and
-a body over 200 MB or an answer over 64 KB is refused. backend/teach_upload.py parses
-the multipart body itself (Starlette's parser needs python-multipart) and checks the
-upload the way te teach checks its inputs: audio or text but not both, the request's
-length and the policy, 1 to 600 camera frames. It saves the capture under
-data/teach/<skill>/ so te teach can repeat the run on the Mac, and a run that needs
-your own labels or could cost over $15 is refused with the te teach command to run
-instead. Nothing is spent before the spend answer; the server mounts the routes in
-v45.
+In backend/server.py, a hello whose "watch" lists skill names starts watch mode for
+that session: the student scores every frame, each ack carries the scores, and an
+alert goes to the phone as a message of its own, to be spoken through the glasses; a
+watch request that cannot be met gets an error. The default watcher reads the student
+endpoint from the settings and takes thresholds and the prompt layout from the served
+run in serving.json; every session shares one cooldown book, saved in
+data/watch/cooldowns.json, so a reconnect or a second phone does not announce a
+condition again too soon. GET /skills lists the taught skills for the Skills screen,
+with their threshold, training run and whether the served run has them. The teach
+routes are mounted, and on shutdown a teach run stops before its next paid call. te
+serve prints this Mac's address on the local network and the /health check, says
+whether teaching from the phone is on, and keeps the server's log lines.
 
 Files added or changed in this stage:
 
-- `backend/teach_api.py` (new): the teach routes for the phone: /teach/start,
-  /teach/status and /teach/answer, behind SERVER_TOKEN
-- `backend/teach_upload.py` (new): the phone's teach upload: a multipart parser, the
-  input checks, the saved capture and the estimate
-- `tests/test_teach_api.py` (new): tests
-- `tests/test_teach_upload.py` (new): tests
+- `backend/cli.py` (changed): the te command line
+- `backend/server.py` (changed): the backend the iPhone app talks to: JPEG frames
+  arrive over a WebSocket at /ws and each one is acknowledged; frames stay in memory
+- `tests/test_cli.py` (changed): tests
+- `tests/test_server.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -51,20 +49,29 @@ These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 10%]
-    ........................................................................ [ 20%]
-    ........................................................................ [ 30%]
-    ........................................................................ [ 40%]
-    ........................................................................ [ 50%]
-    ........................................................................ [ 60%]
-    ........................................................................ [ 70%]
-    ........................................................................ [ 80%]
-    ........................................................................ [ 90%]
-    ...................................................................      [100%]
-    715 passed in 29.20s
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
+    ........................................................................ [ 29%]
+    ........................................................................ [ 39%]
+    ........................................................................ [ 49%]
+    ........................................................................ [ 59%]
+    ........................................................................ [ 69%]
+    ........................................................................ [ 78%]
+    ........................................................................ [ 88%]
+    ........................................................................ [ 98%]
+    ..........                                                               [100%]
+    730 passed in 32.41s
 
     $ ruff check .
     All checks passed!
+
+    $ python -m backend.cli serve --help
+    usage: te serve [-h] [--host HOST] [--port PORT]
+
+    options:
+      -h, --help   show this help message and exit
+      --host HOST
+      --port PORT
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -136,13 +143,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 715 tests, all offline; none calls a paid API.
+- `tests/`: 730 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v45 adds the server's watch mode (scores in each ack, alerts as messages, one
-cooldown book for every session), GET /skills, the teach routes, and a te serve that
-prints the address the phone uses.
+Stage v46 adds te watch, which replays a clip through watch mode with the trained
+model, and te calibrate, which sets a skill's or a run's threshold from labelled frame
+logs.
 
 ## Privacy and policy
 

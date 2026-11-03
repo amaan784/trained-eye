@@ -11,29 +11,31 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v47 (M2): Merging and checking the adapter
+## Build stage v48 (M2): Export and the student endpoint
 
-backend/training/export.py merges a run's QLoRA adapter into the bf16 base on Modal,
-on one H100: the base at the pinned revision, the adapter from runs/<run>/out on the
-volume, merged with peft's merge_and_unload() and saved as safetensors with the
-processor in runs/<run>/merged, the folder the serving app will serve. It then reloads
-that folder and compares its yes or no answers with base plus adapter's on up to 50
-examples of the run's bundle, the validation split if there is one. By default the
-reference is the bf16 base with the adapter; --reference nf4 compares with the NF4
-base that training saw. Loading and prompting copy the cookbook's evaluator, the
-base's small files the save did not write, such as chat_template.jinja, are copied
-over, and tensor names are compared with the base's. backend/training/export_check.py
-is the plain Python part, run on the Mac: the examples in the evaluator's fixed order,
-the answer read after "to=user", and the agreement, where an unreadable answer never
-agrees. The result records the remote call's seconds for the Modal ledger, also when
-it fails.
+backend/inference/modal_serve.py serves the student with vLLM's OpenAI-compatible
+server on Modal as the cookbook's vllm.md describes: its vllm/vllm-openai:muse-glimmer
+image and single-card arguments on one H100. TE_SERVE_RUN serves a run's merged model
+as the app trained-eye-student, model name trained-eye; TE_SERVE_BASE serves the base
+at its pinned revision as the app trained-eye-base, model name muse-glimmer, and
+TE_SERVE_LORAS adds each run's adapter as a model of its own, so the base and a
+fine-tuned endpoint can be up together. Every request needs STUDENT_API_KEY from the
+Modal Secret student, which reaches vLLM through its environment, never its command
+line. backend/cli_serving.py adds te export, which asks first, runs the merge (at most
+3 hours of GPU time), records that time also when interrupted and reports the check,
+and te serve-student, which asks before a deploy, stops the endpoint with --stop, and
+records the served run for GET /skills and the deploy in the Modal ledger. The test
+that te train and te export ask when the Modal credit would run out comes in v74, as
+its te train half needs the experiment plan.
 
 Files added or changed in this stage:
 
-- `backend/training/export.py` (new): the Modal app that merges a trained adapter and
-  checks the merged model's answers
-- `backend/training/export_check.py` (new):
-- `tests/test_export.py` (new): tests
+- `backend/cli.py` (changed): the te command line
+- `backend/cli_serving.py` (new): te export and te serve-student
+- `backend/inference/modal_serve.py` (new): the Modal app that serves the merged model
+  with vLLM behind STUDENT_API_KEY
+- `tests/test_cli_serving.py` (new): tests
+- `tests/test_modal_serve.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -52,19 +54,45 @@ set and no network to Meta); the output under each is what they printed.
     $ python -m pytest
     ........................................................................ [  9%]
     ........................................................................ [ 19%]
-    ........................................................................ [ 29%]
+    ........................................................................ [ 28%]
     ........................................................................ [ 38%]
-    ........................................................................ [ 48%]
-    ........................................................................ [ 58%]
-    ........................................................................ [ 67%]
-    ........................................................................ [ 77%]
-    ........................................................................ [ 87%]
-    ........................................................................ [ 96%]
-    .......................                                                  [100%]
-    743 passed in 40.27s
+    ........................................................................ [ 47%]
+    ........................................................................ [ 57%]
+    ........................................................................ [ 66%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 95%]
+    ...................................                                      [100%]
+    755 passed in 37.27s
 
     $ ruff check .
     All checks passed!
+
+    $ python -m backend.cli export --help
+    usage: te export [-h] --run RUN [--reference {bf16,nf4}] [--limit LIMIT]
+                     [--yes]
+
+    options:
+      -h, --help            show this help message and exit
+      --run RUN             the training run, e.g. exp1-mixed
+      --reference {bf16,nf4}
+                            base precision the merged model is compared against
+      --limit LIMIT         examples to compare
+      --yes                 no question (not over $15)
+
+    $ python -m backend.cli serve-student --help
+    usage: te serve-student [-h] [--run RUN] [--base] [--runs RUNS] [--stop]
+                            [--yes]
+
+    options:
+      -h, --help   show this help message and exit
+      --run RUN    the run whose merged model to serve
+      --base       serve the base model (app trained-eye-base, model muse-
+                   glimmer); with --stop, stop that app
+      --runs RUNS  comma-separated runs: the base with each run's adapter, each
+                   run a model name (vLLM --enable-lora; untried)
+      --stop       stop the endpoint
+      --yes        no question
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -81,6 +109,7 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
   preflight.
 - `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -102,6 +131,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
 - `backend/training/export.py`: the Modal app that merges a trained adapter and checks
   the merged model's answers.
+- `backend/inference/modal_serve.py`: the Modal app that serves the merged model with
+  vLLM behind STUDENT_API_KEY.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -139,12 +170,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 743 tests, all offline; none calls a paid API.
+- `tests/`: 755 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v48 adds te export and te serve-student: the merge run from the Mac, and the
-trained model, the base or the base with adapters served by vLLM on Modal.
+Stage v49 adds the iPhone app's first files: its settings, with the server token in
+the keychain, and the backend's WebSocket, /health and /skills messages as Swift
+types.
 
 ## Privacy and policy
 

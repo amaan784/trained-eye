@@ -14,6 +14,9 @@ named below.
   te watch          replay a clip through watch mode: scores, alerts and the frame log
   te calibrate      set a skill's threshold from replayed, labelled validation clips
                     (backend/cli_watch.py)
+  te export         merge a trained adapter on Modal and check it answers as before (asks)
+  te serve-student  deploy or stop the trained model's endpoint on Modal (asks)
+                    (backend/cli_serving.py)
 """
 
 from __future__ import annotations
@@ -444,6 +447,10 @@ def build_parser() -> argparse.ArgumentParser:
     from backend.cli_watch import add_parsers as watch_parsers
 
     watch_parsers(sub)
+
+    from backend.cli_serving import add_parsers as serving_parsers
+
+    serving_parsers(sub)
     return parser
 
 

@@ -11,23 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v90 (M4): Playground: the page script
+## Build stage v91 (M4): The playground app
 
-backend/playground/static/app.js runs the page, and every URL it asks for is relative,
-so the site also works under a path prefix. It lists the clips and opens one with its
-video and a button per skill that draws that skill's timeline, redrawn when the window
-is resized. For a skill it shows the read-back, the keyframe strip, SAM 3.1's box
-drawn over the teaching frame with how many keyframes had one, and the training wall
-with Spark's agreement, or the public copy's note in its place. Teach it yourself
-loads the status (the estimate, the caps and what the visitor and the day have left),
-offers the keyframes, posts the condition and then polls the run every 1200 ms, adding
-each variation to the wall as it arrives and ending with what the run cost. A refusal
-says it cost nothing; with no key or the budget used up, the page shows the
-precomputed examples instead. The results section shows the charts and results.md.
+backend/playground/app.py serves the page and its JSON API with Starlette: the status,
+clips, skills, examples, keyframes, teach and results routes, and /media/ for only the
+files those answers link to. A visitor gets a random id in an httponly cookie for 30
+days, and the budget counts it together with their address; the default caps are $0.50
+per visitor a day and $10 a day for everyone. A live run is refused when the browser's
+Sec-Fetch-Site header says another site sent it, and its body must be JSON of at most
+4096 bytes, so another site cannot spend for a visitor. The page's
+Content-Security-Policy lets it load nothing from other sites, and the SVG charts get
+one that runs no code. create_app(public=True) is the copy for the open web: no
+generated image, keyframes only from te blur folders, and videos only with a matching
+blur record. behind_proxy takes the visitor's address from the last X-Forwarded-For
+entry, for a host such as Modal.
 
 Files added or changed in this stage:
 
-- `backend/playground/static/app.js` (new):
+- `backend/playground/app.py` (new): the web playground
+- `tests/test_playground_app.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -47,18 +49,18 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [  7%]
     ........................................................................ [ 14%]
     ........................................................................ [ 21%]
-    ........................................................................ [ 29%]
-    ............................................s........................... [ 36%]
+    ........................................................................ [ 28%]
+    ............................................s........................... [ 35%]
     ........................................................................ [ 43%]
     ........................................................................ [ 50%]
-    ........................................................................ [ 58%]
-    ........................................................................ [ 65%]
-    ........................................................................ [ 72%]
-    ........................................................................ [ 80%]
-    ........................................................................ [ 87%]
-    ........................................................................ [ 94%]
-    .....................................................                    [100%]
-    988 passed, 1 skipped in 72.82s (0:01:12)
+    ........................................................................ [ 57%]
+    ........................................................................ [ 64%]
+    ........................................................................ [ 71%]
+    ........................................................................ [ 79%]
+    ........................................................................ [ 86%]
+    ........................................................................ [ 93%]
+    .................................................................        [100%]
+    1000 passed, 1 skipped in 84.52s (0:01:24)
 
     $ ruff check .
     All checks passed!
@@ -147,6 +149,7 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/release/model_card.py`: the Hugging Face model card.
 - `backend/release/package.py`: the release folder (base license, blurred keyframes),
   the upload and the collection.
+- `backend/playground/app.py`: the web playground.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -160,13 +163,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 988 tests, all offline; none calls a paid API.
+- `tests/`: 1000 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v91 adds the playground app: one page and a JSON API over the local results, a
-visitor cookie for the budget, live runs refused from other sites, and a public copy
-for the open web.
+Stage v92 adds te playground and te playground-clip, the public playground on Modal,
+and the notes in their final form, with the credits, licenses and copied Meta sample
+files.
 
 ## Privacy and policy
 

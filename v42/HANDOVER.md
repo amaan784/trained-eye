@@ -72,17 +72,13 @@ Local data, all under `data/` and gitignored: `cache/`, `ledger.jsonl`, and
   cut (see the Decisions in PROGRESS.md).
 - **Review after M1 (Oct 31):** bugs, version compatibility, functionality against
   SPEC.md and the UI, every finding checked by one reviewer who reproduced it and one who
-  tried to refute it. The 27 confirmed in F1 to F29 are fixed in stages v23 to v30, and
-  the confirmed ones in F30 to F62, with the faults that review found in those fixes, in
-  stages v31 to v38 (PROGRESS.md, "Review after M1"). Two open questions from it are in
-  item 9 below.
+  tried to refute it. The 27 confirmed in F1 to F29 are fixed in stages v23 to v30
+  (PROGRESS.md, "Review after M1"). F30 to F62 were not verified yet when those stages
+  were cut; the confirmed ones become the next stages, before M2.
 - **Teaching changes for the author:** keyframes are now named
   `kf_<position>_<hash>.jpg`, so a `--labels` file uses those names (from
   `data/skills/<skill>/keyframes/`); a wrong read-back is fixed with
   `--correct "what is wrong"` on the same command, which reuses the clip and transcript.
-  `te teach` checks the clip, audio, request and labels before it shows the estimate,
-  stops if the dataset would hold only one answer, and says when a rerun would pay again
-  for failed calls. `te serve` prints the address to type into the phone.
 - Spend so far: $0.00 Meta API, $0.00 Modal. Nothing has called a paid service yet.
 
 ### Not done yet, in priority order
@@ -101,10 +97,7 @@ PROGRESS.md.
    `trained-eye` project. It stays private; making it public counts as publishing.
 4. **First washer teach run, small:**
    `te teach --skill washer_done --clip data/teach/washer_done/teach.mp4 --audio data/teach/washer_done/request.m4a --positives 6 --negatives 6`
-   (for a 10 s clip with 20 to 30 keyframes the estimator prints about $0.48 to $0.57, and
-   at most $1.11 to $1.40 if every label has to be asked again with the larger token
-   budget; `te teach` prints the figure for the real clip first). Then look at
-   `data/skills/washer_done/`. The
+   (the estimator says $0.42 at most). Then look at `data/skills/washer_done/`. The
    request shapes for Voice Transcribe (multipart file + model to
    `/audio/transcriptions`), SAM (`/responses`, streamed) and Muse Image (`/images/edits`
    multipart, `/images/generations` JSON) come from SPEC.md and are unconfirmed; fix
@@ -116,30 +109,15 @@ PROGRESS.md.
    masks are base85 per SPEC.md) and add a test with that text as a fixture. The
    `meta-sam-parser` package could not be installed or read; installing it is a
    download, so ask first.
-6. **Full washer run:** the same command with the default 150 and 150. The estimator
-   prints about $5.25 to $5.34 for 20 to 30 keyframes, and at most $11.52 to $11.80 if
-   every label is asked again with the larger budget. That worst case is under the $15
-   ask threshold but over the $10 skill cap: the cap would stop the run partway, and a
-   rerun with a higher `TE_SKILL_CAP_USD` continues from the cache. Image tokens are
-   guessed at 1,500 per image, so treat these as estimates, not bounds.
+6. **Full washer run:** the same command with the default 150 and 150 (the estimator
+   says $5.26 at most, under the $10 skill cap and the $15 ask threshold).
 7. **Real clips** for washer_done, boil_over and bus_m4 (`docs/recording-protocol.md`):
    about 5 minutes of training and validation per skill from sessions 1 and 2, about 5
    minutes of test per skill from a different session, with near-misses.
 8. **Questions for the organizers:** does self-hosting Glimmer on Modal count as partner
    inference (the cookbook lists only Together AI as a Glimmer host)? The human answer on
    training Glimmer on Muse outputs is still pending; if it is no, set
-   `TE_TRAIN_ON_MODEL_OUTPUTS=0`. With it at 0 the images and answers are real and the
-   author's own, but the condition text in every example (spec.positive and negatives)
-   is still written by Muse Wonder: ask whether that is allowed too.
-9. **Questions for the author, from the review:**
-   - Starlette 1.2 and later want the `httpx2` package for `TestClient` (used by
-     `te ws-selftest` and the server tests) and warn without it; pyproject.toml does not
-     name it. Either add `httpx2` to the dependencies (a new download, so ask) or cap
-     `starlette<1.2` (not tested here: only 1.7.0 is installed).
-   - The approved-downloads list in section 4 names openai, httpx, fastapi, websockets,
-     pytest, wandb, modal and opencv-python-headless, but `pip install -e ".[dev]"` also
-     installs numpy, pillow, pydantic, starlette, uvicorn with its extras, and ruff.
-     Ask whether those count as approved.
+   `TE_TRAIN_ON_MODEL_OUTPUTS=0`.
 
 ## 4. The author's rules (all still in force)
 
@@ -185,7 +163,7 @@ PROGRESS.md.
 ### Version stages
 
 The author reviews and commits the project one layer at a time. New work becomes new
-stages after the newest folder (v38 now). The rules, as the author gave them:
+stages after the newest folder (v30 now). The rules, as the author gave them:
 
 - Stages v1 to vN live in the root of `build-stages`, in the order a developer would
   build them: foundations first, docs and UI late.
@@ -243,9 +221,7 @@ packing off, `train_on_inputs: false`; datasets `type: chat_template`,
 `sequence_len` 4096; micro batch 1, gradient accumulation 4 (global batch 32 on eight
 GPUs; the README says use 32 on one H100), 1 epoch, `adamw_bnb_8bit`, cosine, lr 2e-4,
 warmup 0.1, bf16, tf32, gradient checkpointing, flash_attention_2, seed 42. Paths in the
-config are relative; generate a per-run YAML with absolute Modal volume paths. The
-dataset JSONL also holds absolute image paths from where it was written (the recipe's
-format), so write it again under the volume mount before training. Meta
+config are relative; generate a per-run YAML with absolute Modal volume paths. Meta
 verified quality on 8x H100; on 1x H100 only a 2-step smoke (peak 26,995 MiB). The
 cookbook has no merge or export step; the adapter was evaluated on an NF4 base.
 
@@ -368,10 +344,6 @@ copied files, and list them in CONTRIBUTIONS.md.
   build, the experiment adapters, the human-labelled test set (faces blurred, approved
   footage only); never generated images. Apache-2.0 if the Glimmer model card allows it
   (check the card). Model card contents are listed in SPEC.md.
-- Generated images are never published, so ship what regenerates them: copy each
-  skill's `synthetic/manifest.jsonl` out of `data/` into a committed folder, and add a
-  `te regenerate` that rebuilds the images from a manifest and the (face-blurred)
-  keyframes through `synth.generate`, with the usual estimate and ledger.
 - A public W&B report "Trained Eye: experiments" (ask first), the README with results,
   architecture, the Meta-model table, privacy notes, limitations, and CONTRIBUTIONS.md
   crediting the cookbook recipe and any DAT sample code.
@@ -392,6 +364,4 @@ copied files, and list them in CONTRIBUTIONS.md.
 - 2026-10-31, cloud session 1 (continued): the author asked for a scan for bugs and
   version compatibility issues, a functionality check against the plan and a UI check,
   with fixes as stages v23 and later and M2 after them. There is no UI yet (the iOS app
-  and the playground are M2 and M4). Fixes for F1 to F29: stages v23 to v30. The second
-  half of the review, F30 to F62, and a check of the v23 to v30 fixes themselves: stages
-  v31 to v38.
+  and the playground are M2 and M4). Fixes for F1 to F29: stages v23 to v30.

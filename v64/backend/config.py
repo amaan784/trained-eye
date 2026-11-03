@@ -63,6 +63,7 @@ PRICES = {
 # not reachable from the build sandbox. Check modal.com/pricing and fix it here.
 MODAL_GPU_USD_PER_HOUR = {"H100": 3.95}
 ASK_ABOVE_USD = 15.0  # the author's rule: ask before any job estimated over this
+MODAL_CREDIT_USD = 150.0  # HANDOVER, M2: stop and ask if the Modal runs would pass this
 
 
 class ConfigError(RuntimeError):
@@ -96,6 +97,13 @@ class Settings:
     # Mac or vLLM on Modal) and the model name it serves.
     student_url: str | None = None
     student_model: str = "trained-eye"
+    # Reply budget per frame (OpenAIStudent's default). Base Glimmer reasons at length, so
+    # Experiment 4 may need more; a reply cut off before its answer is an error.
+    student_max_tokens: int = 512
+    # True folds the system prompt into the user text of new datasets (dataset.py), in case
+    # the processor preflight shows the template mishandles system turns. Watch mode asks
+    # the student the way the skill's dataset was written, whatever this says now.
+    system_in_user: bool = False
     secrets: Mapping[str, str] = field(default_factory=dict, repr=False)
 
     @property
@@ -198,6 +206,16 @@ def load_settings(
         # Fail closed: a misspelt "off" must not leave training on model outputs switched on.
         raise ConfigError(f"{name} must be 1 or 0, got {merged[name]!r}")
 
+    raw_tokens = merged.get("TE_STUDENT_MAX_TOKENS") or ""
+    try:
+        student_max_tokens = (int(raw_tokens) if raw_tokens.strip()
+                              else Settings.student_max_tokens)
+    except ValueError:
+        student_max_tokens = 0
+    if student_max_tokens < 1:
+        raise ConfigError(f"TE_STUDENT_MAX_TOKENS must be a whole number, 1 or more, got "
+                          f"{raw_tokens!r}")
+
     raw_dir = merged.get("TE_DATA_DIR") or str(Settings.data_dir)
     try:
         data_dir = Path(raw_dir).expanduser()  # here, as .env files are not read by a shell
@@ -215,6 +233,8 @@ def load_settings(
                                       Settings.train_on_model_outputs),
         student_url=(merged.get("TE_STUDENT_URL") or "").strip().rstrip("/") or None,
         student_model=(merged.get("TE_STUDENT_MODEL") or "").strip() or Settings.student_model,
+        student_max_tokens=student_max_tokens,
+        system_in_user=switch("TE_SYSTEM_IN_USER", Settings.system_in_user),
         secrets={name: merged[name] for name in SECRET_NAMES if merged.get(name)},
     )
 
@@ -238,7 +258,9 @@ def describe(settings: Settings) -> str:
         ),
         f"  train on model outputs: {'yes' if settings.train_on_model_outputs else 'no'}",
         (f"  student: {settings.student_url or 'not set (TE_STUDENT_URL)'} "
-         f"({settings.student_model})"),
+         f"({settings.student_model}), at most {settings.student_max_tokens} tokens a reply"),
+        ("  system prompt in new datasets: "
+         + ("folded into the user text" if settings.system_in_user else "its own turn")),
         "  models:",
     ]
     width = max(len(job) for job in settings.models)

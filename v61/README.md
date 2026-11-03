@@ -11,19 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v61 (M2): iOS: Meta's HEVC decoder
+## Build stage v61 (M2): iOS: Connect and Teach screens
 
-The app is SwiftUI for iOS 17.2 and has not been compiled: there is no Xcode here. A
-file may use types from a later iOS stage (the app model and the teach flow need each
-other), so the app builds only as a whole, from v73 on. VideoFrameDecoder.swift and
-the keyframe check are copied unchanged from Meta's CameraAccess sample, with Meta's
-header and the SDK's LICENSE next to them (Meta's Wearables Developer Terms).
+ios/TrainedEye/UI/ConnectView.swift is where the app finds the Mac and the glasses.
+The backend card takes the address te serve prints and the server token, says what
+kind of address it is, and checks the connection with GET /health, then fetches the
+skills. The glasses card shows the Meta AI registration, the paired glasses, their
+battery and the camera's state, with buttons to connect or disconnect and to update
+the glasses or the app on them when needed. A segmented picker chooses the camera, and
+Debug builds add a card for the mock glasses with fold, unfold and a touchpad tap.
+ios/TrainedEye/UI/TeachView.swift is the Teach screen: the name, hold to talk (at most
+30 seconds) or type the request, with a note that skills never cover a person, then
+the 10 second capture with its preview, frame size and countdown, and Send to the Mac.
+During the run on the Mac it shows the estimate to agree to, the read-back to confirm
+or correct, the last 8 progress lines, and the result and spend.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Meta/HEVCKeyframe.swift` (new):
-- `ios/TrainedEye/Meta/LICENSE` (new):
-- `ios/TrainedEye/Meta/VideoFrameDecoder.swift` (new):
+- `ios/TrainedEye/UI/ConnectView.swift` (new):
+- `ios/TrainedEye/UI/TeachView.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -36,19 +42,22 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 26%]
-    ........................................................................ [ 39%]
-    ........................................................................ [ 52%]
-    ........................................................................ [ 65%]
-    ........................................................................ [ 78%]
-    ........................................................................ [ 91%]
-    .................................................                        [100%]
-    553 passed in 23.75s
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
+    ........................................................................ [ 28%]
+    ........................................................................ [ 38%]
+    ........................................................................ [ 47%]
+    ........................................................................ [ 57%]
+    ........................................................................ [ 66%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 95%]
+    ...................................                                      [100%]
+    755 passed in 35.24s
 
     $ ruff check .
     All checks passed!
@@ -65,6 +74,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -97,8 +110,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -123,11 +138,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 553 tests, all offline; none calls a paid API.
+- `tests/`: 755 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v62 adds the glasses connection and the mock device.
+Stage v62 adds the Skills screen (each taught skill with its watch switch and status)
+and the Watch screen (alerts, scores, the connection, the glasses and the background
+counts).
 
 ## Privacy and policy
 

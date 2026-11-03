@@ -11,17 +11,26 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v78 (M3): Evaluation metrics
+## Build stage v78 (M4): Face blurring
 
-backend/eval/metrics.py scores watch frame logs against labelled time ranges: frame
-precision, recall and F1, events caught within 5 s and at all, false alarms per hour,
-time to alert, latency per frame, and cost per hour (GPU, Spark checks, a per-frame
-scorer). Overlapping or touching ranges count as one event. Its tests come with the
-next stage.
+backend/release/faces.py blurs faces in anything published. blur_boxes blurs given
+boxes with Pillow alone, first shrinking each box to 8 pixels across its shorter side,
+so the detail is gone and not only softened. detect_faces uses the Haar cascades
+OpenCV ships (frontal, and profile facing either way) and imports OpenCV only when
+called, naming opencv-python-headless in its error. The cascades miss small, dark,
+tilted or covered faces, so manual boxes, per image file or per stretch of a video,
+are added to the detector's, and a box that misses the picture or falls on no frame is
+refused before anything is written. Every output is rebuilt from the pixels alone:
+EXIF, XMP and ICC are left out and an EXIF rotation is applied first. It is for real
+footage only, as Muse Image outputs keep their provenance. blur_folder writes
+sources.json (each original's SHA-256 to its blurred file), and blur_video runs
+ffmpeg, drops the audio and the container metadata, and writes a blur record with the
+hashes of the source and the output.
 
 Files added or changed in this stage:
 
-- `backend/eval/metrics.py` (new): evaluation metrics from watch frame logs and labels
+- `backend/release/faces.py` (new):
+- `tests/test_faces.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -34,19 +43,24 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 12%]
-    ........................................................................ [ 25%]
-    ........................................................................ [ 37%]
-    ........................................................................ [ 50%]
+    ........................................................................ [  7%]
+    ........................................................................ [ 15%]
+    ........................................................................ [ 23%]
+    ........................................................................ [ 31%]
+    ....................................s................................... [ 38%]
+    ........................................................................ [ 46%]
+    ........................................................................ [ 54%]
     ........................................................................ [ 62%]
-    ........................................................................ [ 75%]
-    ........................................................................ [ 87%]
-    .......................................................................  [100%]
-    575 passed in 26.11s
+    ........................................................................ [ 70%]
+    ........................................................................ [ 77%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 93%]
+    ............................................................             [100%]
+    923 passed, 1 skipped in 69.67s (0:01:09)
 
     $ ruff check .
     All checks passed!
@@ -63,6 +77,14 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
+- `backend/cli_experiments.py`: te experiments, te unfiltered, te clips, te
+  spark-errors and te regress.
+- `backend/cli_replay.py`: te replay: the recorded test clips through watch mode.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -95,8 +117,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -114,6 +138,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/labeltool/images.py`: the labelling tool for generated images, for
   Experiment 2.
 - `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
+- `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
+  and the SVG charts.
+- `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
+  its price.
+- `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
+  reads.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -127,11 +157,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 575 tests, all offline; none calls a paid API.
+- `tests/`: 923 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v79 adds the metrics' tests and the shared SVG pieces for the charts.
+Stage v79 adds the Hugging Face model card, written only from the recipe, the bundle
+manifest and the eval results, under the base model's apache-2.0 license.
 
 ## Privacy and policy
 

@@ -11,15 +11,31 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v74 (M2): iOS: README
+## Build stage v74 (M3): The experiment plan and its price
 
-ios/README.md says how to create the Xcode project, add the DAT package at 1.0.1, the
-Info.plist keys and capabilities, Developer Mode, and how to point the app at te
-serve. It lists the TODOs and says plainly that the code has not been compiled.
+backend/eval/plan.py lists every te train run of Experiments 1 to 3 with its
+arguments: exp1-real, exp1-synthetic and exp1-mixed, exp2-filtered and
+exp2-unfiltered, and exp3-25 to exp3-300 for 25, 50, 100, 200 and 300 generated images
+per skill. Every run trains the same fixed optimizer steps, one epoch over 300 images
+per skill, so Experiment 3's curve measures images rather than steps. Runs that would
+train the same bundle are marked as repeats of the first, which the printed plan says
+can be skipped. plan_cost() prices the runs from the smoke's timing as te train does,
+adds the final run, an export per model that needs one, a guessed number of serving
+hours per evaluated model and the Modal spend so far, and compares the total with the
+$150 credit; runs already finished on this Mac count in the spend instead.
+spark_usd_per_check() gives a Spark check's price, measured or estimated. The
+held-back tests of te train's pricing and fixed steps, te watch --scorer spark, the
+credit check before te train and te export, and the plan's Spark price come back here.
 
 Files added or changed in this stage:
 
-- `ios/README.md` (new): how to build the iPhone app in Xcode (not compiled yet)
+- `backend/eval/plan.py` (new): the experiment plan: every training run with fixed
+  steps and its price
+- `tests/test_cli_serving.py` (changed): tests
+- `tests/test_cli_train.py` (changed): tests
+- `tests/test_cli_watch.py` (changed): tests
+- `tests/test_ledger.py` (changed): tests
+- `tests/test_plan.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -32,19 +48,24 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 26%]
-    ........................................................................ [ 39%]
-    ........................................................................ [ 52%]
+    ........................................................................ [  8%]
+    ........................................................................ [ 16%]
+    ........................................................................ [ 24%]
+    ........................................................................ [ 32%]
+    ........................................................................ [ 41%]
+    ........................................................................ [ 49%]
+    ........................................................................ [ 57%]
     ........................................................................ [ 65%]
-    ........................................................................ [ 78%]
-    ........................................................................ [ 91%]
-    .................................................                        [100%]
-    553 passed in 31.45s
+    ........................................................................ [ 73%]
+    ........................................................................ [ 82%]
+    ........................................................................ [ 90%]
+    ........................................................................ [ 98%]
+    .............                                                            [100%]
+    877 passed in 57.50s
 
     $ ruff check .
     All checks passed!
@@ -61,6 +82,11 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -93,8 +119,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -107,6 +135,15 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   OpenAI-compatible endpoint, read at its yes or no answer token.
 - `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
   alert, alert messages and the frame log.
+- `backend/labeltool/clips.py`: the labelling tool for clips: where the condition is
+  true, saved as time ranges.
+- `backend/labeltool/images.py`: the labelling tool for generated images, for
+  Experiment 2.
+- `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
+- `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
+  and the SVG charts.
+- `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
+  its price.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -120,12 +157,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 553 tests, all offline; none calls a paid API.
+- `tests/`: 877 tests, all offline; none calls a paid API.
 
 ## Next
 
-Milestone M3: the labelling tool, the evaluation harness and the code for the four
-experiments.
+Stage v75 adds te experiments, te unfiltered, te clips, te spark-errors and te
+regress, and eval/plan.json written from the experiment plan with its test and
+validation clips.
 
 ## Privacy and policy
 

@@ -1,9 +1,13 @@
-"""The Hugging Face release: the model card, the release folder and the upload.
+"""The Hugging Face model card: README.md with its front matter, its training, data and
+results sections and its license text. The release folder and the upload are in
+package.py.
 
 Every number in the card comes from a file: axolotl.RECIPE, the training bundle's
-manifest.json, and only the eval harness's results.json for results. No license is claimed
-until the author has checked the Glimmer model card and passes one. `upload` imports
-huggingface_hub only when called and refuses without confirmed=True (the author's yes).
+manifest.json, and only the eval harness's results.json for results. The weights take the
+base model's license: the Muse Glimmer model card at the pinned revision (read on
+2026-11-02) says apache-2.0, with Meta's Usage Policy beside it, so the card says so and
+states that the weights are a modification, and the release folder carries the base
+model's LICENSE (BASE_LICENSE.txt, copied from that revision, by package.prepare_release).
 """
 
 from __future__ import annotations
@@ -11,11 +15,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import shutil
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
-from backend.config import DEFAULT_MODELS, STUDENT_BASE_REVISION, load_settings
+from backend.config import DEFAULT_MODELS, STUDENT_BASE_REVISION
 from backend.training.axolotl import GLOBAL_BATCH, RECIPE
 
 RECIPE_KEYS = ("adapter", "load_in_4bit", "lora_r", "lora_alpha", "lora_dropout",
@@ -26,14 +29,13 @@ DATA_JOBS = ("transcribe", "compiler", "sam", "image", "labeler")
 COLUMNS = (("real", "yes"), ("real", "no"), ("synthetic", "yes"), ("synthetic", "no"))
 METRICS = ("hours", "precision", "recall", "f1", "event_recall_in_window",
            "false_alarms_per_hour", "time_to_alert_median_s", "latency_median_s")
-LICENSE_TODO = "TODO for the author: Apache-2.0 if the Glimmer model card allows it; check the card"
+BASE_LICENSE = "apache-2.0"  # the Muse Glimmer card's license at STUDENT_BASE_REVISION
+USAGE_POLICY = "https://huggingface.co/meta-models/Muse-Glimmer-30B/blob/main/USAGE_POLICY.md"
 KINDS = {  # title, base_model_relation, front matter, what it is
     "adapter": ("LoRA adapter", "adapter", "library_name: peft\n", "A QLoRA adapter (PEFT) for"),
-    "merged": ("merged build", "finetune", "", "The final adapter merged (`merge_and_unload()`) into"),
+    "merged": ("merged build", "finetune", "",
+               "The final adapter merged (`merge_and_unload()`) into"),
 }
-WEIGHT_SUFFIXES = (".safetensors", ".json", ".jinja", ".model", ".txt", ".gguf")
-MEDIA_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".mp4", ".mov")
-REPO_ID = re.compile(r"[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*")
 LICENSE_ID = re.compile(r"[a-z0-9][a-z0-9.+-]*")
 CARD = """\
 ---
@@ -129,6 +131,12 @@ def data_section(manifest: dict) -> str:
         for (skill, split), c in sorted(cells.items())])
 
 
+def synthetic_skills(manifest: dict) -> list[str]:
+    """The skills with generated images in a bundle manifest."""
+    return sorted({key.split("/")[1] for key in manifest["counts"]
+                   if key.split("/")[2] == "synthetic"})
+
+
 def source_counts(manifest: dict) -> tuple[int, int]:
     """(real, synthetic) examples in a bundle manifest, both splits."""
     real = synthetic = 0
@@ -139,17 +147,29 @@ def source_counts(manifest: dict) -> tuple[int, int]:
     return real, synthetic
 
 
-def generated_text(real: int, synthetic: int) -> tuple[str, str]:
-    """The card's paragraph on generated images and its limitation, from the counts."""
+def generated_text(real: int, synthetic: int, skills: Iterable[str] = (),
+                   shipped: Iterable[str] = ()) -> tuple[str, str]:
+    """The card's paragraph on generated images and its limitation, from the counts.
+    `skills` have generated images; `shipped` of them have face-blurred keyframes here."""
     if not synthetic:
         about = ("There are no generated images in this bundle: it holds the user's own "
                  "keyframes only.")
         limit = "The training images are the user's own keyframes, so there were few of them."
         return about, limit
     share = "Most" if synthetic > real else "Some"
+    shipped = sorted(shipped)
+    unshipped = sorted(set(skills) - set(shipped))
     about = ("The generated images are not included. `manifests/` lists every edit prompt with "
-             "the SHA-256 of its keyframe and of its image; `te regenerate` rebuilds them from "
-             "the original keyframes.")
+             "the SHA-256 of its keyframe and of its image.")
+    if shipped:
+        about += (" `keyframes/` holds the face-blurred keyframes the edits start from (for "
+                  f"{', '.join(shipped)}), and `te regenerate --skill <skill> --manifest "
+                  "manifests/<skill>.jsonl --keyframes keyframes/<skill>` needs them to rebuild "
+                  "the images. The edits then start from blurred pixels, so the rebuilt images "
+                  "can differ from the ones trained on.")
+    if unshipped:
+        about += (f" For {', '.join(unshipped)}, `te regenerate` needs the original keyframes, "
+                  "which are not published.")
     limit = (f"{share} training images are Muse Image edits with Muse Spark's labels, which "
              "can be wrong.")
     return about, limit
@@ -176,18 +196,21 @@ def results_section(results: Path | None) -> str:
 
 
 def model_card(out_path: Path, *, run: str, bundle_manifest: Path, kind: str = "adapter",
-               results: Path | None = None, license_id: str | None = None,
-               models: Mapping[str, str] = DEFAULT_MODELS, max_steps: int | None = None) -> Path:
+               results: Path | None = None, license_id: str = BASE_LICENSE,
+               models: Mapping[str, str] = DEFAULT_MODELS, max_steps: int | None = None,
+               keyframes: Iterable[str] = ()) -> Path:
     """Write the model card (README.md with YAML front matter) to out_path. `max_steps` is
-    the run's fixed step count (te train --max-steps), if it had one."""
+    the run's fixed step count (te train --max-steps), if it had one; `keyframes` are the
+    skills whose face-blurred keyframes the release holds."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
-    if license_id is not None and not LICENSE_ID.fullmatch(license_id):
+    if not LICENSE_ID.fullmatch(license_id or ""):
         raise ValueError(f"license {license_id!r}: use a Hugging Face license id")
     manifest = json.loads(Path(bundle_manifest).read_text())
     title, relation, front, what = KINDS[kind]
     base = models["student_base"]
-    generated, mix = generated_text(*source_counts(manifest))
+    generated, mix = generated_text(*source_counts(manifest), synthetic_skills(manifest),
+                                    keyframes)
     rows = [f"| `{k}` | `{_cell(RECIPE[k])}` |" for k in RECIPE_KEYS]
     steps = ""
     if max_steps:
@@ -196,100 +219,23 @@ def model_card(out_path: Path, *, run: str, bundle_manifest: Path, kind: str = "
                  "experiments keep the steps the same for every run)")
     Path(out_path).write_text(CARD.format(
         base=base, relation=relation, title=title, what=what,
-        front=front + (f"license: {license_id}\n" if license_id else ""),
+        front=front + f"license: {license_id}\n",
         revision=STUDENT_BASE_REVISION, run=run, skills=", ".join(sorted(manifest["skills"])),
         batch=GLOBAL_BATCH, models=", ".join(f"{job} `{models[job]}`" for job in DATA_JOBS),
         recipe="\n".join(rows), steps=steps, generated=generated, mix=mix,
         data=data_section(manifest), results=results_section(results),
-        license=f"`{license_id}`" if license_id else f"{LICENSE_TODO} (huggingface.co/{base})."),
+        license=license_text(license_id, base)),
         encoding="utf-8")
     return Path(out_path)
 
 
-def _sha256(path: Path) -> str:
-    with path.open("rb") as fh:
-        return hashlib.file_digest(fh, "sha256").hexdigest()
-
-
-def prepare_release(out_dir: Path, *, run: str, bundle_manifest: Path, manifests_dir: Path,
-                    weights_dir: Path | None = None, **card) -> dict:
-    """Assemble the folder to upload (uploading nothing): README.md (the card; `card` holds
-    kind, results, license_id, models), weights_dir's top-level weight and config files (no
-    pickles, checkpoints or trainer README), the manifests of the skills with synthetic data,
-    and release.json listing every file with its SHA-256."""
-    out_dir, manifests_dir = Path(out_dir), Path(manifests_dir)
-    if out_dir.exists() and any(out_dir.iterdir()) and not (out_dir / "release.json").is_file():
-        raise ValueError(f"{out_dir} is not empty and not a release folder: pick another")
-    keys = [key.split("/") for key in json.loads(Path(bundle_manifest).read_text())["counts"]]
-    synthetic = sorted({k[1] for k in keys if k[2] == "synthetic"})
-    if missing := [s for s in synthetic if not (manifests_dir / f"{s}.jsonl").is_file()]:
-        raise ValueError(f"no prompt manifest for {', '.join(missing)} in {manifests_dir}: "
-                         "run te manifests first")
-    shutil.rmtree(out_dir, ignore_errors=True)
-    (out_dir / "manifests").mkdir(parents=True)
-    skipped = []
-    for path in sorted(Path(weights_dir).iterdir()) if weights_dir else []:
-        if not path.is_file() or path.suffix not in WEIGHT_SUFFIXES or path.name == "README.md":
-            skipped.append(path.name)
-            continue
-        shutil.copy2(path, out_dir / path.name)
-    for skill in synthetic:
-        shutil.copyfile(manifests_dir / f"{skill}.jsonl", out_dir / "manifests" / f"{skill}.jsonl")
-    model_card(out_dir / "README.md", run=run, bundle_manifest=bundle_manifest, **card)
-    release = {"run": run, "kind": card.get("kind", "adapter"), "skipped": skipped,
-               "files": [{"path": p.relative_to(out_dir).as_posix(), "bytes": p.stat().st_size,
-                          "sha256": _sha256(p)} for p in sorted(out_dir.rglob("*")) if p.is_file()]}
-    (out_dir / "release.json").write_text(json.dumps(release, indent=1) + "\n")
-    return release
-
-
-def upload(folder: Path, repo_id: str, token_env: str = "HF_TOKEN", *, confirmed: bool = False,
-           private: bool = True) -> str:
-    """Publish a prepare_release folder to `repo_id` (private unless private=False). Refuses
-    without confirmed=True, while the license is a TODO, or with an image or video in it."""
-    if not confirmed:
-        raise PermissionError("publishing needs the author's yes: nothing was uploaded")
-    folder = Path(folder)
-    if not REPO_ID.fullmatch(repo_id) or not (folder / "release.json").is_file():
-        raise ValueError(f"need a repo id like owner/name and a folder from te release: "
-                         f"{repo_id!r}, {folder}")
-    if LICENSE_TODO in (folder / "README.md").read_text(encoding="utf-8"):
-        raise ValueError("the card's license is still a TODO: check the Glimmer model card, "
-                         "then run te release again with --license")
-    if media := sorted(p.name for p in folder.rglob("*") if p.suffix.lower() in MEDIA_SUFFIXES):
-        raise ValueError(f"images or video in the release folder ({', '.join(media[:5])}): "
-                         "generated images are never published")
-    release = json.loads((folder / "release.json").read_text())
-    names = {f["path"] for f in release["files"]}
-    needed = "adapter_config.json" if release.get("kind", "adapter") == "adapter" else "config.json"
-    if needed not in names or not any(n.endswith(".safetensors") for n in names):
-        raise ValueError(f"the release folder has no {release.get('kind', 'adapter')} weights "
-                         f"({needed} and .safetensors): run te release with --weights")
-    try:
-        from huggingface_hub import HfApi
-    except ImportError:
-        raise RuntimeError("uploading needs huggingface_hub, which is not installed and not on "
-                           "the approved downloads list: ask the author, then "
-                           "pip install huggingface_hub") from None
-    token = load_settings().secret(token_env)  # from the environment or .env
-    def failed(err: Exception) -> RuntimeError:  # its text must not carry the token
-        return RuntimeError(f"upload failed ({type(err).__name__}): "
-                            f"{str(err).replace(token, '[redacted]')[:300]}")
-
-    try:
-        api = HfApi(token=token)
-        api.create_repo(repo_id, repo_type="model", private=private, exist_ok=True)
-        # an existing repo keeps its visibility: never publish after a "private" question
-        actual = getattr(api.repo_info(repo_id, repo_type="model"), "private", None)
-    except Exception as err:  # noqa: BLE001
-        raise failed(err) from None
-    if actual is not private:
-        raise ValueError(f"{repo_id} already exists and is "
-                         f"{'private' if actual else 'public'}, not "
-                         f"{'private' if private else 'public'}: nothing was uploaded")
-    try:
-        api.upload_folder(repo_id=repo_id, folder_path=str(folder), repo_type="model",
-                          commit_message=f"Trained Eye release {folder.name}")
-    except Exception as err:  # noqa: BLE001
-        raise failed(err) from None
-    return f"https://huggingface.co/{repo_id}"
+def license_text(license_id: str, base: str) -> str:
+    """The card's License section: the license, that these weights modify the base model,
+    and Meta's Usage Policy, which applies to any use of Muse Glimmer."""
+    same = (" as the base model's" if license_id == BASE_LICENSE
+            else f"; the base model's is `{BASE_LICENSE}`")
+    return (f"`{license_id}`{same} ({base} at revision `{STUDENT_BASE_REVISION}`; its "
+            "license text is in `LICENSE`). These weights are a modification of that model: "
+            "QLoRA fine-tuning on the data above (for a merged build, that adapter merged "
+            f"into the base). Any use is also subject to Meta's [Muse Glimmer Usage Policy]"
+            f"({USAGE_POLICY}).")

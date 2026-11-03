@@ -2,7 +2,8 @@
 // Theme.swift
 //
 // The look from HANDOVER section 6: dark and minimal, one accent colour, flat shapes and
-// no gradients, with Inter when the app bundles it and the system font otherwise. Laid
+// no gradients, in Inter 4.1 (Fonts/, SIL Open Font License), with the system font as the
+// fallback if the fonts are missing from the target. Laid
 // out like the theme in Meta's BirdSpotter sample: the tokens live in one place and are
 // applied once, at the root.
 //
@@ -32,10 +33,9 @@ enum Theme {
   static let data = font(15, .medium, relativeTo: .body).monospacedDigit()
   static let big = font(44, .semibold, relativeTo: .largeTitle).monospacedDigit()
 
-  /// Inter's static faces when they are bundled (the .ttf files in the target and listed
-  /// under UIAppFonts), else the system font in the same text style and weight.
-  /// TODO: Inter is not bundled (downloading it needs the author's yes). Once it is,
-  /// check these PostScript names: a wrong one falls back to the system font silently.
+  /// Inter's static faces from Fonts/ (in the target and listed under UIAppFonts), else
+  /// the system font in the same text style and weight. The names are the faces'
+  /// PostScript names, read from the Inter 4.1 files.
   static func font(_ size: CGFloat, _ weight: Font.Weight, relativeTo style: Font.TextStyle)
     -> Font
   {

@@ -8,7 +8,9 @@ prompt, then the padded 512x512 image and the condition text.
 Glimmer reasons before it answers, so the first generated token is not the answer. The
 probability is read at the answer itself: the last generated token that is "yes" or
 "no", with the chance of each taken from that token's top logprobs and renormalised
-over the two. A reply without such a token is an error, never a guess.
+over the two. A reply without such a token is an error, never a guess, and so is a reply
+cut off at max_tokens (finish_reason "length"): a yes or no in it comes from the reasoning,
+not the answer. Raise TE_STUDENT_MAX_TOKENS (or te watch --max-tokens) for those.
 
 Sampling follows Meta's serving notes (meta-oss-cookbook muse-glimmer/inference-server/
 vllm.md): no temperature in the request, so the server uses the checkpoint's published
@@ -119,9 +121,14 @@ class OpenAIStudent:
             raise StudentError(f"student endpoint failed: {type(err).__name__}: "
                                f"{str(err)[:200]}") from None
         try:
-            logprobs = reply["choices"][0]["logprobs"]["content"]
+            choice = reply["choices"][0]
+            logprobs = choice["logprobs"]["content"]
         except (KeyError, IndexError, TypeError):
             raise StudentError("the reply has no logprobs (does the server support "
                                "logprobs and top_logprobs?)") from None
+        if choice.get("finish_reason") == "length":
+            raise StudentError(f"the reply was cut off at max_tokens ({self.max_tokens}) "
+                               "before its answer: raise TE_STUDENT_MAX_TOKENS (te watch "
+                               "--max-tokens)")
         p, answer = answer_probability(logprobs)
         return Score(p, answer, time.monotonic() - start)

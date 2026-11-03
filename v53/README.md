@@ -11,19 +11,24 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v53 (M2): Phone teach routes
+## Build stage v53 (M2): iOS: the glasses camera
 
-backend/teach_api.py adds POST /teach/start, GET /teach/status and POST /teach/answer.
-Every route needs the SERVER_TOKEN from .env as a Bearer header: these routes spend
-money and te serve listens on the whole network. One session runs at a time; the
-status carries the state, the progress lines, the estimate, the read-back and the
-result. Both bodies have size limits, and stop() ends every running session for a
-shutdown. Its tests come two stages later.
+ios/TrainedEye/Glasses/GlassesCamera.swift runs the glasses' camera through Meta's DAT
+SDK, with the lifecycle of the CameraAccess sample: a session from the auto device
+selector, the camera permission, then the camera and its stream. Meta AI is opened for
+the camera permission only after the user confirms, and after a refusal no stream
+starts. Unlike CameraAccess, the session is not ended when the app goes to the
+background. While the camera is wanted it comes back by itself: after a fold or a link
+drop, a new session starts when the device selector reports the glasses again, never
+while a session is paused, and at most 3 times without a frame in between. A change of
+stream size stops the camera and adds it again at the new size once its stream has
+stopped, keeping the session. The class also holds the status and interruption lines
+that the Connect and Watch screens show. Nothing here touches the capture LED. The
+stream half, which this file needs, comes in the next stage.
 
 Files added or changed in this stage:
 
-- `backend/teach_api.py` (new): the teach routes for the phone: /teach/start,
-  /teach/status and /teach/answer, behind SERVER_TOKEN
+- `ios/TrainedEye/Glasses/GlassesCamera.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -36,19 +41,22 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 27%]
-    ........................................................................ [ 41%]
-    ........................................................................ [ 55%]
-    ........................................................................ [ 69%]
-    ........................................................................ [ 82%]
-    ........................................................................ [ 96%]
-    .................                                                        [100%]
-    521 passed in 21.32s
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
+    ........................................................................ [ 28%]
+    ........................................................................ [ 38%]
+    ........................................................................ [ 47%]
+    ........................................................................ [ 57%]
+    ........................................................................ [ 66%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 95%]
+    ...................................                                      [100%]
+    755 passed in 35.24s
 
     $ ruff check .
     All checks passed!
@@ -65,6 +73,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -84,6 +96,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   (real, synthetic or mixed, with a validation split and volume paths).
 - `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
   recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
+- `backend/training/export.py`: the Modal app that merges a trained adapter and checks
+  the merged model's answers.
+- `backend/inference/modal_serve.py`: the Modal app that serves the merged model with
+  vLLM behind STUDENT_API_KEY.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -93,8 +109,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -119,12 +137,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 521 tests, all offline; none calls a paid API.
+- `tests/`: 755 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v54 adds the server mounts the teach routes and lists taught skills; the student
-gets its key and Meta's sampling.
+Stage v54 adds the glasses stream (HEVC at 7 fps, a stopped stream added again,
+repeated images skipped) and the throttle that turns frames into one JPEG a second.
 
 ## Privacy and policy
 

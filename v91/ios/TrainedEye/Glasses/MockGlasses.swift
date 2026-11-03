@@ -6,10 +6,12 @@
 // any stream starts (the mock crashes without one). The feed is an HEVC video named
 // mock_feed.mp4 if the app bundle has one (the simulator has no camera), else the iPhone's
 // back camera. Calls as in MockDeviceKitViewModel.swift and MockDeviceCardViewModel.swift
-// in Meta's CameraAccess sample.
+// in Meta's CameraAccess sample. Fold, unfold and a touchpad tap are there to check, in the
+// simulator, that watching comes back after a fold and is not restarted while paused.
 //
 
-// TODO: add an HEVC (h.265) mock_feed.mp4 to the target for the simulator.
+// Resources/mock_feed.mp4 (made by ios/make_mock_feed.py: a drawn washer display counting
+// down to "End", HEVC tagged hvc1) is the feed in the simulator, which has no camera.
 
 #if DEBUG
 
@@ -22,6 +24,7 @@ import Observation
 @Observable
 final class MockGlassesController {
   private(set) var isActive = false
+  private(set) var isFolded = false
   var errorMessage: String?
 
   @ObservationIgnored private let mockDeviceKit: MockDeviceKitInterface = MockDeviceKit.shared
@@ -63,7 +66,26 @@ final class MockGlassesController {
       glasses.services.camera.setCameraFeed(cameraFacing: .back)
     }
     errorMessage = nil
+    isFolded = false
     isActive = true
+  }
+
+  /// Folding ends the glasses' session (AGENTS.md); unfolding makes them available again,
+  /// and puts them back on, as MockDeviceCardViewModel's don() does after an unfold.
+  func fold() {
+    device?.fold()
+    isFolded = true
+  }
+
+  func unfold() {
+    device?.unfold()
+    device?.don()
+    isFolded = false
+  }
+
+  /// A single tap pauses an active stream; a second tap resumes it.
+  func tapTouchpad() {
+    device?.services.captouch.tap()
   }
 
   func stop() {
@@ -73,6 +95,7 @@ final class MockGlassesController {
     mockDeviceKit.disable()
     device = nil
     isActive = false
+    isFolded = false
   }
 }
 

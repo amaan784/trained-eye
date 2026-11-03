@@ -11,20 +11,26 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v57 (M2): Student endpoint on Modal
+## Build stage v57 (M2): iOS: the teach client and flow
 
-backend/inference/modal_serve.py serves the merged model with the vllm-openai
-muse-glimmer image on one H100, with the flags from the cookbook's vllm.md, logprobs
-for the scorer, and an API key from the Modal Secret named student, passed to vLLM in
-its environment rather than on the command line. The tests read both Modal apps (modal
-is not installed here) and test the export helpers.
+ios/TrainedEye/Network/TeachClient.swift calls the teach routes: POST /teach/start
+with the skill, the request (a WAV recording or typed text) and the captured JPEGs as
+a multipart form built in memory, with a 120 second timeout since the server checks
+every frame first; GET /teach/status for one skill, or for the latest session; and
+POST /teach/answer. ios/TrainedEye/Teach/TeachFlow.swift runs the Teach screen's
+steps: a skill name the backend accepts (snake_case, 2 to 40 characters), hold to talk
+or type the request, then a 3 second countdown and a 10 second capture that keeps
+three frames a second in memory. After the upload it sends the user's answers to the
+server's two questions (spend the estimate, and is the read-back right, with an
+optional correction) and polls the status once a second until the run ends. Frames are
+dropped once the Mac has them and kept for another try when the upload fails. A
+session still running on the Mac can be picked up again at launch, when the server
+token is set. The flow uses the app model of the next stage.
 
 Files added or changed in this stage:
 
-- `backend/inference/modal_serve.py` (new): the Modal app that serves the merged model
-  with vLLM behind STUDENT_API_KEY
-- `tests/test_export.py` (new): tests
-- `tests/test_modal_serve.py` (new): tests
+- `ios/TrainedEye/Network/TeachClient.swift` (new):
+- `ios/TrainedEye/Teach/TeachFlow.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -37,19 +43,22 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 26%]
-    ........................................................................ [ 39%]
-    ........................................................................ [ 52%]
-    ........................................................................ [ 65%]
-    ........................................................................ [ 78%]
-    ........................................................................ [ 91%]
-    .............................................                            [100%]
-    549 passed in 24.21s
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
+    ........................................................................ [ 28%]
+    ........................................................................ [ 38%]
+    ........................................................................ [ 47%]
+    ........................................................................ [ 57%]
+    ........................................................................ [ 66%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 95%]
+    ...................................                                      [100%]
+    755 passed in 31.33s
 
     $ ruff check .
     All checks passed!
@@ -66,6 +75,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -98,8 +111,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -124,11 +139,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 549 tests, all offline; none calls a paid API.
+- `tests/`: 755 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v58 adds te export and te serve-student.
+Stage v58 adds the app model that ties the parts together: which camera runs, where
+its frames go, what an alert does, and what went out while the screen was locked.
 
 ## Privacy and policy
 

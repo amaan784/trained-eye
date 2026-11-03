@@ -11,17 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v76 (M3): Labelling tool: clips
+## Build stage v76 (M3): Replay engine and the W&B report
 
-backend/labeltool/clips.py plays a recorded clip (with range requests, so seeking
-works), marks where the condition becomes true and stops with [ and ], and saves
-sorted, merged, checked time ranges in the format te calibrate reads.
+backend/eval/replay.py is the engine of te replay, which comes in v77. plan_jobs()
+takes a run's clips from eval/plan.json, its validation clips first and then the test
+clips of every evaluation whose run it is, each log once, and plan_scorer() says
+whether the student or Muse Spark scores them. warm_up() sends one frame every 15 s
+until a cold endpoint answers or the deadline passes (900 s is te replay's default),
+and gives up at once on a client error such as a wrong key. replay_clip() replays one
+clip through a fresh Watcher into <log>.partial and renames it to the log only when at
+least one frame scored, so an interrupted replay stays pending.
+backend/eval/wandb_report.py plans the W&B report "Trained Eye: experiments": one
+section per experiment with its text from results.md, the training runs' loss panels
+found by their exp tags, and the eval run's table and charts. It is saved only as a
+draft, only after a yes, and the key is never shown. replay.py's tests arrive in v77
+with te replay.
 
 Files added or changed in this stage:
 
-- `backend/labeltool/clips.py` (new): the labelling tool for clips: where the
-  condition is true, saved as time ranges
-- `backend/labeltool/static/clips.html` (new):
+- `backend/eval/replay.py` (new):
+- `backend/eval/wandb_report.py` (new):
+- `tests/test_wandb_report.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -34,19 +44,24 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 26%]
-    ........................................................................ [ 39%]
-    ........................................................................ [ 52%]
-    ........................................................................ [ 65%]
-    ........................................................................ [ 78%]
-    ........................................................................ [ 91%]
-    .................................................                        [100%]
-    553 passed in 24.31s
+    ........................................................................ [  8%]
+    ........................................................................ [ 16%]
+    ........................................................................ [ 24%]
+    ........................................................................ [ 32%]
+    ........................................................................ [ 40%]
+    ........................................................................ [ 48%]
+    ........................................................................ [ 56%]
+    ........................................................................ [ 64%]
+    ........................................................................ [ 72%]
+    ........................................................................ [ 80%]
+    ........................................................................ [ 88%]
+    ........................................................................ [ 96%]
+    ............................                                             [100%]
+    892 passed in 53.00s
 
     $ ruff check .
     All checks passed!
@@ -63,6 +78,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
+- `backend/cli_experiments.py`: te experiments, te unfiltered, te clips, te
+  spark-errors and te regress.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -95,8 +117,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -113,6 +137,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   true, saved as time ranges.
 - `backend/labeltool/images.py`: the labelling tool for generated images, for
   Experiment 2.
+- `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
+- `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
+  and the SVG charts.
+- `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
+  its price.
+- `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
+  reads.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -126,11 +157,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 553 tests, all offline; none calls a paid API.
+- `tests/`: 892 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v77 adds the labelling tools' tests.
+Stage v77 adds te replay: a run's pending clips of eval/plan.json replayed into the
+plan's logs, its threshold calibrated on its own validation clips before the test
+clips.
 
 ## Privacy and policy
 

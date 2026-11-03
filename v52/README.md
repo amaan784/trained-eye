@@ -11,18 +11,29 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v52 (M2): Teach session and upload tests
+## Build stage v52 (M2): iOS: glasses connection and the mock device
 
-Tests for the session (both questions and their timeouts, answers that do not fit, a
-refused request, a failed run, a run that fails before the spend question, and a stop
-that answers no, refuses the next call or cuts a rate-limit backoff short) and for the
-parser and the upload's refusals, against the fake Meta API. The full run, a
-correction and the $15 and frame-shape limits are tested over HTTP with the routes.
+ios/TrainedEye/Glasses/GlassesConnection.swift registers the app with the Meta AI app,
+which calls back through the app's URL scheme, and follows the paired glasses as
+Meta's CameraAccess and BirdSpotter samples do: it listens to each device's link,
+compatibility and state, and reports the first connected pair (else the first paired
+one) with its name, link and battery, which stays unknown while DAT reports 0. It says
+when the glasses need a firmware update and can open that update, or the update of the
+DAT app on the glasses. ios/TrainedEye/Glasses/MockGlasses.swift, in Debug builds
+only, drives DAT's Mock Device Kit: it pairs the "Meta Glasses" model, powers it on,
+unfolds and dons it, and sets its camera feed before any stream starts, to
+Resources/mock_feed.mp4 when the app has it, else the iPhone's back camera. Fold,
+unfold and a touchpad tap let the simulator check that watching comes back after a
+fold and is left alone while paused. ios/make_mock_feed.py makes that clip with Pillow
+and ffmpeg: a drawn washer display counting down to "End", HEVC tagged hvc1, 360x640,
+10 fps, 16 seconds.
 
 Files added or changed in this stage:
 
-- `tests/test_teach_session.py` (new): tests
-- `tests/test_teach_upload.py` (new): tests
+- `ios/TrainedEye/Glasses/GlassesConnection.swift` (new):
+- `ios/TrainedEye/Glasses/MockGlasses.swift` (new):
+- `ios/TrainedEye/Resources/mock_feed.mp4` (new):
+- `ios/make_mock_feed.py` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -35,19 +46,22 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 27%]
-    ........................................................................ [ 41%]
-    ........................................................................ [ 55%]
-    ........................................................................ [ 69%]
-    ........................................................................ [ 82%]
-    ........................................................................ [ 96%]
-    .................                                                        [100%]
-    521 passed in 21.24s
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
+    ........................................................................ [ 28%]
+    ........................................................................ [ 38%]
+    ........................................................................ [ 47%]
+    ........................................................................ [ 57%]
+    ........................................................................ [ 66%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 95%]
+    ...................................                                      [100%]
+    755 passed in 34.79s
 
     $ ruff check .
     All checks passed!
@@ -64,6 +78,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -73,6 +91,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   paid call, the read-back, progress lines and timeouts.
 - `backend/teach_upload.py`: the phone's teach upload: a multipart parser, the input
   checks, the saved capture and the estimate.
+- `backend/teach_api.py`: the teach routes for the phone: /teach/start, /teach/status
+  and /teach/answer, behind SERVER_TOKEN.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
 - `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
@@ -81,6 +101,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   (real, synthetic or mixed, with a validation split and volume paths).
 - `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
   recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
+- `backend/training/export.py`: the Modal app that merges a trained adapter and checks
+  the merged model's answers.
+- `backend/inference/modal_serve.py`: the Modal app that serves the merged model with
+  vLLM behind STUDENT_API_KEY.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -90,8 +114,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -116,12 +142,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 521 tests, all offline; none calls a paid API.
+- `tests/`: 755 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v53 adds the teach routes the phone calls: start, status and answer, behind a
-token.
+Stage v53 adds the glasses camera: a DAT session that comes back by itself after a
+fold or a link drop, the camera permission asked first, and a change of stream size.
 
 ## Privacy and policy
 

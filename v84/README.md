@@ -11,16 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v84 (M3): Spark as a scorer
+## Build stage v84 (M4): Playground: clips, results and media
 
-backend/eval/spark_scorer.py lets watch mode use Muse Spark itself on every frame (yes
-1.0, no 0.0, unsure 0.5), through the cache and the ledger, and records the latency of
-the frames it actually sent.
+The web playground starts with backend/playground/data.py, which reads local results
+when a page asks and never calls Meta or writes a file. A clip is a folder
+data/playground/clips/<name>/ with the frame log te watch writes, the video and
+optional labels; clip_timeline turns it into each skill's threshold, [t, p] points and
+alerts, each alert with the spoken text from the log or else from the skill's spec.
+results() lists the evaluation's SVG charts and results.md. media_path is the only way
+to a file: clip videos, keyframes, generated variations, the provided keyframes and
+the charts, each a plain name inside its folder. The public copy serves no generated
+image and no original keyframe, keyframes only from a te blur folder's sources.json,
+and a video only when its blur record matches it. .gitignore now leaves out
+eval/clips/ and eval/galleries/, as both hold real footage.
 
 Files added or changed in this stage:
 
-- `backend/eval/spark_scorer.py` (new):
-- `tests/test_spark_scorer.py` (new): tests
+- `.gitignore` (changed): keeps secrets, local data and outputs out of git
+- `backend/playground/data.py` (new):
+- `tests/test_playground_data.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -33,20 +42,25 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 11%]
-    ........................................................................ [ 23%]
-    ........................................................................ [ 35%]
-    ........................................................................ [ 47%]
-    ........................................................................ [ 59%]
-    ........................................................................ [ 71%]
-    ........................................................................ [ 83%]
-    ........................................................................ [ 95%]
-    ..............................                                           [100%]
-    606 passed in 23.36s
+    ........................................................................ [  7%]
+    ........................................................................ [ 15%]
+    ........................................................................ [ 22%]
+    ........................................................................ [ 30%]
+    ............................................s........................... [ 37%]
+    ........................................................................ [ 45%]
+    ........................................................................ [ 52%]
+    ........................................................................ [ 60%]
+    ........................................................................ [ 67%]
+    ........................................................................ [ 75%]
+    ........................................................................ [ 82%]
+    ........................................................................ [ 90%]
+    ........................................................................ [ 97%]
+    ......................                                                   [100%]
+    957 passed, 1 skipped in 66.84s (0:01:06)
 
     $ ruff check .
     All checks passed!
@@ -63,6 +77,15 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
+- `backend/cli_experiments.py`: te experiments, te unfiltered, te clips, te
+  spark-errors and te regress.
+- `backend/cli_replay.py`: te replay: the recorded test clips through watch mode.
+- `backend/cli_release.py`: the M4 release commands.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -95,8 +118,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -116,6 +141,14 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
 - `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
   and the SVG charts.
+- `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
+  its price.
+- `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
+  reads.
+- `backend/regenerate.py`: the prompt manifests and regenerating images from them.
+- `backend/release/model_card.py`: the Hugging Face model card.
+- `backend/release/package.py`: the release folder (base license, blurred keyframes),
+  the upload and the collection.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -129,11 +162,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 606 tests, all offline; none calls a paid API.
+- `tests/`: 957 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v85 adds Spark's error rate and the unfiltered arm, for Experiment 2.
+Stage v85 adds how each taught skill was built, for the playground: the read-back, the
+keyframes, SAM's box on a teaching frame, the labelled training wall and the keyframes
+a visitor may pick.
 
 ## Privacy and policy
 

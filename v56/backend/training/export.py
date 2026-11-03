@@ -15,12 +15,17 @@ every comparison. Pass --load-in-4bit for both the untuned NF4 baseline and its 
 use bf16 for both the untuned baseline and LoRA or full checkpoint." Meta evaluated its QLoRA
 adapters on an NF4 base only. The merge is bf16, so the default reference is bf16 base +
 adapter; --reference nf4 compares with the NF4 base + adapter that training saw.
+
+The result's `seconds` is the remote call timed here (so the container start is in it), for
+te export's Modal ledger (backend/training/gpu_ledger.py); a failed call still writes the
+run, ok false and its seconds before the error goes on.
 """
 
 from __future__ import annotations
 
 import json
 import re
+import time
 from pathlib import Path
 
 import modal
@@ -205,10 +210,20 @@ def main(run: str, bundle: str = "", limit: int = 50, reference: str = "bf16",
         raise SystemExit(f"no examples in the bundle's {split}.jsonl to compare")
     base = config.DEFAULT_MODELS["student_base"]
     config.check_model_allowed(base)
-    out = export.remote(run, base, config.STUDENT_BASE_REVISION, examples, reference=reference)
+    start = time.monotonic()
+    try:
+        out = export.remote(run, base, config.STUDENT_BASE_REVISION, examples,
+                            reference=reference)
+    except BaseException:
+        if result:  # the GPU time it took, for te export's ledger
+            Path(result).write_text(json.dumps({"run": run, "ok": False, "seconds": round(
+                time.monotonic() - start, 1)}, indent=1) + "\n")
+        raise
+    seconds = round(time.monotonic() - start, 1)
     before = [yes_no(text) for text in out.pop("reference_generations")]
     after = [yes_no(text) for text in out.pop("merged_generations")]  # raw text never kept
-    summary = {"run": run, "split": split, "reference": f"{reference} base + adapter", **out,
+    summary = {"run": run, "split": split, "reference": f"{reference} base + adapter",
+               "seconds": seconds, **out,
                **compare([e["id"] for e in examples],
                          [e["messages"][-1]["content"] for e in examples], before, after)}
     print(json.dumps(summary))

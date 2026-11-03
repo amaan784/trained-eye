@@ -4,13 +4,18 @@
   -> region of interest (SAM 3.1) -> synthetic variations (Muse Image)
   -> labels (Muse Spark) -> Axolotl dataset
 
+The dataset's real examples are the keyframes and, for each keyframe SAM found a box in,
+the keyframe cropped to that box (roi.crop_box), labelled like the keyframe and recorded
+with the keyframe's hash and the box in the dataset's provenance index.
+
 Every step writes its output under data/skills/<skill>/ and every Meta call is cached,
 so a rerun after a crash or a change further down costs nothing for the steps that
 already ran.
 
 If training on Meta model outputs is not allowed (settings.train_on_model_outputs is
 False, see SPEC.md "Fallback"), generated images and Spark labels are still produced
-for evaluation, but the dataset holds only real frames with the user's own labels.
+for evaluation, but the dataset holds only real frames with the user's own labels (and
+no crops, as SAM chose their pixels).
 """
 
 from __future__ import annotations
@@ -28,11 +33,15 @@ from backend.dataengine import dataset, labels, roi, synth
 from backend.dataengine.keyframes import load_frames, select_keyframes
 from backend.meta.cache import sha256_hex
 from backend.meta.client import EXTENSIONS, MetaClient, sniff_mime, wav_duration_s
-from backend.meta.ledger import token_cost, unit_cost
+from backend.meta.ledger import (
+    IMAGE_TOKENS,  # noqa: F401 - the guess, still importable from here
+    image_tokens,
+    token_cost,
+    unit_cost,
+)
 from backend.skills.compiler import compile_skill
 from backend.skills.spec import SkillSpec, check_name, read_back
 
-IMAGE_TOKENS = 1500  # guess per image for estimates only
 LABEL_WORDS = {"yes": "yes", "y": "yes", "true": "yes", "no": "no", "n": "no", "false": "no"}
 KEYFRAME_FILE = re.compile(r"kf_\d{2}(?:_[0-9a-f]{8})?\.(?:jpg|png|webp)")  # written here
 MIN_KEYFRAMES = 20  # SPEC asks for 20 to 30; select_keyframes keeps at most 24
@@ -56,20 +65,23 @@ class TeachOptions:
 def estimate(client: MetaClient, *, audio_s: float, keyframes: int, positives: int,
              negatives: int) -> dict[str, float]:
     """Cost parts and their total, before cache hits. "at_most" is the total if every
-    label is cut off and asked again with the larger budget."""
+    label is cut off and asked again with the larger budget. Images are priced at the
+    input tokens per image measured from the ledger (ledger.image_tokens; the guess,
+    IMAGE_TOKENS, before there are such calls)."""
     s = client.settings
     images = positives + negatives
     label_price = s.price(s.model("labeler"))
+    per_image = image_tokens(s, client.ledger).per_image
     parts = {
         "transcribe": unit_cost(s.price(s.model("transcribe")), audio_s=audio_s),
-        "compile": token_cost(s.price(s.model("compiler")), 3 * IMAGE_TOKENS + 900, 4096),
+        "compile": token_cost(s.price(s.model("compiler")), 3 * per_image + 900, 4096),
         "sam": unit_cost(s.price(s.model("sam")), images=keyframes),
         "images": unit_cost(s.price(s.model("image")), images=images),
         "labels": (keyframes + images)
-        * token_cost(label_price, IMAGE_TOKENS + 250, labels.MAX_TOKENS[0]),
+        * token_cost(label_price, per_image + 250, labels.MAX_TOKENS[0]),
     }
     parts["total"] = sum(parts.values())
-    retries = (keyframes + images) * sum(token_cost(label_price, IMAGE_TOKENS + 250, m)
+    retries = (keyframes + images) * sum(token_cost(label_price, per_image + 250, m)
                                          for m in labels.MAX_TOKENS[1:])
     parts["at_most"] = parts["total"] + retries
     return parts
@@ -221,8 +233,10 @@ def run_teach(
                       progress=_progress(say, "sam", len(keyframes)))
     roi.save(rois, root / "roi.json")
     report["roi_frames_with_box"] = sum(1 for r in rois if r.best)
+    report["roi_frames_without_box"] = len(rois) - report["roi_frames_with_box"]
     say(f"region of interest: {report['roi_frames_with_box']} of {len(rois)} keyframes "
-        "with a box")
+        "with a box" + (f" ({report['roi_frames_without_box']} without one get no crop)"
+                        if report["roi_frames_without_box"] else ""))
 
     # 5. synthetic variations
     by_hash = {sha256_hex(data): data for data in keyframes.values()}
@@ -273,10 +287,12 @@ def run_teach(
             f"({len(examples)}), so it cannot teach a yes/no check. Spark's verdicts per kind "
             f"are in {root / 'label_stats.json'}")
         return report
-    manifest = dataset.write_dataset(examples, root / "dataset", f"{opts.skill}-teach")
+    manifest = dataset.write_dataset(examples, root / "dataset", f"{opts.skill}-teach",
+                                     system_in_user=client.settings.system_in_user)
     report["dataset"] = manifest
-    say(f"dataset: {manifest['examples']} examples ({answers['yes']} yes, {answers['no']} no) "
-        f"-> {root / 'dataset'}")
+    report["crop_examples"] = sum(e.provenance.get("kind") == "crop" for e in examples)
+    say(f"dataset: {manifest['examples']} examples ({answers['yes']} yes, {answers['no']} no; "
+        f"{report['crop_examples']} of them keyframes cropped to SAM's box) -> {root / 'dataset'}")
     if min(answers.values()) < MIN_CLASS_SHARE * len(examples):
         report["warning"] = "unbalanced dataset"
         say(f"warning: unbalanced dataset, under {MIN_CLASS_SHARE:.0%} of the examples say "
@@ -286,7 +302,10 @@ def run_teach(
 
 def _examples(spec: SkillSpec, root: Path, rows: list[dict], kept: list[dict],
               allow_model_outputs: bool) -> list[dataset.Example]:
+    """The dataset: the real keyframes with an answer, each followed by its crop to SAM's
+    box when roi.json has one (not in the fallback), then the generated images kept."""
     out = []
+    boxes = _boxes(root) if allow_model_outputs else {}
     for row in rows:
         if row["source"] != "real":
             continue
@@ -297,9 +316,35 @@ def _examples(spec: SkillSpec, root: Path, rows: list[dict], kept: list[dict],
             answer = row["spark_label"] if allow_model_outputs else None
         if answer in ("yes", "no"):
             out.append(_example(spec, root, row, answer))
+            crop = _crop_example(out[-1], boxes.get(sha256_hex(out[-1].image)))
+            out += [crop] if crop else []
     if allow_model_outputs:
         out += [_example(spec, root, row, row["label"]) for row in kept]
     return out
+
+
+def _boxes(root: Path) -> dict[str, dict]:
+    """{keyframe sha256: its roi.json entry} for the keyframes SAM found a box in."""
+    path = root / "roi.json"
+    frames = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else []
+    return {f["keyframe_sha256"]: f for f in frames if f.get("best")}
+
+
+def _crop_example(keyframe: dataset.Example, frame: dict | None) -> dataset.Example | None:
+    """The keyframe cropped to its best box, labelled like it; None without a box, or when
+    the crop would be the whole frame (no new view)."""
+    if frame is None:
+        return None
+    box = tuple(frame["best"]["box"])
+    crop = roi.crop_box(box, (frame["width"], frame["height"]))
+    if crop == (0, 0, frame["width"], frame["height"]):
+        return None
+    return dataset.Example(
+        id=f"{keyframe.id}-crop", image=roi.crop_image(keyframe.image, crop),
+        answer=keyframe.answer, source=keyframe.source, skill=keyframe.skill,
+        positive=keyframe.positive, negatives=list(keyframe.negatives),
+        provenance={"kind": "crop", "keyframe_sha256": frame["keyframe_sha256"],
+                    "box": [round(float(v), 2) for v in box], "crop": list(crop)})
 
 
 def _example(spec: SkillSpec, root: Path, row: dict, answer: str) -> dataset.Example:

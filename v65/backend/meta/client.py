@@ -7,6 +7,10 @@ Each call runs the same steps:
   4. send, retrying 429, 5xx and timeouts with backoff (a 4xx is never retried)
   5. record the actual cost from the reported usage, check the output, cache it
 
+The check in step 3 reserves the estimate in the ledger until step 5 records the call (or
+the call fails before it), so calls running at the same time in other threads or
+processes count against the caps together.
+
 Spend is counted conservatively: a retried attempt that may have reached the server
 (a read timeout, a 500/502/504) is charged at the estimate, and so is a reply that
 cannot be priced or a call stopped with Ctrl+C. The caps are checked again before each
@@ -42,14 +46,22 @@ import httpx
 
 from backend.config import SECRET_NAMES, Settings, check_model_allowed
 from backend.meta.cache import Cache, cache_key
-from backend.meta.ledger import NO_SKILL, BudgetExceeded, Entry, Ledger, token_cost, unit_cost
+from backend.meta.ledger import (
+    IMAGE_TOKENS,
+    NO_SKILL,
+    BudgetExceeded,
+    Entry,
+    Ledger,
+    token_cost,
+    unit_cost,
+)
 
 RETRY_STATUSES = frozenset({408, 429})
 # Statuses after which the server may already have done (and billed) the work.
 MAYBE_PROCESSED_STATUSES = frozenset({500, 502, 504})
 TRANSIENT_ERRORS = (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)
 NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout)
-IMAGE_TOKENS_GUESS = 1500  # per image, for estimates only; actual cost uses reported usage
+IMAGE_TOKENS_GUESS = IMAGE_TOKENS  # per image, for the cap check; cost uses reported usage
 
 
 class MetaAPIError(RuntimeError):
@@ -136,7 +148,8 @@ def _messages(input: Any, system: str | None) -> list[dict]:
     return messages
 
 
-def _estimate_input_tokens(messages: list[dict]) -> int:
+def _input_counts(messages: list[dict]) -> tuple[int, int]:
+    """(estimated text tokens, images) of a request's messages."""
     images = 0
     chars = 0
     for m in messages:
@@ -147,7 +160,7 @@ def _estimate_input_tokens(messages: list[dict]) -> int:
                 images += 1
             else:
                 chars += len(str(p.get("text", "")))
-    return chars // 3 + 50 + images * IMAGE_TOKENS_GUESS
+    return chars // 3 + 50, images
 
 
 def token_counts(usage: dict) -> tuple[int, int]:
@@ -196,6 +209,52 @@ def parse_sse(body: str) -> list[dict]:
     if data:
         events.append("\n".join(data))
     return [json.loads(e) for e in events if e.strip() and e.strip() != "[DONE]"]
+
+
+def sam_stream_text(events: list[dict]) -> str:
+    """The text of a streamed SAM response's one output-text lane, as Meta's SAM 3
+    protocol (meta-models/meta-sam, protocol/sam3.md) reads it: deltas of one lane (an
+    item_id, output_index, content_index), finished by response.output_text.done or a
+    response.content_part.done with an output_text part, whose text must equal the deltas
+    (or is the whole text when there were none). OutputError for another lane, a
+    mismatch, a refusal, a failure or no completion. Lenient on one point: a response that
+    completes without the done event still gives its deltas. Empty text is a valid answer
+    (SAM found nothing)."""
+    lane, deltas, final, completed = None, [], None, None
+    for event in events:
+        kind = event.get("type", "")
+        if kind == "response.output_text.delta" or kind == "response.output_text.done" or (
+                kind == "response.content_part.done"
+                and (event.get("part") or {}).get("type") == "output_text"):
+            this = (event.get("item_id"), event.get("output_index"), event.get("content_index"))
+            if lane is None:
+                lane = this
+            elif this != lane:
+                raise OutputError("SAM interleaved more than one output text lane")
+            if kind == "response.output_text.delta":
+                if final is not None:
+                    raise OutputError("SAM sent text after finishing its output")
+                deltas.append(event.get("delta") or "")
+                continue
+            text = event.get("text") if kind.endswith("output_text.done") else (
+                (event.get("part") or {}).get("text"))
+            if not isinstance(text, str) or (final is not None and text != final):
+                raise OutputError("SAM finished its output twice with different text")
+            if deltas and text != "".join(deltas):
+                raise OutputError("SAM's finished text does not match what it streamed")
+            final = text
+        elif "refusal" in kind or (kind == "response.content_part.done"
+                                   and (event.get("part") or {}).get("type") == "refusal"):
+            raise OutputError("SAM refused the request")
+        elif kind in ("response.failed", "error", "response.incomplete"):
+            raise OutputError(f"SAM stream ended with {kind}")
+        elif kind == "response.completed":
+            completed = event.get("response") or {}
+    if completed is None:
+        raise OutputError("SAM stream did not complete")
+    if final is not None:
+        return final
+    return "".join(deltas) if lane is not None else responses_text(completed)
 
 
 def responses_text(response: dict) -> str:
@@ -339,12 +398,13 @@ class MetaClient:
         cost: Callable[[dict], float],
         check: Callable[[dict], Any],
         cache_only: bool = False,
+        inputs: tuple[int, int] = (0, 0),
     ) -> tuple[dict, dict[str, bytes], CallInfo, Any]:
         """Shared cache / ledger / send logic.
 
         `check(response)` returns the parsed output or raises OutputError. Returns
         (response, blobs, info, parsed). With `cache_only`, a miss raises CacheMiss
-        instead of sending.
+        instead of sending. `inputs` (estimated text tokens, images) goes in the entry.
         """
         check_model_allowed(model)
         key = cache_key(model, endpoint, key_request)
@@ -360,8 +420,18 @@ class MetaClient:
             raise CacheMiss(key)
 
         self.settings.secret("MODEL_API_KEY")  # fail before touching the ledger
-        self.ledger.check(estimate_usd, skill)
-        entry = Entry(model, endpoint, estimate_usd, 0.0, skill=skill or NO_SKILL, cache_key=key)
+        entry = Entry(model, endpoint, estimate_usd, 0.0, skill=skill or NO_SKILL, cache_key=key,
+                      input_text_tokens=inputs[0], input_images=inputs[1])
+        self.ledger.check(estimate_usd, skill)  # reserves the estimate until record()
+        try:
+            return self._paid(entry, key, endpoint, model, skill, estimate_usd, send, cost,
+                              check)
+        finally:
+            self.ledger.release()  # a call that failed before record(); free after it
+
+    def _paid(self, entry: Entry, key: str, endpoint: str, model: str, skill: str | None,
+              estimate_usd: float, send, cost, check) -> tuple[dict, dict, CallInfo, Any]:
+        """Send a call that passed the caps, record what it cost, check and cache it."""
         tally = _Tally()
         tally.guard = lambda: self.ledger.check(estimate_usd * (1 + tally.maybe_billed), skill)
         try:
@@ -394,7 +464,7 @@ class MetaClient:
             entry.actual_usd = cost(response) if usage else estimate_usd
             if not math.isfinite(entry.actual_usd) or entry.actual_usd < 0:
                 raise ValueError("not a cost")  # nan or a negative would switch the caps off
-        except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
+        except Exception:  # noqa: BLE001 - any unpriceable reply is charged the estimate
             entry.actual_usd = estimate_usd
             usage = {**usage, "unpriced": True}
         if not usage:
@@ -454,7 +524,8 @@ class MetaClient:
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         price = self.settings.price(model)
-        estimate = token_cost(price, _estimate_input_tokens(messages), max_tokens)
+        inputs = _input_counts(messages)
+        estimate = token_cost(price, inputs[0] + inputs[1] * IMAGE_TOKENS_GUESS, max_tokens)
 
         def send(tally):
             return self._json(self._send("POST", endpoint, tally, json=payload)), {}
@@ -489,7 +560,7 @@ class MetaClient:
 
         _, _, info, data = self._call(endpoint=endpoint, model=model, key_request=payload,
                                       skill=skill, estimate_usd=estimate, send=send, cost=cost,
-                                      check=check, cache_only=cache_only)
+                                      check=check, cache_only=cache_only, inputs=inputs)
         details = info.usage.get("completion_tokens_details")
         reasoning = details.get("reasoning_tokens") if isinstance(details, dict) else None
         return StructuredResult(data, info, reasoning)
@@ -562,6 +633,7 @@ class MetaClient:
                 ],
             }],
             "stream": True,
+            "metadata": {"include_confidence": "true"},  # a c= score on each box (protocol)
         }
         price = self.settings.price(model)
 
@@ -572,16 +644,9 @@ class MetaClient:
                     events = parse_sse(resp.text)
                 except json.JSONDecodeError:
                     raise OutputError("SAM stream is not readable") from None
-                text, final, last = [], None, None
-                for event in events:
-                    last = event.get("type")
-                    if last == "response.output_text.delta":
-                        text.append(event.get("delta", ""))
-                    elif last == "response.completed":
-                        final = event.get("response") or {}
-                if final is None:
-                    raise OutputError(f"SAM stream did not complete (last event: {last})")
-                out = "".join(text) or responses_text(final)
+                out = sam_stream_text(events)
+                final = next((e.get("response") or {} for e in events
+                              if e.get("type") == "response.completed"), {})
                 body = {"text": out, "usage": final.get("usage") or {}}
             else:
                 raw = self._json(resp)
@@ -591,9 +656,9 @@ class MetaClient:
             return _with_usage((body, {}), {"images": 1})
 
         def check(r):
-            if not r["text"].strip():
-                raise OutputError("SAM returned no output")
-            return r["text"]
+            if not isinstance(r.get("text"), str):
+                raise OutputError("SAM returned no output text")
+            return r["text"]  # empty: SAM found nothing, which is an answer
 
         _, _, info, text = self._call(
             endpoint=endpoint, model=model, key_request=payload, skill=skill,

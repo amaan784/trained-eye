@@ -15,10 +15,9 @@ from PIL import Image, PngImagePlugin
 
 from backend.config import load_settings
 from backend.dataengine.keyframes import load_frames, select_keyframes
-from backend.dataengine.synth import TooManyFailures
 from backend.meta.client import MetaAPIError, MetaClient
 from backend.skills.compiler import compile_skill
-from backend.teach import TeachOptions, estimate, normalise_labels, run_teach
+from backend.teach import TeachOptions, estimate, run_teach
 
 PROVENANCE = "fake-c2pa: made with Muse Image"
 
@@ -49,14 +48,12 @@ def chat(content: dict) -> dict:
 
 
 class FakeMeta:
-    def __init__(self, reject_edit=lambda prompt: False, refuse_label=lambda n: False,
-                 answer=lambda label, real: label):
+    def __init__(self, reject_edit=lambda prompt: False, refuse_label=lambda n: False):
         self.calls = {}
         self.edits = 0
         self.returned = []  # every image the fake editor sent back, as sent
         self.reject_edit = reject_edit
         self.refuse_label = refuse_label
-        self.answer = answer  # overrides the colour-read label: (label, real frame) -> label
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path.removeprefix("/v1")
@@ -88,14 +85,12 @@ class FakeMeta:
         image_url = body["messages"][1]["content"][0]["image_url"]["url"]
         img = Image.open(io.BytesIO(base64.b64decode(image_url.split(",", 1)[1]))).convert("RGB")
         r, g, _ = img.getpixel((32, 32))
-        real = False
         if g > 150 and r < 80:
             label = "yes" if self.calls[path] % 9 else "no"  # an occasional disagreement
         elif r > 150 and g < 80:
             label = "no"
         else:
-            label, real = "no", True  # real keyframes: the washer is mid-cycle
-        label = self.answer(label, real)
+            label = "no"  # real keyframes: the washer is mid-cycle
         return httpx.Response(200, json=chat({"label": label, "reason": "fake"}))
 
 
@@ -351,101 +346,3 @@ def test_fallback_without_labels_stops_before_any_paid_call(tmp_path):
     assert "needs your own labels" in report["stopped"]
     assert fake.calls == {} and client.ledger.entries() == []
     assert any((tmp_path / "skills" / "washer_done" / "keyframes").iterdir())
-
-
-def teach(tmp_path, client, **kw):
-    said = []
-    opts = TeachOptions(skill="washer_done", clip=kw.pop("clip", None) or clip(tmp_path / "clip"),
-                        request="let me know when the washer says done",
-                        **{"positives": 6, "negatives": 6, **kw})
-    report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: True,
-                       say=said.append)
-    return report, said
-
-
-def test_a_one_class_dataset_stops_instead_of_being_written(tmp_path):
-    report, _ = teach(tmp_path, client_for(tmp_path, FakeMeta(answer=lambda label, real: "no")))
-    assert "only 'no' examples" in report["stopped"] and report["label_stats"]["kept"] == 6
-    assert not (tmp_path / "skills/washer_done/dataset").exists()
-
-
-def test_the_dataset_line_shows_both_answers(tmp_path):
-    report, said = teach(tmp_path, client_for(tmp_path, FakeMeta()))
-    counts = report["dataset"]["counts"]
-    yes = sum(n for k, n in counts.items() if k.endswith("/yes"))
-    assert any(line.startswith(f"dataset: {report['dataset']['examples']} examples ({yes} yes, ")
-               for line in said)
-
-
-def test_spark_unsure_on_a_real_frame_leaves_it_out(tmp_path):
-    fake = FakeMeta(answer=lambda label, real: "unsure" if real else label)
-    report, _ = teach(tmp_path, client_for(tmp_path, fake))
-    assert not any("/real/" in k for k in report["dataset"]["counts"])
-
-
-def test_fallback_labels_must_say_both_yes_and_no(tmp_path):
-    fake = FakeMeta()
-    client = fallback_client(tmp_path, fake)
-    first, _ = teach(tmp_path, client)
-    assert "yes or no (both are needed)" in first["stopped"]
-    names = keyframe_names(tmp_path)
-    report, _ = teach(tmp_path, client, clip=tmp_path / "clip",
-                      real_labels=dict.fromkeys(names[:5], "no"))
-    assert "all 5 say 'no'" in report["stopped"] and fake.calls == {}
-
-
-def test_a_new_spec_removes_the_old_dataset(tmp_path):
-    fake = FakeMeta()
-    client = client_for(tmp_path, fake)
-    teach(tmp_path, client)
-    assert (tmp_path / "skills/washer_done/dataset/washer_done-teach.jsonl").is_file()
-    opts = TeachOptions(skill="washer_done", clip=tmp_path / "clip", correction="the lid light",
-                        request="let me know when the washer says done")
-    report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: False,
-                       say=lambda s: None)
-    assert report["stopped"] == "not confirmed"
-    assert not (tmp_path / "skills/washer_done/dataset").exists()
-
-
-def test_the_skill_folder_is_never_read_as_the_clip_and_only_keyframes_are_cleaned(tmp_path):
-    client = fallback_client(tmp_path, FakeMeta())
-    teach(tmp_path, client)
-    kf_dir = tmp_path / "skills/washer_done/keyframes"
-    with pytest.raises(ValueError, match="inside this skill's own folder"):
-        teach(tmp_path, client, clip=kf_dir)
-    (kf_dir / "notes.txt").write_text("frame 3 is the best")
-    (kf_dir / "kf_extra").mkdir()
-    (kf_dir / "kf_00_deadbeef.jpg").write_bytes(b"from an earlier take")
-    teach(tmp_path, client, clip=tmp_path / "clip")
-    assert (kf_dir / "notes.txt").is_file() and (kf_dir / "kf_extra").is_dir()
-    assert not (kf_dir / "kf_00_deadbeef.jpg").exists()
-
-
-def test_contradicting_label_entries_are_refused():
-    with pytest.raises(ValueError, match="opposite of an earlier entry"):
-        normalise_labels({"kf_00_1a2b3c4d.jpg": "yes", "keyframes/kf_00_1a2b3c4d.jpg": "no"},
-                         ["kf_00_1a2b3c4d.jpg"])
-    same = normalise_labels({"kf_00_1a2b3c4d.jpg": "yes", "keyframes/kf_00_1a2b3c4d.jpg": "Y"},
-                            ["kf_00_1a2b3c4d.jpg"])
-    assert same == {"kf_00_1a2b3c4d.jpg": "yes"}
-
-
-def test_labels_so_far_are_saved_when_labelling_stops(tmp_path):
-    fake = FakeMeta(refuse_label=lambda n: n > 1)  # every label after the compile call
-    with pytest.raises(TooManyFailures, match="labels failed so far") as err:
-        teach(tmp_path, client_for(tmp_path, fake))
-    rows = [json.loads(x) for x in
-            (tmp_path / "skills/washer_done/labels.jsonl").read_text().splitlines()]
-    assert rows and all(r["label_error"] for r in rows)
-    assert str(err.value).startswith(f"{len(rows)} of ")
-
-
-def test_a_short_clip_warns_about_few_keyframes(tmp_path):
-    _, said = teach(tmp_path, fallback_client(tmp_path, FakeMeta()), clip=clip(tmp_path / "c", 8))
-    assert any(line.startswith("warning: fewer keyframes") for line in said)
-
-
-def test_estimate_prices_the_label_retry_as_an_upper_bound(tmp_path):
-    client = client_for(tmp_path, FakeMeta())
-    parts = estimate(client, audio_s=5, keyframes=24, positives=150, negatives=150)
-    assert parts["at_most"] > parts["total"] + parts["labels"]  # 4096 tokens after 1024

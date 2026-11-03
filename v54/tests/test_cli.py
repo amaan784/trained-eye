@@ -1,5 +1,6 @@
-"""CLI tests for the commands that talk to the Meta API. The client is swapped for one
-backed by httpx.MockTransport, so nothing is sent or billed."""
+"""CLI tests for the commands in backend/cli.py (te spend, models, api-smoke, serve,
+ws-selftest, teach), and the fixtures and helpers the other CLI tests import from here. The
+client is swapped for one backed by httpx.MockTransport, so nothing is sent or billed."""
 
 import io
 import json
@@ -330,6 +331,19 @@ def test_serve_prints_an_address_the_phone_can_use_and_keeps_server_logs(monkeyp
     assert "ws://<this Mac's Wi-Fi IP>:9000/ws" in capsys.readouterr().out
 
 
+def test_serve_says_whether_the_phone_can_teach(env, monkeypatch, capsys):
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: None)
+    monkeypatch.setenv("SERVER_TOKEN", "")
+    cli.main(["serve"])
+    assert "teaching from the phone: off (set SERVER_TOKEN" in capsys.readouterr().out
+    monkeypatch.setenv("SERVER_TOKEN", "t0ken-never-printed")
+    cli.main(["serve"])
+    out = capsys.readouterr().out
+    assert "teaching from the phone: on" in out and "t0ken-never-printed" not in out
+
+
 def test_server_log_lines_reach_the_console_handler(capsys):
     import logging.config
 
@@ -377,129 +391,6 @@ def fake_modal(monkeypatch, result=None, code=0):
 TRAIN = ["train", "--skills", "washer_done", "--run", "exp1-mixed"]
 
 
-def test_train_needs_a_smoke_timing_before_a_real_run(env, monkeypatch, capsys):
-    taught(env)
-    runs = fake_modal(monkeypatch)
-    assert cli.main(TRAIN) == 2
-    assert "run the same command with --smoke first" in capsys.readouterr().err and runs == []
-
-
-def test_train_smoke_asks_runs_modal_and_saves_the_timing(env, monkeypatch, capsys):
-    taught(env)
-    runs = fake_modal(monkeypatch, {"seconds": 900.0, "train_runtime": 60.0,
-                                    "train_samples_per_second": 0.5, "ok": True})
-    prompts = answer(monkeypatch, "y")
-    assert cli.main([*TRAIN, "--smoke"]) == 0
-    assert prompts == ["Run the smoke on Modal? [y/N] "]
-    [command] = runs
-    assert command[:3] == ["modal", "run", "backend/training/modal_train.py"]
-    assert command[-1] == "--smoke" and "--bundle" in command
-    tags = command[command.index("--tags") + 1].split(",")
-    assert {"exp:exp1", "skills:washer_done", "mix:mixed", "seed:42",
-            "commit:abc1234"} <= set(tags) and any(t.startswith("examples:") for t in tags)
-    timing = json.loads((env / "data/train/smoke-timing.json").read_text())
-    assert timing["train_samples_per_second"] == 0.5
-    manifest = json.loads((env / "data/train/exp1-mixed/manifest.json").read_text())
-    assert manifest["image_root"] == "/vol/bundles/exp1-mixed"
-    out = capsys.readouterr().out
-    assert "bundle exp1-mixed:" in out and "smoke timing saved" in out
-
-
-def test_train_prices_the_real_run_from_the_smoke_and_asks(env, monkeypatch, capsys):
-    taught(env)
-    (env / "data/train").mkdir(parents=True)
-    (env / "data/train/smoke-timing.json").write_text(json.dumps(
-        {"seconds": 900.0, "train_runtime": 60.0, "train_samples_per_second": 0.5}))
-    runs = fake_modal(monkeypatch, {"seconds": 990.0, "ok": True})
-    assert cli.main([*TRAIN, "--estimate-only"]) == 0
-    out = capsys.readouterr().out
-    # setup 840 s + 40 examples / 0.5 per s = 920 s, about 15 min
-    assert "about 15 min of H100, about $1.01" in out and runs == []
-    prompts = answer(monkeypatch, "n")
-    assert cli.main(TRAIN) == 1 and runs == [] and "about $1.01" in prompts[0]
-    assert cli.main([*TRAIN, "--yes"]) == 0 and len(runs) == 1
-
-
-def test_train_over_fifteen_dollars_asks_even_with_yes(env, monkeypatch, capsys):
-    taught(env)
-    (env / "data/train").mkdir(parents=True)
-    (env / "data/train/smoke-timing.json").write_text(json.dumps(
-        {"seconds": 60.0, "train_runtime": 0.0, "train_samples_per_second": 0.001}))
-    runs = fake_modal(monkeypatch, {"seconds": 1.0, "ok": True})
-    prompts = answer(monkeypatch, "n")
-    assert cli.main([*TRAIN, "--yes"]) == 1 and runs == [] and len(prompts) == 1
-    assert "over $15" in capsys.readouterr().out
-
-
-@pytest.mark.parametrize("args, message", [
-    (["--skills", "washer_done", "--run", "Exp 1"], "run name"),
-    (["--skills", "nope", "--run", "exp1"], "no dataset yet"),
-    (["--skills", ",", "--run", "exp1"], "at least one"),
-])
-def test_train_input_errors(env, monkeypatch, capsys, args, message):
-    taught(env)
-    fake_modal(monkeypatch)
-    assert cli.main(["train", *args]) == 2 and message in capsys.readouterr().err
-
-
-def test_a_failed_training_run_says_where_the_log_is(env, monkeypatch, capsys):
-    taught(env)
-    fake_modal(monkeypatch, None, code=1)
-    assert cli.main([*TRAIN, "--smoke", "--yes"]) == 1
-    assert "runs/exp1-mixed/train.log" in capsys.readouterr().err
-
-
-def test_watch_replays_a_clip_through_the_student(env, monkeypatch, capsys):
-    from backend.inference import student
-
-    taught(env)
-    monkeypatch.setenv("TE_STUDENT_URL", "http://127.0.0.1:8080/v1")
-    seen = []
-
-    class Fake:
-        def __init__(self, url, model):
-            seen.append((url, model))
-
-        def score(self, image, spec):
-            return student.Score(0.9, "yes", 0.1)
-
-    monkeypatch.setattr(student, "OpenAIStudent", Fake)
-    clip = write_clip(env / "clip", n=5)
-    assert cli.main(["watch", "--skills", "washer_done", "--clip", str(clip)]) == 0
-    out = capsys.readouterr().out
-    assert seen == [("http://127.0.0.1:8080/v1", "trained-eye")]
-    assert '2.0 s  washer_done: "Laundry\'s done."' in out and "cloud not checked" in out
-    assert "5 frames scored at 1 fps" in out and "no calibrated threshold" in out
-    [log] = (env / "data/watch").glob("replay-*-clip.jsonl")
-    assert len(log.read_text().splitlines()) == 5
-
-
-def test_watch_needs_the_student_endpoint(env, capsys):
-    assert cli.main(["watch", "--skills", "washer_done", "--clip", "x"]) == 2
-    assert "TE_STUDENT_URL" in capsys.readouterr().err
-
-
-def test_calibrate_writes_the_threshold_watch_mode_then_uses(env, capsys):
-    from backend.watch.watcher import load_skill
-
-    root = taught(env)
-    log, labels = env / "replay.jsonl", env / "labels.json"
-    probs = [0.6 if i % 1800 < 3 else 0.2 for i in range(3600)] + [0.9] * 30
-    log.write_text("".join(json.dumps({"t": float(i), "skill": "washer_done", "p": p}) + "\n"
-                           for i, p in enumerate(probs)))
-    labels.write_text(json.dumps({"true": [[3600, 3630]]}))
-    assert cli.main(["calibrate", "--skill", "washer_done", "--log", str(log),
-                     "--labels", str(labels)]) == 0
-    out = capsys.readouterr().out
-    assert "0 false alarms, 1 of 1 events caught" in out
-    saved = json.loads((root / "threshold.json").read_text())
-    assert 0.6 < saved["threshold"] <= 0.9 and saved["clips"][0]["frames"] == 3630
-    assert load_skill(root).trigger.threshold == saved["threshold"]
-    assert cli.main(["calibrate", "--skill", "washer_done", "--log", str(log), "--log", str(log),
-                     "--labels", str(labels)]) == 2
-    assert "one --labels file for each --log" in capsys.readouterr().err
-
-
 def test_teach_rejects_a_blank_request_and_negative_counts_before_any_estimate(env, monkeypatch,
                                                                                capsys):
     calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
@@ -511,3 +402,23 @@ def test_teach_rejects_a_blank_request_and_negative_counts_before_any_estimate(e
         cli.main([*TEACH, "--clip", clip, "--positives", "-100"])
     assert stop.value.code == 2 and "must be 0 or more" in capsys.readouterr().err
     assert calls == []
+
+
+def test_teach_over_fifteen_dollars_asks_even_with_yes(env, monkeypatch, capsys):
+    calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    prompts = answer(monkeypatch, "n")
+    code = cli.main([*TEACH, "--clip", str(write_clip(env / "clip")), "--positives", "600",
+                     "--negatives", "600", "--yes"])
+    assert code == 1 and calls == [] and len(prompts) == 1
+    assert "so it needs your yes even with --yes" in capsys.readouterr().out
+
+
+def test_spend_prints_the_modal_total(env, capsys):
+    from backend.training import gpu_ledger
+
+    gpu_ledger.record(env / "data", "train", "exp1-mixed", 3600)
+    assert cli.main(["spend"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("Meta API spend")
+    assert ("Modal GPU spend (data/modal_ledger.jsonl, at config prices): $3.95 of $150 credit"
+            in out)

@@ -6,9 +6,12 @@
 // welcome, the acks (with each watched skill's score) and the alerts. One frame is in
 // flight at a time: the next goes only after the server acked the last, so a server that
 // takes longer than a second to score drops frames here instead of queueing them. It
-// reconnects with
-// a growing pause (1, 2, 4, 8, then 15 seconds) whenever the connection drops. Each
-// reconnect is a new session on the server, so its 3-of-4 frame count starts again.
+// reconnects with a growing pause (1, 2, 4, 8, then 15 seconds) whenever the connection
+// drops. Each reconnect is a new session on the server, so its 3-of-4 frame count starts
+// again. After the welcome, a keepalive pings every 20 seconds: a tunnel may close a socket
+// left idle while the glasses' stream is paused, and a link that went quiet is noticed only
+// when a ping gets no pong within 10 seconds (te serve's uvicorn pings the phone every 20 s
+// too, and URLSessionWebSocketTask answers those by itself).
 //
 
 import Foundation
@@ -46,10 +49,15 @@ final class WatchSocket {
   /// Called on the main actor for every alert message.
   @ObservationIgnored var onAlert: ((ServerMessage) -> Void)?
 
-  // TODO: no keepalive ping yet. A tunnel may close a socket that is idle while the
-  // glasses' stream is paused; URLSessionWebSocketTask.sendPing could keep it open.
   @ObservationIgnored private var task: URLSessionWebSocketTask?
   @ObservationIgnored private var runner: Task<Void, Never>?
+  /// Pings while the socket is live; cancelled when its loop iteration ends.
+  @ObservationIgnored private var keepalive: Task<Void, Never>?
+  /// Why the app dropped the socket itself (no ack, no pong), shown instead of the error
+  /// receive() then ends with.
+  @ObservationIgnored private var dropReason: String?
+  static let pingInterval = Duration.seconds(20)
+  static let pongTimeout: TimeInterval = 10
   @ObservationIgnored private var isSending = false
   /// When the frame in flight was sent, until its ack (or an error) arrives.
   @ObservationIgnored private var awaitingAckSince: Date?
@@ -75,6 +83,7 @@ final class WatchSocket {
   func disconnect() {
     runner?.cancel()
     runner = nil
+    stopKeepalive()
     if let task {
       self.task = nil
       Task {
@@ -96,7 +105,7 @@ final class WatchSocket {
     guard status == .live, let task, !isSending else { return }
     if let since = awaitingAckSince {
       if Date().timeIntervalSince(since) >= Self.ackTimeout {
-        lastError = "No answer from the backend for a frame: reconnecting."
+        dropReason = "No answer from the backend for a frame: reconnecting."
         task.cancel(with: .goingAway, reason: nil)  // receive() fails and run() reconnects
       }
       return
@@ -121,6 +130,7 @@ final class WatchSocket {
       status = .connecting
       let task = urlSession.webSocketTask(with: url)
       self.task = task
+      dropReason = nil
       task.resume()
       do {
         let helloText = String(decoding: try JSONEncoder().encode(hello), as: UTF8.self)
@@ -138,8 +148,9 @@ final class WatchSocket {
       } catch {
         // disconnect() closes the task, which ends receive() with an error: not a failure.
         guard !Task.isCancelled else { return }
-        lastError = error.localizedDescription
+        lastError = dropReason ?? error.localizedDescription
       }
+      stopKeepalive()
       task.cancel(with: .goingAway, reason: nil)
       if self.task === task { self.task = nil }
       session = nil
@@ -160,6 +171,7 @@ final class WatchSocket {
       retryDelay = 1
       session = message.session
       watching = message.watching ?? []
+      if let task { startKeepalive(on: task) }
     case "ack":
       framesAcked += 1
       awaitingAckSince = nil
@@ -174,5 +186,66 @@ final class WatchSocket {
     default:
       break
     }
+  }
+
+  // MARK: - Keepalive
+
+  /// Every pingInterval, a ping. A failed ping, or no pong within pongTimeout, drops the
+  /// socket, so receive() throws and run() reconnects with its pause.
+  private func startKeepalive(on task: URLSessionWebSocketTask) {
+    keepalive?.cancel()
+    keepalive = Task { [weak self] in
+      while true {
+        try? await Task.sleep(for: WatchSocket.pingInterval)
+        guard !Task.isCancelled else { return }
+        let failure = await WatchSocket.ping(task, timeout: WatchSocket.pongTimeout)
+        guard !Task.isCancelled else { return }
+        guard let failure else { continue }
+        self?.dropReason = failure
+        task.cancel(with: .goingAway, reason: nil)  // receive() fails and run() reconnects
+        return
+      }
+    }
+  }
+
+  private func stopKeepalive() {
+    keepalive?.cancel()
+    keepalive = nil
+  }
+
+  /// Sends a ping and waits for its pong, at most `timeout` seconds: nil for a pong, else
+  /// what went wrong. The pong handler runs on URLSession's queue, or never, so whichever of
+  /// it and the timeout comes first answers.
+  private static func ping(_ task: URLSessionWebSocketTask, timeout: TimeInterval) async
+    -> String?
+  {
+    await withCheckedContinuation { continuation in
+      let answer = FirstAnswer(continuation)
+      task.sendPing { error in
+        answer.give(error.map { "The keepalive ping failed: \($0.localizedDescription)" })
+      }
+      DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+        answer.give("No pong from the backend in \(Int(timeout)) s: reconnecting.")
+      }
+    }
+  }
+}
+
+/// Resumes a continuation once, with whichever answer comes first. Thread safe.
+private final class FirstAnswer: @unchecked Sendable {
+  private let lock = NSLock()
+  private var continuation: CheckedContinuation<String?, Never>?
+
+  init(_ continuation: CheckedContinuation<String?, Never>) {
+    self.continuation = continuation
+  }
+
+  func give(_ answer: String?) {
+    let waiting = lock.withLock { () -> CheckedContinuation<String?, Never>? in
+      let first = continuation
+      continuation = nil
+      return first
+    }
+    waiting?.resume(returning: answer)
   }
 }

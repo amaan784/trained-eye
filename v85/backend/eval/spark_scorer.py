@@ -20,9 +20,10 @@ its score says `latency_measured=False`, and the evaluation should leave it out 
 latency figures.
 
 Base Glimmer zero-shot needs no code: it is OpenAIStudent pointed at an endpoint serving
-the base model, e.g. `TE_STUDENT_URL=<base endpoint> TE_STUDENT_MODEL=<its served name>
-te watch ...`, with the same prompt as the fine-tuned model. Untrained, it reasons at
-length, so raise OpenAIStudent's max_tokens (512) if replies stop before yes or no.
+the base model (te serve-student --base), e.g. `TE_STUDENT_URL=<base endpoint>
+TE_STUDENT_MODEL=muse-glimmer te watch ...`, with the same prompt as the fine-tuned model.
+Untrained, it reasons at length, so raise TE_STUDENT_MAX_TOKENS (or te watch --max-tokens,
+512 by default) if replies stop before yes or no.
 """
 
 from __future__ import annotations

@@ -101,3 +101,35 @@ def test_endpoint_failures_are_student_errors(response):
     student = OpenAIStudent("http://x/v1", "m", transport=httpx.MockTransport(lambda r: response))
     with pytest.raises(StudentError):
         student.score(jpeg(), SPEC)
+
+
+@pytest.mark.parametrize("tokens", [
+    [token("The", -0.1), token(" display", -0.2)],  # stopped mid-reasoning, no answer yet
+    [token("Is", -0.1), token(" it", -0.1), token(" no", -0.3)],  # a "no" in the reasoning
+])
+def test_a_reply_cut_off_at_max_tokens_is_an_error_that_says_so(tokens):
+    def handler(request):
+        cut = reply(tokens)
+        cut["choices"][0]["finish_reason"] = "length"
+        return httpx.Response(200, json=cut)
+
+    student = OpenAIStudent("http://x/v1", "m", max_tokens=64,
+                            transport=httpx.MockTransport(handler))
+    with pytest.raises(StudentError, match=r"cut off at max_tokens \(64\).*TE_STUDENT_MAX_TOKENS"):
+        student.score(jpeg(), SPEC)
+
+
+def test_max_tokens_and_the_folded_prompt_reach_the_request():
+    sent = []
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json=reply([token("yes", math.log(0.8),
+                                                      [("no", math.log(0.2))])]))
+
+    student = OpenAIStudent("http://x/v1", "m", max_tokens=2048, system_in_user=True,
+                            transport=httpx.MockTransport(handler))
+    assert student.score(jpeg(), SPEC).answer == "yes"
+    [body] = sent
+    assert body["max_tokens"] == 2048 and [m["role"] for m in body["messages"]] == ["user"]
+    assert body["messages"][0]["content"][1]["text"].startswith(SYSTEM_PROMPT)

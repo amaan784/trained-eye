@@ -35,3 +35,7 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint.isort]
+# Named, so imports sort the same in a stage folder that lacks some backend packages.
+known-first-party = ["backend", "tests"]

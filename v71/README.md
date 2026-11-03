@@ -11,16 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v71 (M2): iOS: Teach screen
+## Build stage v71 (M3): The evaluation plan and report
 
-The app is SwiftUI for iOS 17.2 and has not been compiled: there is no Xcode here. A
-file may use types from a later iOS stage (the app model and the teach flow need each
-other), so the app builds only as a whole, from v73 on. The Teach screen for the teach
-flow.
+backend/eval/report.py is what te eval and make eval will run. The plan is a JSON file
+of evaluations, each with a unique name, its experiment (1 to 4), skill and variant,
+one or more pairs of a te watch frame log and the clip's human labels, the student's
+GPU price (none for the Mac), the price of a Spark check or of a per-frame scorer, and
+for Experiment 3 the synthetic images and what they cost. An evaluation whose log or
+labels do not exist yet is pending, so the plan can come before the clips. run_eval()
+scores the rest, records the thresholds each evaluation's logs were scored at and
+where they came from, pools Experiment 4's judges over the skills, reads Spark's error
+rate, label agreement and the regression result when given, and writes results.json,
+results.md, the charts and the galleries. With log_wandb, and wandb installed, it logs
+every number, the table and the charts to one W&B run in the trained-eye project, and
+the key is never shown. The gallery tests held back from v70 come back here.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/UI/TeachView.swift` (new):
+- `backend/eval/report.py` (new): the evaluation runner: the plan, results.json,
+  results.md and the SVG charts
+- `tests/test_eval_gallery.py` (new): tests
+- `tests/test_eval_report.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -33,19 +44,23 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 26%]
-    ........................................................................ [ 39%]
-    ........................................................................ [ 52%]
-    ........................................................................ [ 65%]
-    ........................................................................ [ 78%]
-    ........................................................................ [ 91%]
-    .................................................                        [100%]
-    553 passed in 28.19s
+    ........................................................................ [  8%]
+    ........................................................................ [ 17%]
+    ........................................................................ [ 25%]
+    ........................................................................ [ 34%]
+    ........................................................................ [ 43%]
+    ........................................................................ [ 51%]
+    ........................................................................ [ 60%]
+    ........................................................................ [ 68%]
+    ........................................................................ [ 77%]
+    ........................................................................ [ 86%]
+    ........................................................................ [ 94%]
+    .............................................                            [100%]
+    837 passed in 33.84s
 
     $ ruff check .
     All checks passed!
@@ -62,6 +77,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -94,8 +113,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -108,6 +129,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   OpenAI-compatible endpoint, read at its yes or no answer token.
 - `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
   alert, alert messages and the frame log.
+- `backend/labeltool/clips.py`: the labelling tool for clips: where the condition is
+  true, saved as time ranges.
+- `backend/labeltool/images.py`: the labelling tool for generated images, for
+  Experiment 2.
+- `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
+- `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
+  and the SVG charts.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -120,11 +148,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 553 tests, all offline; none calls a paid API.
+- `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
+- `tests/`: 837 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v72 adds the Skills and Watch screens.
+Stage v72 adds te eval and te label on the command line, make eval, and the README
+results block written from results.json only.
 
 ## Privacy and policy
 

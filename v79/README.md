@@ -11,17 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v79 (M3): Metric tests and chart building blocks
+## Build stage v79 (M4): The Hugging Face model card
 
-The metrics' tests cover their edge cases and a log written by the watcher itself.
-backend/eval/svg.py holds the palette, the light and dark styles inside each SVG,
-escaping, axes and marks (matplotlib cannot be installed here, so the charts are
-written by hand).
+backend/release/model_card.py writes the model card: README.md with its front matter,
+then the training, data, evaluation, uses, limitations, privacy and license sections.
+Every number comes from a file: the recipe's values from axolotl.RECIPE, the examples
+per skill, split, source and answer from the bundle's manifest.json, and results only
+from the scored evaluations in te eval's results.json, copied as they are with that
+file's SHA-256; without results the card says it is not evaluated yet. A run with a
+fixed step count says so. The card is written for the LoRA adapter or the merged build
+and says whether the bundle has generated images: they are never included, only the
+prompt manifests, and it names the skills that ship face-blurred keyframes for te
+regenerate. The license is the base model's, apache-2.0 from the Muse Glimmer card at
+the pinned revision, with a statement that the weights are a modification and a link
+to Meta's Usage Policy. The release folder and the upload come in the next stage.
 
 Files added or changed in this stage:
 
-- `backend/eval/svg.py` (new):
-- `tests/test_eval_metrics.py` (new): tests
+- `backend/release/model_card.py` (new): the Hugging Face model card
+- `tests/test_model_card.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -34,20 +42,24 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 12%]
-    ........................................................................ [ 24%]
-    ........................................................................ [ 37%]
-    ........................................................................ [ 49%]
-    ........................................................................ [ 61%]
-    ........................................................................ [ 74%]
-    ........................................................................ [ 86%]
-    ........................................................................ [ 99%]
-    .....                                                                    [100%]
-    581 passed in 24.96s
+    ........................................................................ [  7%]
+    ........................................................................ [ 15%]
+    ........................................................................ [ 23%]
+    ........................................................................ [ 31%]
+    ....................................s................................... [ 38%]
+    ........................................................................ [ 46%]
+    ........................................................................ [ 54%]
+    ........................................................................ [ 62%]
+    ........................................................................ [ 69%]
+    ........................................................................ [ 77%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 93%]
+    ..............................................................           [100%]
+    925 passed, 1 skipped in 61.63s (0:01:01)
 
     $ ruff check .
     All checks passed!
@@ -64,6 +76,14 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
+- `backend/cli_experiments.py`: te experiments, te unfiltered, te clips, te
+  spark-errors and te regress.
+- `backend/cli_replay.py`: te replay: the recorded test clips through watch mode.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -96,8 +116,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -115,6 +137,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/labeltool/images.py`: the labelling tool for generated images, for
   Experiment 2.
 - `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
+- `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
+  and the SVG charts.
+- `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
+  its price.
+- `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
+  reads.
+- `backend/release/model_card.py`: the Hugging Face model card.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -128,11 +157,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 581 tests, all offline; none calls a paid API.
+- `tests/`: 925 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v80 adds the experiment charts.
+Stage v80 adds the release folder (the card, the weights, the prompt manifests and the
+base model's LICENSE), the guarded Hugging Face upload and the collection of release
+repos.
 
 ## Privacy and policy
 

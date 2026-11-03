@@ -6,8 +6,7 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
 
 ## Setup (MacBook)
 
-    brew install python@3.12 ffmpeg  # python3 may be Apple's 3.9; ffmpeg reads video clips
-    python3.12 -m venv .venv && source .venv/bin/activate
+    python3 -m venv .venv && source .venv/bin/activate
     pip install -e ".[dev]"          # add ,train for Modal and W&B
     cp .env.example .env             # then fill in the keys
 
@@ -16,7 +15,7 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
     pytest                           # tests; never call paid APIs
     ruff check .
     te spend                         # Meta API spend from data/ledger.jsonl
-    te serve                         # backend; prints the ws:// address for the phone
+    te serve                         # backend, WebSocket at ws://<mac>:8765/ws
     te ws-selftest                   # synthetic frames through the WebSocket, in process
     te api-smoke                     # one tiny paid Muse Spark call (needs MODEL_API_KEY)
     te policy "<request>"            # local policy check, free
@@ -24,13 +23,6 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
                                      # teach flow; prints a cost estimate and asks first
                                      # --correct "<fix>" after a wrong read-back,
                                      # --labels <json> with names from keyframes/
-    te train --skills washer_done --run exp1-mixed --smoke
-                                     # the recipe's two-step smoke on Modal; asks first.
-                                     # Without --smoke: the real run, priced from the smoke
-    te watch --skills washer_done --clip <video or frame folder>
-                                     # replay a clip through watch mode (needs TE_STUDENT_URL)
-    te calibrate --skill washer_done --log <frame log> --labels <true ranges json>
-                                     # threshold from labelled validation clips
     modal run backend/training/wandb_smoke.py   # one W&B run from Modal
 
 ## Conventions

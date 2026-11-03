@@ -11,16 +11,24 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v55 (M2): Phone teach routes tests
+## Build stage v55 (M2): iOS: phone camera and spoken alerts
 
-Tests over HTTP with the fake Meta API: a full run, a no to the spend, a corrected
-read-back, a second start while one runs, the $15 limit, bad inputs, the token
-(missing, wrong, unset or unusable), odd answers, frames that are not camera frames
-and an endless audio length. None of them sends or bills anything.
+ios/TrainedEye/Camera/PhoneCamera.swift is the fallback when the glasses are
+unavailable, built like the phone camera source in Meta's BirdSpotter sample: one
+capture session on its own queue with the back camera at 640x480, frames turned
+upright by a quarter turn, and only the frames the throttle wants converted. It asks
+for camera access the first time. iOS stops the camera in the background, so this
+source watches only with the app open. ios/TrainedEye/Audio/Speaker.swift speaks
+alerts on the glasses. DAT has no speaker API, so, as BirdSpotter does, a line is
+spoken only when the audio goes to a Bluetooth output and is dropped otherwise, never
+played from the iPhone's speaker. Lines queue rather than cut each other off, and the
+speaker reports whether a line was said. While the microphone is in use for a teach
+request, nothing is spoken and a line being said is cut short.
 
 Files added or changed in this stage:
 
-- `tests/test_teach_api.py` (new): tests
+- `ios/TrainedEye/Audio/Speaker.swift` (new):
+- `ios/TrainedEye/Camera/PhoneCamera.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -33,19 +41,22 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 26%]
-    ........................................................................ [ 40%]
-    ........................................................................ [ 53%]
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
+    ........................................................................ [ 28%]
+    ........................................................................ [ 38%]
+    ........................................................................ [ 47%]
+    ........................................................................ [ 57%]
     ........................................................................ [ 66%]
-    ........................................................................ [ 80%]
-    ........................................................................ [ 93%]
-    ..................................                                       [100%]
-    538 passed in 26.16s
+    ........................................................................ [ 76%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 95%]
+    ...................................                                      [100%]
+    755 passed in 34.81s
 
     $ ruff check .
     All checks passed!
@@ -62,6 +73,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -81,6 +96,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   (real, synthetic or mixed, with a validation split and volume paths).
 - `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
   recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
+- `backend/training/export.py`: the Modal app that merges a trained adapter and checks
+  the merged model's answers.
+- `backend/inference/modal_serve.py`: the Modal app that serves the merged model with
+  vLLM behind STUDENT_API_KEY.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -90,8 +109,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -116,12 +137,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 538 tests, all offline; none calls a paid API.
+- `tests/`: 755 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v56 adds the export: merge the trained adapter on Modal and check the merged
-model.
+Stage v56 adds the request recorder: the spoken teach request as 16 kHz WAV in memory,
+from the glasses' microphone when it is the input, else the iPhone's.
 
 ## Privacy and policy
 

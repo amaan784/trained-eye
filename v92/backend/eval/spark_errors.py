@@ -18,7 +18,9 @@ unsure are left out and counted, as are images Spark could not label (`label_err
 `write_unfiltered_dataset` writes that unfiltered arm: a dataset written exactly like te
 teach's (same writer, name and file names) into dataset-unfiltered/, with every generated
 image and the label it was generated for, whatever Spark said, plus the real keyframes
-with the same answers te teach used. `te train --dataset dataset-unfiltered` trains on it.
+with the same answers te teach used, and the system prompt placed as in te teach's
+dataset (its manifest's system_in_user). `te train --dataset dataset-unfiltered` trains on
+it.
 """
 
 from __future__ import annotations
@@ -119,17 +121,26 @@ def spark_error_rate(labels_jsonl: Path, human: Path) -> dict:
     }
 
 
-def write_unfiltered_dataset(skill_dir: Path, *, train_on_model_outputs: bool = True) -> dict:
+def write_unfiltered_dataset(skill_dir: Path, *, train_on_model_outputs: bool = True,
+                             system_in_user: bool | None = None) -> dict:
     """Write skill_dir/dataset-unfiltered (replacing it) and return its manifest. Needs a
-    finished te teach run (its dataset/ shows the labels.jsonl is complete)."""
+    finished te teach run (its dataset/ shows the labels.jsonl is complete). The system
+    prompt goes where te teach's dataset put it; `system_in_user` (TE_SYSTEM_IN_USER),
+    when given, must agree, so the two arms differ only in the filter."""
     skill_dir = Path(skill_dir)
     name = skill_dir.name
     if not train_on_model_outputs:
         raise ValueError("training on model outputs is off: the unfiltered arm trains on "
                          "generated images, so there is nothing to compare")
-    if not (skill_dir / "dataset" / f"{name}-teach.manifest.json").is_file():
+    teach_manifest = skill_dir / "dataset" / f"{name}-teach.manifest.json"
+    if not teach_manifest.is_file():
         raise ValueError(f"{name} has no finished teach run (no dataset/): run te teach "
                          "for it first")
+    taught = bool(json.loads(teach_manifest.read_text("utf-8")).get("system_in_user", False))
+    if system_in_user is not None and system_in_user != taught:
+        raise ValueError(f"{name}'s dataset/ was written with TE_SYSTEM_IN_USER="
+                         f"{int(taught)}, but it is {int(system_in_user)} now: run te teach "
+                         "again first (cached calls are free), so both arms match")
     spec = SkillSpec.model_validate_json((skill_dir / "spec.json").read_text("utf-8"))
     rows = [json.loads(line) for line in (skill_dir / "labels.jsonl").read_text("utf-8")
             .splitlines() if line.strip()]
@@ -139,4 +150,4 @@ def write_unfiltered_dataset(skill_dir: Path, *, train_on_model_outputs: bool = 
     examples = _examples(spec, skill_dir, rows, generated, True)
     out = skill_dir / "dataset-unfiltered"
     shutil.rmtree(out, ignore_errors=True)  # only this function writes here
-    return write_dataset(examples, out, f"{name}-teach")
+    return write_dataset(examples, out, f"{name}-teach", system_in_user=taught)

@@ -23,6 +23,8 @@ def short(stage: dict, k: int) -> str:
     if k == 1:
         return "Project skeleton and the settings module."
     text = stage["next"].rstrip(".")
+    if text.startswith("te "):  # a command name keeps its case
+        return text + "."
     return text[0].upper() + text[1:] + "."
 
 

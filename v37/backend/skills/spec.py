@@ -6,7 +6,8 @@ before anything is generated or trained.
 
 Skills may cover objects, states, text, displays, signs and vehicles. They may never
 identify or track a specific person, concern people's bodies or health, monitor
-anyone covertly, or coach sports performance. `policy_check` catches the clear cases
+anyone covertly, coach sports performance, or be about politics or war (an anti-project
+of the hackathon). `policy_check` catches the clear cases
 locally (no API call, no cost); the compiler model refuses the rest.
 """
 
@@ -75,15 +76,20 @@ def lower_first(text: str) -> str:
         return text
     words = text.split()
     first = words[0]
+    lowered = text[0].lower() + text[1:]
+    if f"{first.lower()} " in DETERMINERS:  # "The LG display" -> "the LG display"
+        return lowered
     if (len(first) > 1 and first.isupper()) or any(c.isupper() for c in first[1:]):
         return text
     if first[0].isupper() and len(words) > 1 and words[1][:1].isupper():
         return text
-    if first.strip("'\"") in DISPLAY_LABELS:
-        return text
-    return text[0].lower() + text[1:]
+    if first.strip("'\"") in DISPLAY_LABELS and (len(words) == 1 or LABEL_VERB.match(words[1])):
+        return text  # "End shows", but "ready light turns green"
+    return lowered
 
 
+LABEL_VERB = re.compile(r"(?:shows?|appears?|lights|comes?|is|flashes|blinks|displays?|turns?)$",
+                        re.IGNORECASE)
 LEADING_WHEN = re.compile(r"^\s*(?:when|whenever|if|once|as soon as)\s+", re.IGNORECASE)
 
 
@@ -141,12 +147,12 @@ PERSON_WORDS = (
     "babysitter", "mailman", "postman", "ex", "who", "whoever", "men", "babies", "aunt",
     "uncle", "cousin", "niece", "nephew", "grandmother", "grandfather", "grandparent",
     "parent", "spouse", "fiance", "fianc\u00e9", "fianc\u00e9e", "teen", "teenager",
-    "teacher", "nurse",
+    "teacher", "nurse", "wives", "nannies", "landladies", "mailmen", "postmen",
 )
 # Words that are not nouns get no plural: "his" must not match "hiss" (a kettle).
 NO_PLURAL = frozenset({"he", "she", "him", "her", "his", "hers", "who", "whoever", "ex",
-                       "a man", "the man", "a guy", "the guy", "men", "people", "children",
-                       "babies", "kids"})
+                       "a man", "the man", "men", "people", "children", "babies", "kids",
+                       "wives", "nannies", "landladies", "mailmen", "postmen"})
 IDENTIFY = re.compile(r"\b(?:recogni[sz]e|identify|track|follow)\s+(?:him|her|them|people|"
                       r"faces?|who|the person|someone|anyone)\b", re.IGNORECASE)
 HEALTH_WORDS = (
@@ -160,14 +166,24 @@ COVERT_WORDS = ("secretly", "without them knowing", "without her knowing",
                 "without him knowing", "without their knowledge", "behind her back",
                 "behind his back", "spy", "spying", "covert*", "hidden camera", "stalking",
                 "stalker", "nobody notices", "no one notices", "without them noticing",
-                "without anyone noticing", "without anyone knowing", "discreet*",
-                "undercover", "snoop*", "eavesdrop*")
+                "without anyone noticing", "without anyone knowing", "snoop", "snoops",
+                "snooping", "snooped", "eavesdrop*")
+COVERT_PHRASES = re.compile(r"\bdiscreetly\s+(?:watch|monitor|record|film|track)\b",
+                            re.IGNORECASE)
 # The glasses' capture light always shows when the camera is on (a fixed rule, not a skill).
+# Only the glasses' light counts: "turn off the recording light" on a camcorder is fine.
+_GLASSES_LIGHT = (r"(?:the\s+|my\s+|its\s+)?(?:glasses'?\s+(?:camera\s+|recording\s+)?"
+                  r"(?:light|led|indicator)|(?:capture|privacy)\s+(?:light|led|indicator))")
+_HIDE = (r"hide|hiding|cover|covering|tape over|taping over|disable|disabling|block|blocking|"
+         r"black out|blacking out")
 CAPTURE_LIGHT = re.compile(
-    r"\b(?:hide|hiding|cover|covering|tape over|taping over|turn off|turning off|switch off|"
-    r"disable|disabling|block|blocking|dim|dimming|black out)\s+(?:the\s+|my\s+|its\s+)?"
-    r"(?:glasses'?\s+)?(?:capture|recording|camera|privacy)\s+(?:light|indicator|led)\b"
-    r"|\b(?:keep|with)\s+(?:the\s+)?(?:led|capture light|recording light)\s+off\b",
+    rf"\b(?:{_HIDE}|turn off|turning off|switch off|switching off|shut off|dim|dimming)\s+"
+    rf"{_GLASSES_LIGHT}"
+    rf"|\b(?:{_HIDE})\s+(?:the\s+|my\s+|its\s+)?(?:led|recording light|camera light)\b"
+    rf"|\b(?:turn|switch|shut|keep)\s+{_GLASSES_LIGHT}\s+off\b"
+    r"|\b(?:turn|switch|shut)\s+off\s+the\s+led\s+on\s+(?:the|my)\s+glasses\b"
+    r"|\bkeep\s+(?:the\s+)?(?:led|capture light|privacy light)\s+off\b"
+    r"|\bwithout\s+(?:the\s+)?(?:led|capture light|privacy light)\s+on\b",
     re.IGNORECASE)
 SENSITIVE_WORDS = ("clinic", "hospital", "locker room", "changing room", "bathroom",
                    "restroom", "toilet", "church", "mosque", "synagogue", "temple",
@@ -175,43 +191,102 @@ SENSITIVE_WORDS = ("clinic", "hospital", "locker room", "changing room", "bathro
 SPORTS_WORDS = ("workout", "coach me", "coach my", "coaching", "sports", "squat depth",
                 "yoga pose")
 # "my shot" and "my form" count bare or after a sport word, so "my espresso shot" and
-# "my tax form" pass. Counting exercises counts with or without "my".
+# "my tax form" pass; "my lift" (a ride) and "my pitch" (a deck) only after a sport word.
+# Counting counts only exercises, and without "my" only words that are nothing else.
 SPORT = (r"golf|tennis|basketball|baseball|softball|football|soccer|hockey|volleyball|"
          r"cricket|rugby|lacrosse|badminton|squash|pickleball|bowling|archery|boxing|yoga|"
          r"pilates|jump|running|swimming|swim|rowing|climbing|skating|skiing|squat|lifting|"
          r"deadlift|bench|throwing|batting|shooting|pitching|putting|kicking|passing|"
          r"free[ -]throw|three[ -]point|penalty|tee")
-EXERCISES = (r"reps|sets|push[- ]?ups|pull[- ]?ups|chin[- ]?ups|sit[- ]?ups|squats|lunges|"
-             r"jumps|burpees|jacks|crunches|curls|presses|dips|planks|kicks|punches|swings|"
-             r"strokes")
+EXERCISES = (r"reps|push[- ]?ups|pull[- ]?ups|chin[- ]?ups|sit[- ]?ups|burpees|"
+             r"jumping[- ]jacks|lunges|squats|crunches")
 SPORTS_FORM = re.compile(
     r"\bmy\s+(?:\w+\s+)?(?:swing|serve|stroke|technique|posture|reps|stance|backhand|"
-    r"forehand|putt|putts|pitch|throw|kick|dive|lift|lifts|squat|squats)s?\b"
+    r"forehand|putt|putts|squat|squats)s?\b"
     rf"|\bmy\s+(?:(?:{SPORT})\s+)?(?:shot|form)\b"
+    rf"|\bmy\s+(?:{SPORT})\s+(?:lift|kick|pitch|throw|dive)s?\b"
     rf"|\bcount\s+(?:my\s+|the\s+)?(?:[\w-]+\s+)?(?:{EXERCISES})\b"
-    r"|\bcount\s+my\s+(?:[\w-]+\s+)?(?:laps|steps|miles|rounds|shots|throws|lifts)\b",
+    r"|\bcount\s+my\s+(?:[\w-]+\s+)?(?:laps|steps|miles|curls|jumps)\b",
     re.IGNORECASE)
+# Politics and war, a hackathon anti-project. Phrases, so a war film poster, a campaign of
+# laundry loads, election day on a calendar, military time, a glue gun or a Swiss army
+# knife pass; ARMS_LOOKALIKES (toy weapons, a Salvation Army truck) are removed first.
+POLITICS_WORDS = ("politic*", "propaganda", "partisan*", "democrat*", "republican*", "maga",
+                  "ballot", "ballots", "voter*", "vote for", "voting for", "voted for", "protest",
+                  "protests", "protester*", "protestor*", "protesting",
+                  "picket line*", "riot police", "riot gear", "the president",
+                  "prime minister", "senator", "senators", "soldier*", "troops", "militia*",
+                  "weapon*", "firearm*", "rifle*", "handgun*", "a gun", "the gun", "my gun",
+                  "guns", "pistol*", "shotgun*", "revolver*", "ammo", "bullets", "gunfire",
+                  "gunshot*", "gunman", "gunmen", "missile*", "rocket launcher*", "grenade*",
+                  "landmine*", "land mine*", "artillery", "ammunition", "a bomb", "the bomb",
+                  "bombing*", "car bomb*", "airstrike*", "air strike*", "air raid*",
+                  "drone strike*", "warplane*", "war plane*", "fighter jet*", "war zone",
+                  "warzone",
+                  "war crime*", "at war")
+POLITICS_FORM = re.compile(
+    r"\b(?:campaign|election)\s+(?:\w+\s+)?(?:signs?|posters?|banners?|flyers?|stickers?|"
+    r"buttons?|billboards?|rally|rallies|office)\b"
+    r"|\belection\s+(?:\w+\s+)?(?:ads?|adverts?|results?|coverage)\b"  # a campaign's may sell
+    r"|\b(?:military|army)\s+(?:vehicles?|trucks?|convoys?|tanks?|aircraft|planes?|jets?|"
+    r"helicopters?|drones?|bases?|parades?|police|checkpoints?|uniforms?|personnel|units?|"
+    r"forces?|equipment|activity|movements?|exercises?|operations?|targets?)\b"
+    r"|\bbattle\s+tanks?\b|\btanks?\s+(?:rolls?|rolling|drives?|driving|fires?|firing)\b",
+    re.IGNORECASE)
+TOOL_GUNS = (r"\b(?:glue|staple|nail|heat|caulk|caulking|spray|sprayer|paint|grease|solder|"
+             r"soldering|massage|lint|price|label|tape|foam|nerf|water|squirt|toy|tin|lego|"
+             r"plastic|bubble|confetti)\s+guns?\b")
+ARMS_LOOKALIKES = re.compile(
+    r"\b(?:toy|tin|lego|plastic|foam|nerf|water|squirt)\s+(?:soldiers?|tanks?|guns?|pistols?|"
+    r"rifles?|weapons?|missiles?|grenades?|fighter jets?|warplanes?)\b"
+    r"|\bsalvation\s+army\b|\bsoldier\s+(?:fly|flies|ants?|beetles?)\b"
+    rf"|{TOOL_GUNS}|\bgun[- ]?metal\b|\bpistol[- ]grip\b|\bbath\s+bombs?\b"
+    r"|\bsoldiers?\s+(?:figurines?|figures?|miniatures?|models?)\b"
+    r"|\b(?:ad|advertising|marketing|sales|brand|product|promo|promotional|fundraising|"
+    r"charity)\s+campaigns?\b|\bpresidents?'?s?\s+(?:choice|day)\b",
+    re.IGNORECASE)
+# A compound the text names makes a bare mention later in it ("the gun is unplugged" after
+# "the glue gun") that same thing, so the bare word goes too before the check.
+REFERS_BACK = (
+    (re.compile(TOOL_GUNS, re.IGNORECASE), re.compile(r"\b(?:a|the|my|this|that)\s+guns?\b|\bguns\b",
+                                                       re.IGNORECASE)),
+    (re.compile(r"\bbath\s+bombs?\b", re.IGNORECASE),
+     re.compile(r"\b(?:a|the|this|that)\s+bombs?\b", re.IGNORECASE)),
+    (re.compile(r"\b(?:toy|tin|lego|plastic)\s+soldiers?\b", re.IGNORECASE),
+     re.compile(r"\bsoldiers?\b", re.IGNORECASE)),
+)
 # Object names that contain a person word; removed before the word lists are checked.
 # "child lock" stays a phrase only before a word break, so "the child locks the door" counts.
 OBJECT_PHRASES = re.compile(r"\b(?:child[ -]?lock|child[ -]?proof|baby (?:bottle|food|"
-                            r"spinach|carrots?)|bus shelter)\b", re.IGNORECASE)
+                            r"spinach|carrots?)|bus shelter|green men|men at work|"
+                            r"nurse sharks?|parent (?:folder|directory)|uncle ben's)\b",
+                            re.IGNORECASE)
 
 # A capitalized word after "when" counts as a name only if an arrival or presence verb
 # follows, so devices and display labels ("when Roomba is stuck", "until End lights up")
-# are not mistaken for people. With a possessive ("when Jake's car gets stuck") any such
-# verb counts. Without one, "gets" and "comes" do not count before a device state
-# ("Roomba gets stuck", "Instant Pot comes to pressure", "Nest gets to 70").
+# are not mistaken for people. "gets" and "comes" do not count before a device state
+# ("Instant Pot comes to pressure", "Nest gets to 70 degrees", "Brita's light comes on");
+# without a possessive, also not before "stuck" ("Roomba gets stuck", but "when Jake's
+# car gets stuck" counts). Between the name and the verb: one word, another name ("Sam
+# and Jake arrive", "Mary Jane Watson arrives"), or with a possessive up to two words.
+# After a title (Dr. Patel) the word is a name even if it is also a brand.
 _LEAD = (r"\b(?i:when|if|once|until|whenever|as soon as)\s+"
-         r"(?:(?i:dr|mr|mrs|ms|mx|miss)\.?\s+)?")
+         r"(?P<title>(?i:dr|mr|mrs|ms|mx|miss)\.?\s+)?")
 _ARRIVAL = (r"arrives?|leaves?|pulls?|walks?|drives?|enters?|shows up|"
             r"is (?:here|home|back|at|in|out|outside|leaving|coming)|home|here|back")
+_READING = r"\d+(?:\.\d+)?\s*(?:%|\u00b0\s*[fc]?|degrees?|percent|[fc]|psi|minutes?)?\W*$"
+_DEVICE_STATE = (r"(?:full|empty|hot|cold|warm|low)\b|to\s+(?:" + _READING + r"|pressure|temp)|"
+                 r"up\s+on\b|on\W*$")
+_NAME = r"([^\W\d_][\w'-]*?)"
 NAMED_ARRIVAL = (
-    re.compile(_LEAD + r"([^\W\d_][\w'-]*?)'s\s+"
-               rf"(?i:(?:\w+\s+){{0,2}}(?:gets?|comes?|{_ARRIVAL}))\b"),
-    re.compile(_LEAD + r"([^\W\d_][\w'-]*?)(?:'s)?\s+"
-               r"(?i:(?:\w+\s+)?(?:(?:gets?|comes?)(?!\s+(?:(?:stuck|jammed|clogged|full|"
-               r"empty|hot|cold|warm|low)\b|to\s+(?:\d+\W*$|pressure|temp)|up\s+on\b|"
-               rf"on\W*$))|{_ARRIVAL}))\b"),
+    re.compile(_LEAD + _NAME + r"'s\s+"
+               rf"(?i:(?:\w+\s+){{0,2}}(?:(?:gets?|comes?)(?!\s+(?:{_DEVICE_STATE}))|"
+               rf"{_ARRIVAL})|at|in|out|outside)\b"),
+    re.compile(_LEAD + _NAME + r"(?:'s)?\s+"
+               r"(?:(?:[A-Z][\w'-]*\s+){1,2}|(?i:and|or|&)\s+[^\W\d_][\w'-]*\s+|"
+               r"(?i:\w+\s+))?"
+               rf"(?i:(?:gets?|comes?)(?!\s+(?:stuck\b|jammed\b|clogged\b|{_DEVICE_STATE}))|"
+               rf"{_ARRIVAL})\b"),
 )
 # Words a display shows; they keep their capital in a read-back ("when End shows").
 DISPLAY_LABELS = frozenset({"End", "Done", "Ready", "Off", "On", "Error", "Hot", "Low", "Full",
@@ -221,7 +296,8 @@ NOT_NAMES = DISPLAY_LABELS | frozenset({"The", "This", "That", "It", "My", "Our"
                        "DoorDash", "UberEats", "Grubhub", "GrubHub", "Instacart",
                        # devices
                        "Roomba", "Nest", "Bosch", "Kindle", "Whirlpool", "Dyson", "Keurig",
-                       "Nespresso", "Breville", "Samsung", "Instant",
+                       "Nespresso", "Breville", "Samsung", "Instant", "Ecobee", "Traeger",
+                       "Meater", "Vitamix", "Brita", "Sonos", "KitchenAid", "Miele", "Rivian",
                        # days ("when Sunday's paper arrives")
                        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
                        "Sunday"})
@@ -236,6 +312,8 @@ REFUSALS = {
     "sensitive": "I can't watch sensitive places such as clinics, places of worship or "
                  "changing rooms.",
     "sports": "I can't do sports analysis or coaching.",
+    "politics": "I can't do skills about politics or war, such as campaigns, elections, "
+                "protests, soldiers or weapons.",
     "capture_light": "I can't hide or turn off the glasses' capture light: it is on "
                      "whenever the camera is.",
 }
@@ -266,8 +344,9 @@ def policy_check(request: str) -> str | None:
     request = normalise(request)
     for pattern in NAMED_ARRIVAL:
         for named in pattern.finditer(request):
-            word = named.group(1)
-            if word[0].isupper() and not word.isupper() and word not in NOT_NAMES:
+            word = named.group(2)
+            if named.group("title") or (word[0].isupper() and not word.isupper()
+                                        and word not in NOT_NAMES):
                 return REFUSALS["person"]
     request = OBJECT_PHRASES.sub(" ", request)
     if IDENTIFY.search(request) or _has_word(request, PERSON_WORDS, plurals=True):
@@ -279,15 +358,21 @@ def policy_check(request: str) -> str | None:
 
 
 def topic_check(text: str) -> str | None:
-    """The covert, health and sports rules alone. They also apply to every word the
-    compiler writes, where people and rooms may come up in passing."""
+    """The covert, health, sports and politics rules alone. They also apply to every word
+    the compiler writes, where people and rooms may come up in passing."""
     text = OBJECT_PHRASES.sub(" ", normalise(text))
-    if _has_word(text, COVERT_WORDS):
+    if _has_word(text, COVERT_WORDS) or COVERT_PHRASES.search(text):
         return REFUSALS["covert"]
     if _has_word(text, HEALTH_WORDS):
         return REFUSALS["health"]
     if SPORTS_FORM.search(text) or _has_word(text, SPORTS_WORDS):
         return REFUSALS["sports"]
+    for compound, back in REFERS_BACK:
+        if compound.search(text):
+            text = back.sub(" ", text)
+    text = ARMS_LOOKALIKES.sub(" ", text)
+    if POLITICS_FORM.search(text) or _has_word(text, POLITICS_WORDS):
+        return REFUSALS["politics"]
     return None
 
 

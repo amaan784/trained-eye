@@ -11,23 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v88 (M3): Commands: eval, label, steps, Spark
+## Build stage v88 (M4): Playground: the page and its style
 
-te eval (and make eval) runs the evaluation plan; te label starts the labelling tool
-on a clip or on a skill's generated images; te train takes --max-steps, which the
-Modal app passes on; te watch takes --scorer spark (it prices the frames and asks
-first, and only Spark's yes can fire) and --log, which starts the log afresh.
+The playground's page arrives in backend/playground/static/. index.html has a section
+for each part: the recorded clips, with the video, the skill picker and the timeline;
+how each skill was built, with the keyframes, what SAM looks at and the training wall;
+teach it yourself, a form with a condition of at most 300 characters and a keyframe
+picker; the results; and the privacy notes (faces blurred, frames not stored, Muse
+Image provenance kept, no skills about specific people, nothing loaded from other
+sites, the address kept only as a salted hash). The clips, skills, teach and results
+sections each say whether they are precomputed or live. style.css follows the system's
+dark or light setting and styles the timeline, the wall's tiles and the yes and no
+tags. The Inter 4.1 variable font is bundled in fonts/ with its SIL Open Font License,
+so the page fetches nothing from a CDN. The scripts come in the next two stages, and
+the app's tests in v91 check the page.
 
 Files added or changed in this stage:
 
-- `Makefile` (new):
-- `backend/cli.py` (changed): the te command line
-- `backend/training/modal_train.py` (changed): the Modal app that trains on one H100
-  with the recipe's pins, the trained-eye volume and the wandb and huggingface Secrets
-- `backend/watch/watcher.py` (changed): watch mode: scores, the Muse Spark check
-  before an alert, alert messages and the frame log
-- `tests/test_cli.py` (changed): tests
-- `tests/test_watcher.py` (changed): tests
+- `backend/playground/static/fonts/InterVariable.woff2` (new):
+- `backend/playground/static/fonts/LICENSE.txt` (new):
+- `backend/playground/static/index.html` (new):
+- `backend/playground/static/style.css` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -40,20 +44,25 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 11%]
-    ........................................................................ [ 22%]
-    ........................................................................ [ 33%]
-    ........................................................................ [ 44%]
-    ........................................................................ [ 56%]
-    ........................................................................ [ 67%]
-    ........................................................................ [ 78%]
-    ........................................................................ [ 89%]
-    ..................................................................       [100%]
-    642 passed in 29.94s
+    ........................................................................ [  7%]
+    ........................................................................ [ 14%]
+    ........................................................................ [ 21%]
+    ........................................................................ [ 29%]
+    ............................................s........................... [ 36%]
+    ........................................................................ [ 43%]
+    ........................................................................ [ 50%]
+    ........................................................................ [ 58%]
+    ........................................................................ [ 65%]
+    ........................................................................ [ 72%]
+    ........................................................................ [ 80%]
+    ........................................................................ [ 87%]
+    ........................................................................ [ 94%]
+    .....................................................                    [100%]
+    988 passed, 1 skipped in 75.27s (0:01:15)
 
     $ ruff check .
     All checks passed!
@@ -70,6 +79,15 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
+- `backend/cli_experiments.py`: te experiments, te unfiltered, te clips, te
+  spark-errors and te regress.
+- `backend/cli_replay.py`: te replay: the recorded test clips through watch mode.
+- `backend/cli_release.py`: the M4 release commands.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -102,8 +120,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -125,6 +145,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   and the SVG charts.
 - `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
   its price.
+- `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
+  reads.
+- `backend/regenerate.py`: the prompt manifests and regenerating images from them.
+- `backend/release/model_card.py`: the Hugging Face model card.
+- `backend/release/package.py`: the release folder (base license, blurred keyframes),
+  the upload and the collection.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -138,11 +164,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 642 tests, all offline; none calls a paid API.
+- `tests/`: 988 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v89 adds te experiments, te unfiltered, te spark-errors and te regress.
+Stage v89 adds the playground's two drawings: the live timeline of a clip's scores
+against the threshold with its spoken alerts, and the training wall of labelled
+variations.
 
 ## Privacy and policy
 

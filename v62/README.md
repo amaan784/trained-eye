@@ -11,19 +11,26 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v62 (M2): iOS: glasses connection and mock
+## Build stage v62 (M2): iOS: Skills and Watch screens
 
-The app is SwiftUI for iOS 17.2 and has not been compiled: there is no Xcode here. A
-file may use types from a later iOS stage (the app model and the teach flow need each
-other), so the app builds only as a whole, from v73 on. GlassesConnection registers
-with the Meta AI app and follows the device, link and battery states as the DAT
-samples do; MockGlasses drives DAT's mock device in debug builds, choosing its feed
-before the pair is worn.
+ios/TrainedEye/UI/SkillsView.swift lists the taught skills from GET /skills, fetched
+when the screen opens, on a pull or with Refresh. Each has a switch for watch mode,
+its alert text, its status (training on Modal, trained, ready with its threshold, else
+how far the teach flow got), the newest run's time and its quiet time after an alert
+in minutes. Changing a switch while watching says hello again.
+ios/TrainedEye/UI/WatchView.swift starts and stops watching and shows which camera is
+on and the newest frame; the last alert, with its probability, whether Muse Spark
+agreed and whether it was spoken on the glasses; each watched skill's latest score
+next to its threshold; the connection with frames sent and acked; the last stay in the
+background with what the camera gave, what went out and what came back acked; and the
+glasses' camera state, frame size, recoveries and battery. The Save the last 10
+seconds button is on only while watching, and the screen says frames are stored only
+that way.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Glasses/GlassesConnection.swift` (new):
-- `ios/TrainedEye/Glasses/MockGlasses.swift` (new):
+- `ios/TrainedEye/UI/SkillsView.swift` (new):
+- `ios/TrainedEye/UI/WatchView.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -36,19 +43,22 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 26%]
-    ........................................................................ [ 39%]
-    ........................................................................ [ 52%]
-    ........................................................................ [ 65%]
-    ........................................................................ [ 78%]
-    ........................................................................ [ 91%]
-    .................................................                        [100%]
-    553 passed in 21.63s
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
+    ........................................................................ [ 28%]
+    ........................................................................ [ 38%]
+    ........................................................................ [ 47%]
+    ........................................................................ [ 57%]
+    ........................................................................ [ 66%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 95%]
+    ...................................                                      [100%]
+    755 passed in 36.80s
 
     $ ruff check .
     All checks passed!
@@ -65,6 +75,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -97,8 +111,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -123,11 +139,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 553 tests, all offline; none calls a paid API.
+- `tests/`: 755 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v63 adds the glasses camera: HEVC at 7 fps, one JPEG a second to the backend.
+Stage v63 adds the clips the user saves, as frame folders te watch can replay, and
+ios/README.md: how to build the app in Xcode and what to check on the glasses.
 
 ## Privacy and policy
 

@@ -11,24 +11,30 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v44 (M2): Watch mode on the server
+## Build stage v44 (M2): The phone's teach API
 
-A hello with "watch": [skill names] now starts watch mode for the session: the welcome
-lists the skills, each ack carries their scores, and an alert message follows when one
-fires. Without a watch request the protocol is unchanged. The server builds the
-watcher from the settings: the student endpoint (TE_STUDENT_URL and TE_STUDENT_MODEL,
-new settings shown by python -m backend.config), Muse Spark for the check and a frame
-log under data/watch/.
+backend/teach_api.py has the routes the phone teaches through: POST /teach/start with
+the skill, the spoken request or its text, and the JPEG frames of the 10 second
+capture as multipart form data, GET /teach/status, and POST /teach/answer for the two
+questions. Every route needs SERVER_TOKEN from .env as a Bearer token: without it the
+answer is 401, and with no token set on the Mac, 503. One session runs at a time, and
+a body over 200 MB or an answer over 64 KB is refused. backend/teach_upload.py parses
+the multipart body itself (Starlette's parser needs python-multipart) and checks the
+upload the way te teach checks its inputs: audio or text but not both, the request's
+length and the policy, 1 to 600 camera frames. It saves the capture under
+data/teach/<skill>/ so te teach can repeat the run on the Mac, and a run that needs
+your own labels or could cost over $15 is refused with the te teach command to run
+instead. Nothing is spent before the spend answer; the server mounts the routes in
+v45.
 
 Files added or changed in this stage:
 
-- `backend/config.py` (changed): settings: model IDs for every job, prices, spend caps
-  and data paths; secrets come from the environment or a local .env file and are never
-  printed
-- `backend/server.py` (changed): the backend the iPhone app talks to: JPEG frames
-  arrive over a WebSocket at /ws and each one is acknowledged; frames stay in memory
-- `tests/test_config.py` (changed): tests
-- `tests/test_server.py` (changed): tests
+- `backend/teach_api.py` (new): the teach routes for the phone: /teach/start,
+  /teach/status and /teach/answer, behind SERVER_TOKEN
+- `backend/teach_upload.py` (new): the phone's teach upload: a multipart parser, the
+  input checks, the saved capture and the estimate
+- `tests/test_teach_api.py` (new): tests
+- `tests/test_teach_upload.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -41,49 +47,24 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 15%]
+    ........................................................................ [ 10%]
+    ........................................................................ [ 20%]
     ........................................................................ [ 30%]
-    ........................................................................ [ 45%]
+    ........................................................................ [ 40%]
+    ........................................................................ [ 50%]
     ........................................................................ [ 60%]
-    ........................................................................ [ 75%]
-    ........................................................................ [ 91%]
-    ..........................................                               [100%]
-    474 passed in 8.72s
+    ........................................................................ [ 70%]
+    ........................................................................ [ 80%]
+    ........................................................................ [ 90%]
+    ...................................................................      [100%]
+    715 passed in 29.20s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.config
-    Trained Eye settings
-      base_url: https://api.meta.ai/v1
-      data_dir: data
-      spend caps: $10.00 per skill, $120.00 global
-      train on model outputs: yes
-      student: not set (TE_STUDENT_URL) (trained-eye)
-      models:
-        transcribe    muse-voice-transcribe-1.0
-        compiler      muse-wonder-1.0
-        sam           sam-3.1
-        image         muse-image-1.0
-        labeler       muse-spark-1.3
-        confirm       muse-spark-1.3
-        student_base  meta-models/Muse-Glimmer-30B
-                      (student_base revision a4e59da52a7b)
-      secrets:
-        MODEL_API_KEY  missing
-        HF_TOKEN       missing
-        WANDB_API_KEY  missing
-
-    $ python -m backend.cli ws-selftest
-    connected: session s1, protocol 1
-    frame 1: ack 640x480, 5427 bytes
-    frame 2: ack 640x480, 5426 bytes
-    frame 3: ack 640x480, 5426 bytes
-    sent 3 frames, got 3 acks
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -97,13 +78,27 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
 - `backend/server.py`: the backend the iPhone app talks to: JPEG frames arrive over a
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
+- `backend/teach_session.py`: a phone teach session: the spend question before any
+  paid call, the read-back, progress lines and timeouts.
+- `backend/teach_upload.py`: the phone's teach upload: a multipart parser, the input
+  checks, the saved capture and the estimate.
+- `backend/teach_api.py`: the teach routes for the phone: /teach/start, /teach/status
+  and /teach/answer, behind SERVER_TOKEN.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
+- `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
+  recipe with the run's paths, W&B names and gradient accumulation for one H100.
+- `backend/training/prepare.py`: bundles taught skills into one training set for Modal
+  (real, synthetic or mixed, with a validation split and volume paths).
+- `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
+  recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -113,8 +108,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -139,12 +136,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 474 tests, all offline; none calls a paid API.
+- `tests/`: 715 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v45 adds the training data: taught skills bundled for Modal, and the Axolotl
-config from Meta's recipe.
+Stage v45 adds the server's watch mode (scores in each ack, alerts as messages, one
+cooldown book for every session), GET /skills, the teach routes, and a te serve that
+prints the address the phone uses.
 
 ## Privacy and policy
 

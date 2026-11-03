@@ -1,16 +1,23 @@
 """Static checks on the Modal vLLM app. Modal and vLLM are not installed in CI, so the script
-is parsed, not run; the vLLM command is read from serve_command's returned list."""
+is parsed, not imported: its constants and plain functions (model_dir, lora_modules,
+serve_command, wants_base) are run on their own, without modal."""
 
 import ast
 import inspect
+import re
 from pathlib import Path
 
-from backend.config import Settings
+import pytest
+
+from backend import cli_serving
+from backend.config import DEFAULT_MODELS, STUDENT_BASE_REVISION, Settings
 from backend.inference.student import OpenAIStudent
+from backend.training.axolotl import RECIPE
 
 SCRIPT = Path(__file__).resolve().parents[1] / "backend" / "inference" / "modal_serve.py"
 TREE = ast.parse(SCRIPT.read_text())
 FUNCS = {n.name: n for n in TREE.body if isinstance(n, ast.FunctionDef)}
+PLAIN = ("model_dir", "lora_modules", "serve_command", "wants_base")
 
 
 def constants():
@@ -18,21 +25,23 @@ def constants():
             and isinstance(n.value, ast.Constant)}
 
 
-def command(model="/vol/runs/exp1-mixed/merged"):
-    """serve_command's list, with the constants (and str() of them) filled in."""
-    values = {**constants(), "model": model}
-    [ret] = [n for n in ast.walk(FUNCS["serve_command"]) if isinstance(n, ast.Return)]
-    out = []
-    for elt in ret.value.elts:
-        if isinstance(elt, ast.Call):
-            assert ast.unparse(elt.func) == "str"
-            elt = elt.args[0]
-        out.append(str(elt.value) if isinstance(elt, ast.Constant) else str(values[elt.id]))
-    return out
+def plain():
+    """The module's constants and PLAIN functions, run without modal or os.environ."""
+    body = [n for n in TREE.body if isinstance(n, ast.Assign)
+            and "modal" not in ast.unparse(n) and "os.environ" not in ast.unparse(n)]
+    body += [FUNCS[name] for name in PLAIN]
+    namespace = {"re": re, "Path": Path}
+    code = compile(ast.Module(body=body, type_ignores=[]), str(SCRIPT), "exec")
+    exec(code, namespace)  # noqa: S102 - our own script's plain functions, without modal
+    return namespace
 
 
-def flags():
-    cmd = command()
+def command(*args, **kwargs):
+    return plain()["serve_command"](*(args or ("/vol/runs/exp1-mixed/merged",)), **kwargs)
+
+
+def flags(cmd=None):
+    cmd = cmd or command()
     return {a: (b if not b.startswith("--") else None) for a, b in zip(cmd, cmd[1:] + ["--"])
             if a.startswith("--")}
 
@@ -46,6 +55,7 @@ def test_the_cookbook_image_and_single_card_flags_on_one_80_gb_gpu():
     assert f["--tool-call-parser"] == f["--reasoning-parser"] == "muse_glimmer"
     assert f["--generation-config"] == "auto" and "--chat-template" not in f
     assert (f["--host"], f["--port"]) == ("0.0.0.0", str(c["PORT"]))
+    assert "--revision" not in f and "--enable-lora" not in f  # a merged folder: neither
     assert ".entrypoint([])" in SCRIPT.read_text()
 
 
@@ -54,9 +64,52 @@ def test_it_serves_the_merged_folder_as_trained_eye_with_enough_logprobs():
     assert f["--served-model-name"] == "trained-eye" == Settings().student_model
     asked = inspect.signature(OpenAIStudent).parameters["top_logprobs"].default
     assert int(f["--max-logprobs"]) >= asked == 10
-    assert "return f'{MOUNT}/runs/{run}/merged'" in ast.unparse(FUNCS["model_dir"])
+    assert plain()["model_dir"]("exp1-mixed") == "/vol/runs/exp1-mixed/merged"
+    with pytest.raises(ValueError, match="TE_SERVE_RUN"):
+        plain()["model_dir"]("../x")
     assert constants()["MOUNT"] == "/vol" and constants()["VOLUME"] == "trained-eye"
     assert "model = model_dir(os.environ.get(RUN_ENV, ''))" in ast.unparse(FUNCS["serve"])
+
+
+def test_the_base_is_the_pinned_hub_model_under_its_own_app_and_model_name():
+    c, ns = constants(), plain()
+    assert (c["BASE_MODEL"], c["BASE_REVISION"]) == (DEFAULT_MODELS["student_base"],
+                                                     STUDENT_BASE_REVISION)
+    assert c["BASE_APP"] != c["APP"]  # both endpoints can be up at once
+    assert (cli_serving.STUDENT_APP, cli_serving.BASE_APP, cli_serving.BASE_MODEL_NAME) == (
+        c["APP"], c["BASE_APP"], c["BASE_MODEL_NAME"])
+    assert cli_serving.SERVE_ENVS == (c["RUN_ENV"], c["BASE_ENV"], c["LORAS_ENV"])
+    cmd = ns["serve_command"](c["BASE_MODEL"], c["BASE_MODEL_NAME"], c["BASE_REVISION"])
+    f = flags(cmd)
+    assert cmd[:3] == ["vllm", "serve", "meta-models/Muse-Glimmer-30B"]
+    assert f["--served-model-name"] == "muse-glimmer"
+    assert f["--revision"] == f["--tokenizer-revision"] == STUDENT_BASE_REVISION
+    assert ns["wants_base"]({"TE_SERVE_BASE": "1"}) and ns["wants_base"](
+        {"TE_SERVE_LORAS": "exp1-mixed"})
+    assert not ns["wants_base"]({"TE_SERVE_RUN": "exp1-mixed", "TE_SERVE_BASE": ""})
+    text = SCRIPT.read_text()
+    assert "app = modal.App(BASE_APP if BASE else APP)" in text
+    assert '.env({"HF_HOME": f"{MOUNT}/hf"})' in text  # the cache training filled
+    serve = ast.unparse(FUNCS["serve"])
+    assert "serve_command(BASE_MODEL, BASE_MODEL_NAME, BASE_REVISION, loras)" in serve
+
+
+def test_lora_runs_are_model_names_on_one_endpoint():
+    ns = plain()
+    modules = ns["lora_modules"]("exp1-real, exp1-mixed,")
+    assert modules == ["exp1-real=/vol/runs/exp1-real/out", "exp1-mixed=/vol/runs/exp1-mixed/out"]
+    assert ns["lora_modules"]("") == []
+    for bad, match in (("exp1-real,exp1-real", "twice"), ("Exp 1", "bad run name")):
+        with pytest.raises(ValueError, match=match):
+            ns["lora_modules"](bad)
+    cmd = ns["serve_command"]("meta-models/Muse-Glimmer-30B", "muse-glimmer", "abc", modules)
+    f = flags(cmd)
+    assert "--enable-lora" in f and int(f["--max-lora-rank"]) >= RECIPE["lora_r"] == 32
+    assert int(f["--max-cpu-loras"]) == 2 and int(f["--max-loras"]) >= 1
+    assert cmd[cmd.index("--lora-modules") + 1:] == modules  # every module after the flag
+    serve = ast.unparse(FUNCS["serve"])
+    assert "Path(adapter, 'adapter_config.json').is_file()" in serve  # refuses a missing one
+    assert "LoRA serving is not documented for Muse Glimmer" in ast.get_docstring(TREE)
 
 
 def test_modal_settings_are_named_constants():
@@ -72,11 +125,13 @@ def test_modal_settings_are_named_constants():
 
 def test_the_api_key_comes_from_the_student_secret_and_is_never_printed():
     c, text = constants(), SCRIPT.read_text()
-    assert (c["API_SECRET"], c["API_KEY_ENV"]) == ("student", "STUDENT_API_KEY")
+    assert (c["API_SECRET"], c["API_KEY_ENV"], c["HF_SECRET"]) == (
+        "student", "STUDENT_API_KEY", "huggingface")
     assert "--api-key" not in command()  # vLLM logs its arguments: the key goes in the env
     [call] = [d for d in FUNCS["serve"].decorator_list if ast.unparse(d.func) == "app.function"]
-    assert {kw.arg: ast.unparse(kw.value) for kw in call.keywords}["secrets"] == (
-        "[modal.Secret.from_name(API_SECRET)]")
+    assert {kw.arg: ast.unparse(kw.value) for kw in call.keywords}["secrets"] == "SECRETS"
+    assert ("SECRETS = [modal.Secret.from_name(API_SECRET)] + "
+            "([modal.Secret.from_name(HF_SECRET)] if BASE else [])") in ast.unparse(TREE)
     names = [n for n in ast.walk(TREE) if isinstance(n, ast.Constant) and n.value == c[
         "API_KEY_ENV"]]
     assert len(names) == 1 and "environ[" not in text  # only API_KEY_ENV, read with .get
@@ -85,5 +140,5 @@ def test_the_api_key_comes_from_the_student_secret_and_is_never_printed():
             name = ast.unparse(node.func)
             assert name != "print" and not name.startswith(("logging.", "logger.")), name
             assert "shell" not in {kw.arg for kw in node.keywords}
-    assert ("subprocess.Popen(serve_command(model), env={**os.environ, 'VLLM_API_KEY': api_key})"
+    assert ("subprocess.Popen(command, env={**os.environ, 'VLLM_API_KEY': api_key})"
             in ast.unparse(FUNCS["serve"]))

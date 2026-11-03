@@ -2,7 +2,8 @@
 // TeachClient.swift
 //
 // The teach API (backend/teach_api.py): POST /teach/start with the request and the
-// captured frames as multipart/form-data, GET /teach/status, POST /teach/answer.
+// captured frames as multipart/form-data, GET /teach/status (for one skill, or the latest
+// session), POST /teach/answer.
 //
 
 import Foundation
@@ -36,8 +37,11 @@ extension BackendClient {
     return try JSONDecoder().decode(TeachStatus.self, from: data)
   }
 
-  func teachStatus(skill: String) async throws -> TeachStatus {
-    try await get("teach/status", query: [URLQueryItem(name: "skill", value: skill)])
+  /// GET /teach/status for `skill`; for nil, the query is left out and the backend returns
+  /// the latest session since it started (404 when there is none).
+  func teachStatus(skill: String?) async throws -> TeachStatus {
+    let query = skill.map { [URLQueryItem(name: "skill", value: $0)] } ?? []
+    return try await get("teach/status", query: query)
   }
 
   /// Answers the open question ("spend" or "read_back") and returns the new status.

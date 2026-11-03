@@ -7,9 +7,16 @@ paths (absolute, on the Modal volume), the W&B names, and, on one H100, gradient
 accumulation 32 to keep the recipe's global batch of 32 (the recipe's README says so).
 
 The config is written as JSON, which YAML readers (Axolotl's included) accept as is.
+
+W&B: the run's tags come from te train; wandb_config() is the bundle summary modal_train.py
+adds to the run's config (WANDB_CONFIG_PATHS). Model uploads (wandb_log_model "end") stay
+off unless te train --wandb-artifacts asked the author first.
 """
 
 from __future__ import annotations
+
+import hashlib
+import json
 
 from backend.config import DEFAULT_MODELS, STUDENT_BASE_REVISION
 
@@ -70,8 +77,11 @@ SMOKE = {"max_steps": 2, "gradient_accumulation_steps": 1, "eval_strategy": "no"
 
 
 def qlora_config(run: str, train_jsonl: str, output_dir: str, *, val_jsonl: str | None = None,
-                 gpus: int = 1, smoke: bool = False, seed: int = 42) -> dict:
-    """The full Axolotl config for `run`. Paths must be absolute inside the container."""
+                 gpus: int = 1, smoke: bool = False, seed: int = 42, entity: str | None = None,
+                 log_model: bool = False) -> dict:
+    """The full Axolotl config for `run`. Paths must be absolute inside the container.
+    `entity` is the W&B team (default: the key's own account); `log_model` uploads the
+    adapter to W&B at the end (only after the author said yes)."""
     for path in (train_jsonl, output_dir, val_jsonl):
         if path is not None and not path.startswith("/"):
             raise ValueError(f"paths in the training config must be absolute: {path}")
@@ -87,6 +97,10 @@ def qlora_config(run: str, train_jsonl: str, output_dir: str, *, val_jsonl: str 
         "gradient_accumulation_steps": GLOBAL_BATCH // gpus,
         "seed": seed,
     }
+    if entity:
+        config["wandb_entity"] = entity
+    if log_model:
+        config["wandb_log_model"] = "end"
     if val_jsonl:
         config["test_datasets"] = [{"path": val_jsonl, "split": "train", **CHAT_DATASET}]
     if smoke:
@@ -98,3 +112,36 @@ def optimizer_steps(examples: int, gpus: int = 1) -> int:
     """Optimizer steps for one epoch at the recipe's global batch of 32."""
     per_step = (GLOBAL_BATCH // gpus) * gpus
     return max(1, -(-examples // per_step))
+
+
+# Run-specific fields of a bundle manifest (prepare.py): the split hashes cover image paths
+# under /vol/bundles/<run>, so they differ for the same data under another run name.
+RUN_FIELDS = ("image_root", "train_sha256", "val_sha256")
+
+
+def data_hash(manifest: dict) -> str:
+    """sha256 of what a bundle trains on, the same under any run name: its manifest
+    (backend/training/prepare.py: the skills' dataset hashes, variant, limit, dataset
+    folder, prompt layout and counts) without RUN_FIELDS. W&B tags it data:<first 12>."""
+    kept = {k: v for k, v in manifest.items() if k not in RUN_FIELDS}
+    return hashlib.sha256(json.dumps(kept, sort_keys=True).encode()).hexdigest()
+
+
+def wandb_tags(manifest: dict) -> list[str]:
+    """The data tags of a run: data hash, base revision, dataset folder, images per skill."""
+    return [f"data:{data_hash(manifest)[:12]}", f"base:{STUDENT_BASE_REVISION[:12]}",
+            f"dataset:{manifest.get('dataset_dir', 'dataset')}",
+            f"images:{manifest.get('limit') or 'all'}"]
+
+
+def wandb_config(manifest: dict, run: str, tags: list[str]) -> dict:
+    """The bundle summary for the W&B run's config, in W&B's config-defaults format
+    ({key: {"value": ...}}): modal_train.py writes it as YAML and points WANDB_CONFIG_PATHS
+    at it. It holds hashes and counts, never images or prompts."""
+    tagged = dict(t.split(":", 1) for t in tags if ":" in t)
+    summary = {"run": run, "data_hash": data_hash(manifest),
+               "base_model": DEFAULT_MODELS["student_base"],
+               "base_revision": STUDENT_BASE_REVISION, "commit": tagged.get("commit"),
+               "bundle": {k: v for k, v in manifest.items() if k != "image_root"}}
+    return {"trained_eye": {"desc": "te train: the bundle and base this run trained on",
+                            "value": summary}}

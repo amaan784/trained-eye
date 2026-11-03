@@ -82,3 +82,29 @@ def test_rows_whose_labelling_failed_are_counted_apart():
     kept, stats = filter_generated(rows)
     assert len(kept) == 1 and stats["total"] == 1 and stats["label_errors"] == 1
     assert stats["agreement"] == 1.0
+
+
+def test_a_label_that_needed_the_bigger_budget_costs_nothing_on_a_rerun(tmp_path):
+    client, budgets = client_for(tmp_path, [reply("", "length"),
+                                            reply('{"label": "yes", "reason": "End shows"}')])
+    first = label_image(client, SPEC, JPEG)
+    assert first.cost_usd == pytest.approx(sum(e["actual_usd"]
+                                               for e in client.ledger.entries()))
+    again = label_image(client, SPEC, JPEG)  # no replies left: any request would fail
+    assert (again.label, again.cached, again.cost_usd) == ("yes", True, 0.0)
+    assert budgets == [1024, 4096] and len(client.ledger.entries()) == 2
+
+
+def test_a_label_cut_off_mid_answer_is_asked_again(tmp_path):
+    client, budgets = client_for(tmp_path, [reply('{"label": "ye', "length"),
+                                            reply('{"label": "no", "reason": "dark"}')])
+    lab = label_image(client, SPEC, JPEG)
+    assert (lab.label, lab.error, lab.cached) == ("no", False, False)
+    assert budgets == [1024, 4096]
+
+
+def test_a_failed_label_still_reports_what_it_cost(tmp_path):
+    client, _ = client_for(tmp_path, [reply("not json")])
+    lab = label_image(client, SPEC, JPEG)
+    [entry] = client.ledger.entries()
+    assert lab.error and lab.cost_usd == entry["actual_usd"] > 0

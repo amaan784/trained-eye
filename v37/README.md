@@ -11,18 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v37 (M1 review): Fix: CI and setup
+## Build stage v37 (M2): The watcher
 
-CI installs ffmpeg, so the video tests run there instead of being skipped. The Mac
-setup uses python3.12 and installs ffmpeg (python3 on a Mac can be Apple's 3.9, which
-the project does not support). .env.example no longer offers WANDB_ENTITY, which
-nothing reads; it says to pass the W&B team to the Modal job instead.
+backend/watch/watcher.py is watch mode for a set of taught skills: frames in, alerts
+out. For every frame and skill the student scores the frame, the skill's trigger
+decides whether it fires, and a skill that asks for it has Muse Spark check the frame
+first. If Spark says no, the skill is snoozed for a minute; if the check itself fails,
+the alert goes out marked unconfirmed, as missing the washer is worse than one
+unchecked alert. Thresholds come from te watch --threshold, then the trained run's
+calibration, then the skill's, else 0.5, and each frame log row says which. One
+CooldownBook holds each skill's quiet time for every session and is saved to
+data/watch/cooldowns.json, so a reconnect, a second phone or a restart does not
+announce a condition again inside its cooldown. Every scored frame is logged as one
+JSON line; frames themselves are never written.
 
 Files added or changed in this stage:
 
-- `.env.example` (changed): template for the keys (copy to .env)
-- `.github/workflows/ci.yml` (changed): CI: ruff and pytest on every push
-- `CLAUDE.md` (changed): short setup, commands and conventions
+- `backend/watch/watcher.py` (new): watch mode: scores, the Muse Spark check before an
+  alert, alert messages and the frame log
+- `tests/test_watcher.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -35,17 +42,20 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 18%]
-    ........................................................................ [ 36%]
-    ........................................................................ [ 54%]
-    ........................................................................ [ 72%]
-    ........................................................................ [ 90%]
-    ........................................                                 [100%]
-    400 passed in 7.11s
+    ........................................................................ [ 11%]
+    ........................................................................ [ 23%]
+    ........................................................................ [ 35%]
+    ........................................................................ [ 47%]
+    ........................................................................ [ 59%]
+    ........................................................................ [ 70%]
+    ........................................................................ [ 82%]
+    ........................................................................ [ 94%]
+    .................................                                        [100%]
+    609 passed in 8.07s
 
     $ ruff check .
     All checks passed!
@@ -78,14 +88,22 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
 - `backend/dataengine/labels.py`: Muse Spark labels for every image, the filter that
   keeps generated images only when Spark agrees, and agreement stats.
 - `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
+- `backend/watch/trigger.py`: when a skill fires: 3 of the last 4 frames over the
+  threshold, then the cooldown; the threshold calibration on labelled clips.
+- `backend/inference/student.py`: scores a frame with the trained model on an
+  OpenAI-compatible endpoint, read at its yes or no answer token.
+- `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
+  alert, alert messages and the frame log.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -98,12 +116,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 400 tests, all offline; none calls a paid API.
+- `tests/`: 609 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v38 adds the docs for these fixes: the estimator figures for a real clip, the
-recording protocol and the notes.
+Stage v38 adds the training bundle (real, synthetic or mixed, with a fixed validation
+split) and Meta's QLoRA recipe as the Axolotl config.
 
 ## Privacy and policy
 

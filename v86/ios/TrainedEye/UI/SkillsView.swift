@@ -2,7 +2,9 @@
 // SkillsView.swift
 //
 // The taught skills from GET /skills, each with an on/off switch for watch mode and its
-// status (dataset built, calibrated). Changing a switch while watching says hello again.
+// status: Training (a te train run on Modal is going), Trained (a run finished), Ready
+// (served by te serve-student and calibrated), else how far the teach flow got. Changing
+// a switch while watching says hello again.
 //
 
 import SwiftUI
@@ -22,7 +24,8 @@ struct SkillsView: View {
       }
       Notice(
         text: "Switched-on skills are scored while watching. That needs the trained model's "
-          + "endpoint set on the Mac (TE_STUDENT_URL).")
+          + "endpoint set on the Mac (TE_STUDENT_URL). Ready means the model te serve-student "
+          + "deployed knows the skill and te calibrate set its threshold.")
       Button("Refresh") { Task { await app.refreshSkills() } }
         .buttonStyle(SecondaryButtonStyle())
     }
@@ -45,7 +48,10 @@ private struct SkillRow: View {
           }
           Text(skill.statusText)
             .font(Theme.caption)
-            .foregroundStyle(skill.calibrated ? Theme.accent : Theme.secondary)
+            .foregroundStyle(skill.isReady ? Theme.accent : Theme.secondary)
+          if let time = skill.trainingTimeText {
+            Text(time).font(Theme.caption).foregroundStyle(Theme.secondary)
+          }
         }
       }
       if let cooldown = skill.cooldownSeconds, cooldown > 0 {

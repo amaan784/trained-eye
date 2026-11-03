@@ -127,3 +127,110 @@ def test_wandb_is_optional_and_logged_only_when_asked(plan, tmp_path, monkeypatc
     assert len(rows) == 6 and columns[:4] == ["name", "experiment", "skill", "variant"]
     assert set(logged) >= {"charts/exp1_bars", "charts/timeline_exp1-mixed_1"}
     assert f"W&B: {run.url}" in (tmp_path / "c" / "results.md").read_text()
+
+
+def test_wandb_runs_go_to_the_team_given(plan, tmp_path, monkeypatch):
+    inits = []
+    run = types.SimpleNamespace(summary={}, url="https://wandb.ai/team/trained-eye/runs/y",
+                                log=lambda data: None, finish=lambda: None)
+    monkeypatch.setitem(sys.modules, "wandb", types.SimpleNamespace(
+        init=lambda **kw: inits.append(kw) or run, Table=lambda columns, data: None,
+        Html=lambda html: None))
+    run_eval(plan, tmp_path / "a", log_wandb=True, wandb_entity="team")
+    run_eval(plan, tmp_path / "b", log_wandb=True)
+    assert [i["entity"] for i in inits] == ["team", None]  # None: the key's own account
+    assert {i["project"] for i in inits} == {"trained-eye"}
+
+
+def skill_clip(folder, name, skill, alert_at, **kw):
+    """write_clip for another skill."""
+    clip = write_clip(folder, name, alert_at, **kw)
+    log = folder / f"{name}.jsonl"
+    log.write_text(log.read_text().replace('"washer_done"', f'"{skill}"'))
+    return clip
+
+
+def test_judges_pool_over_their_skills_and_side_results_reach_results_and_wandb(
+        tmp_path, monkeypatch):
+    from tests.test_eval_writeup import REGRESSION, SPARK_ERRORS
+
+    clips = tmp_path / "clips"
+    clips.mkdir()
+
+    def judge(name, variant, skill, clip, **extra):
+        return {"name": name, "experiment": 4, "skill": skill, "variant": variant,
+                "clips": [clip], **extra}
+
+    plan_path = tmp_path / "eval" / "plan.json"
+    plan_path.parent.mkdir()
+    plan_path.write_text(json.dumps({"evaluations": [
+        judge("ft-w", "finetuned", "washer_done", write_clip(clips, "ftw", 62), gpu="H100",
+              highlight=True),
+        judge("ft-b", "finetuned", "boil_over", skill_clip(clips, "ftb", "boil_over", None,
+                                                           n=240), gpu="H100", highlight=True),
+        judge("base-w", "base", "washer_done", write_clip(clips, "bw", 75), gpu="H100"),
+        judge("base-b", "base", "boil_over", {"log": "../clips/none.jsonl",
+                                              "labels": "../clips/none.json"}),
+        judge("spark-w", "spark", "washer_done", write_clip(clips, "sw", 63),
+              scorer_usd_per_frame=0.003)]}))
+    data = tmp_path / "data"
+    for skill, files in (("washer_done", {"spark_errors.json": {**SPARK_ERRORS,
+                                                                 "unmatched_files": ["x.png"]},
+                                          "label_stats.json": {"total": 250, "kept": 200,
+                                                               "agreement": 0.8,
+                                                               "by_kind": {}}}),
+                         ("boil_over", {})):
+        (data / "skills" / skill).mkdir(parents=True)
+        for name, content in files.items():
+            (data / "skills" / skill / name).write_text(json.dumps(content))
+    regression = tmp_path / "eval" / "regression.json"
+    regression.write_text(json.dumps({**REGRESSION, "rows": [{"reply": "general answers"}]}))
+    logged = {}
+    run = types.SimpleNamespace(summary={}, url="https://wandb.ai/me/trained-eye/runs/z",
+                                log=logged.update, finish=lambda: None)
+    monkeypatch.setitem(sys.modules, "wandb", types.SimpleNamespace(
+        init=lambda **kw: run, Table=lambda columns, data: None, Html=lambda html: None))
+    results = run_eval(plan_path, tmp_path / "out", log_wandb=True, data_dir=data,
+                       regression=regression)
+
+    judges = {j["variant"]: j for j in results["experiment4"]}
+    assert list(judges) == ["finetuned", "base", "spark"]
+    assert judges["finetuned"]["skills"] == ["washer_done", "boil_over"] and judges[
+        "finetuned"]["highlight"]
+    assert judges["finetuned"]["metrics"]["frames"] == 120 + 240  # the counts added up
+    assert judges["finetuned"]["metrics"]["clips"] == 2
+    by_name = {e["name"]: e for e in results["evaluations"]}
+    hours = [by_name[n]["metrics"]["hours"] for n in ("ft-w", "ft-b")]
+    usd = [by_name[n]["cost_per_hour"]["total_usd"] for n in ("ft-w", "ft-b")]
+    assert judges["finetuned"]["usd_per_hour"] == round(
+        (usd[0] * hours[0] + usd[1] * hours[1]) / sum(hours), 4)  # weighted by footage
+    assert (judges["base"]["skills"], judges["base"]["of"]) == (["washer_done"], 2)
+    assert by_name["ft-w"]["threshold"] == {"values": [0.6], "sources": []}
+    svg = (tmp_path / "out" / "exp4_cost.svg").read_text()
+    assert svg.count('class="acc ring"') == 1 and svg.count('class="neu ring"') == 2
+    assert "base (1 of 2 skills)" in svg
+
+    assert results["spark_errors"]["washer_done"]["spark"]["errors"] == 19
+    assert "unmatched_files" not in results["spark_errors"]["washer_done"]
+    assert results["spark_errors"]["boil_over"] is None is results["label_stats"]["boil_over"]
+    assert "by_kind" not in results["label_stats"]["washer_done"]
+    assert results["regression"]["questions"] == 2 and "rows" not in results["regression"]
+    md = (tmp_path / "out" / "results.md").read_text()
+    assert "## Regression check" in md and "19 of 190 (10.0%" in md
+    summary = run.summary
+    assert summary["exp4-pooled/finetuned/frames"] == 360
+    assert summary["spark_errors/washer_done/spark_rate"] == 0.1
+    assert summary["spark_errors/washer_done/spark_ci95_low"] == 0.065
+    assert summary["spark_errors/washer_done/kept_n"] == 150
+    assert summary["label_stats/washer_done/agreement"] == 0.8
+    assert (summary["regression/base_accuracy"], summary["regression/finetuned_accuracy"],
+            summary["regression/changed"]) == (1.0, 0.5, 1)
+    assert summary["ft-w/threshold"] == 0.6
+    assert not any(k.startswith("spark_errors/boil_over") for k in summary)
+
+    regression.write_text(json.dumps({"precision": "bf16", "base": {}}))
+    with pytest.raises(ValueError, match="is not te regress's report"):
+        run_eval(plan_path, tmp_path / "out", data_dir=data, regression=regression)
+    regression.write_text("{")
+    with pytest.raises(ValueError, match="cannot be read"):
+        run_eval(plan_path, tmp_path / "out", regression=regression)

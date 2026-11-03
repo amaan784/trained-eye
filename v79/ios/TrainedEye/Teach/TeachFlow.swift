@@ -5,7 +5,10 @@
 // second capture after a 3 second countdown that keeps three frames a second in memory,
 // the upload to /teach/start, then the server's two questions (spend the estimate? is the
 // read-back right?) and its progress lines until the run ends. Frames are only held in
-// memory: they are dropped once the Mac has them, or on Start over.
+// memory: they are dropped once the Mac has them, or on Start over. The glasses stream at
+// medium resolution (504x896) for the capture (AppModel). After a relaunch, a session still
+// running on the Mac is picked up again from GET /teach/status, which without a skill
+// returns the latest one.
 //
 
 import Foundation
@@ -23,10 +26,6 @@ final class TeachFlow {
     case onServer
   }
 
-  // TODO: the capture uses the watch stream's low resolution (360x640). Medium
-  // (504x896) may teach better, but needs the camera added again with a new
-  // StreamConfiguration. And after a relaunch, a running session could be picked up
-  // again from GET /teach/status (without a skill it returns the latest).
   static let captureSeconds = 10
   /// The pace the backend reads a folder of frames at (keyframes.load_frames).
   static let captureInterval: TimeInterval = 1.0 / 3.0
@@ -37,7 +36,9 @@ final class TeachFlow {
   private(set) var phase: Phase = .compose
   private(set) var isRecording = false
   private(set) var requestSeconds: Double?
-  private(set) var requestFromGlasses = false
+  /// Which microphone recorded the request: "glasses", "iPhone", or both in order when the
+  /// route changed part way ("glasses, then iPhone").
+  private(set) var requestMicrophone = "iPhone"
   private(set) var frameCount = 0
   private(set) var activeSkill: String?
   private(set) var status: TeachStatus?
@@ -52,6 +53,7 @@ final class TeachFlow {
   @ObservationIgnored private var wantsRecording = false
   @ObservationIgnored private var captureTask: Task<Void, Never>?
   @ObservationIgnored private var pollTask: Task<Void, Never>?
+  @ObservationIgnored private var didTryResume = false
 
   var isCapturing: Bool {
     if case .capturing = phase { return true }
@@ -98,7 +100,7 @@ final class TeachFlow {
     if let result = recorder.stop() {
       requestAudio = result.wav
       requestSeconds = result.seconds
-      requestFromGlasses = recorder.usesGlassesMicrophone
+      requestMicrophone = recorder.microphoneText
       typedRequest = ""
     }
     app?.speaker.setListening(false)
@@ -146,6 +148,26 @@ final class TeachFlow {
   }
 
   // MARK: - On the Mac
+
+  /// Run once at launch: picks up the newest session on the Mac if it is still running, so
+  /// its spend or read-back question can be answered here. Only on a fresh Teach screen,
+  /// with an address and the server token set (the teach routes need it); a 404 (no session
+  /// since the server started) or a network error leaves the screen as it is.
+  func resumeIfRunning() async {
+    guard !didTryResume else { return }
+    didTryResume = true
+    guard phase == .compose, status == nil, let backend = app?.backend, !backend.token.isEmpty
+    else { return }
+    guard let latest = try? await backend.teachStatus(skill: nil), !latest.isFinished,
+      let skill = latest.skill
+    else { return }
+    // The user may have started something while the request was out.
+    guard phase == .compose, status == nil else { return }
+    activeSkill = skill
+    status = latest
+    phase = .onServer
+    startPolling(skill: skill)
+  }
 
   func send() {
     guard canSend else { return }

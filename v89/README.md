@@ -11,20 +11,24 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v89 (M3): Experiment commands
+## Build stage v89 (M4): Playground: the timeline and the wall
 
-backend/cli_experiments.py adds te experiments (the plan and its price, and
-eval/plan.json), te unfiltered, te spark-errors and te regress, which uses the
-student's sampling for both models.
+Two scripts for the page, in backend/playground/static/. timeline.js draws one skill's
+timeline for a clip as SVG: the student's yes-probability for each scored frame as a
+line, broken where the student gave no score, the threshold dashed, the true ranges
+shaded, and each alert marked with its spoken text, on two rows to keep the labels
+apart. A playhead follows the video, hovering shows a frame's score, a click seeks, a
+sentence below reads the score against the threshold, and a banner shows what was
+spoken for 5 seconds after each alert. wall.js draws the training wall: generated
+variations flip in one after another, each tagged with Muse Spark's label; the ones
+Spark disagreed with fade and are marked rejected, and each image's alt text says what
+it was made to show. Wall.add adds tiles one at a time for a live run, and
+Wall.summary counts them in a sentence. The page's script uses both in the next stage.
 
 Files added or changed in this stage:
 
-- `backend/cli.py` (changed): the te command line
-- `backend/cli_experiments.py` (new):
-- `backend/training/prepare.py` (changed): bundles taught skills into one training set
-  for Modal (real, synthetic or mixed, with a validation split and volume paths)
-- `tests/test_cli_experiments.py` (new): tests
-- `tests/test_training_prep.py` (changed): tests
+- `backend/playground/static/timeline.js` (new):
+- `backend/playground/static/wall.js` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -37,20 +41,25 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 11%]
-    ........................................................................ [ 22%]
-    ........................................................................ [ 33%]
-    ........................................................................ [ 44%]
-    ........................................................................ [ 55%]
-    ........................................................................ [ 66%]
-    ........................................................................ [ 77%]
-    ........................................................................ [ 89%]
-    .......................................................................  [100%]
-    647 passed in 28.88s
+    ........................................................................ [  7%]
+    ........................................................................ [ 14%]
+    ........................................................................ [ 21%]
+    ........................................................................ [ 29%]
+    ............................................s........................... [ 36%]
+    ........................................................................ [ 43%]
+    ........................................................................ [ 50%]
+    ........................................................................ [ 58%]
+    ........................................................................ [ 65%]
+    ........................................................................ [ 72%]
+    ........................................................................ [ 80%]
+    ........................................................................ [ 87%]
+    ........................................................................ [ 94%]
+    .....................................................                    [100%]
+    988 passed, 1 skipped in 78.16s (0:01:18)
 
     $ ruff check .
     All checks passed!
@@ -67,6 +76,15 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
+- `backend/cli_experiments.py`: te experiments, te unfiltered, te clips, te
+  spark-errors and te regress.
+- `backend/cli_replay.py`: te replay: the recorded test clips through watch mode.
+- `backend/cli_release.py`: the M4 release commands.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -99,8 +117,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -122,6 +142,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   and the SVG charts.
 - `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
   its price.
+- `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
+  reads.
+- `backend/regenerate.py`: the prompt manifests and regenerating images from them.
+- `backend/release/model_card.py`: the Hugging Face model card.
+- `backend/release/package.py`: the release folder (base license, blurred keyframes),
+  the upload and the collection.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -135,12 +161,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 647 tests, all offline; none calls a paid API.
+- `tests/`: 988 tests, all offline; none calls a paid API.
 
 ## Next
 
-Milestone M4: the release tools (manifests, regeneration, face blurring, the model
-card) and the web playground.
+Stage v90 adds the page script that ties the playground together: the clip and skill
+pickers, SAM's outline, a live teach run followed as it goes, the cost and the caps,
+and the results.
 
 ## Privacy and policy
 

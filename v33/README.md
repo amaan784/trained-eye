@@ -11,30 +11,33 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v33 (M1 review): Fix: policy check and compiler, second round
+## Build stage v33 (M2): Meta calls: client, labels and image edits
 
-The second check of the earlier policy fixes found that they let through named people
-('when Jake gets ready', 'when Jake's car gets stuck') and coaching ('count my
-burpees', 'check my pitching form'); both are refused again, without refusing Roomba,
-Instant Pot or Nest requests. Person words match plurals and more relatives, and the
-check refuses hiding the glasses' capture light and more covert, nutrition and
-supplement wording. A correction that rules something out ('not the bathroom light,
-the one on the lid') is no longer refused for what it rules out, and a refused
-correction says the correction caused it. Requests over 500 characters stop before the
-paid call. Everything the model writes gets the covert, health and sports rules
-(before, only the target and the trigger were checked). The read-back keeps names such
-as Instant Pot and display labels such as End, never says 'when when' or 'the our
-oven', and duplicate near-misses are dropped.
+A call stopped with Ctrl+C, or one whose reply fails after the request went through,
+is charged as billed. An empty transcript is billed but not cached, a cached reply
+that today's checks reject is fetched again, a generated image whose download fails
+twice becomes an output error the data engine can skip, and a reply without usable
+images is charged for the images asked for. The caps are checked again before every
+retry. Failed calls carry what they cost and the finish reason, structured calls can
+ask the cache alone, and each entry records the images and text tokens sent. SAM 3.1
+calls ask for confidences and read the streamed reply by the lane rules of Meta's SAM
+3 protocol: a refusal or a failed or incomplete response is an error, and an empty
+answer is valid. Labels can come from the cache alone, and the synthetic set stops
+with TooManyFailures when too many edits fail.
 
 Files added or changed in this stage:
 
-- `backend/skills/compiler.py` (changed): the skill compiler: the request and 3
-  keyframes go to Muse Wonder (structured output), which returns a spec or a refusal
-- `backend/skills/spec.py` (changed): the skill spec (version 1), the local policy
-  check that refuses skills about people, health, covert monitoring or sports, and the
-  plain-English read-back
-- `tests/test_compiler.py` (changed): tests
-- `tests/test_skills.py` (changed): tests
+- `backend/dataengine/labels.py` (changed): Muse Spark labels for every image, the
+  filter that keeps generated images only when Spark agrees, and agreement stats
+- `backend/dataengine/synth.py` (changed): the synthetic set: a deterministic plan of
+  Muse Image edits of the keyframes (positives, hard negatives, nuisance variation),
+  saved untouched with a manifest
+- `backend/meta/client.py` (changed): MetaClient, the only way the code calls Meta's
+  API: cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and
+  spend recorded from the reported usage
+- `tests/test_client.py` (changed): tests
+- `tests/test_labels.py` (changed): tests
+- `tests/test_synth.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -47,27 +50,22 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 19%]
-    ........................................................................ [ 39%]
-    ........................................................................ [ 59%]
-    ........................................................................ [ 79%]
-    ........................................................................ [ 99%]
-    .                                                                        [100%]
-    361 passed in 5.29s
+    ........................................................................ [ 13%]
+    ........................................................................ [ 27%]
+    ........................................................................ [ 41%]
+    ........................................................................ [ 55%]
+    ........................................................................ [ 69%]
+    ........................................................................ [ 83%]
+    ........................................................................ [ 97%]
+    ............                                                             [100%]
+    516 passed in 10.97s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli policy "Tell me when Jake gets ready"
-    refused: I can't watch for or recognize specific people. Skills can cover objects, states, text, displays, signs and vehicles.
-    (exit code 1)
-
-    $ python -m backend.cli policy "Tell me when Roomba's bin gets full"
-    ok: no local policy objection (the skill compiler checks again)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -97,8 +95,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -117,12 +115,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 361 tests, all offline; none calls a paid API.
+- `tests/`: 516 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v34 adds the keyframe and image fixes: hidden macOS files, WebP and HEIC
-folders, EXIF turns, and a manifest that is written even when generation stops.
+Stage v34 adds our reader of SAM 3.1's text format, with boxes and crops for every
+keyframe.
 
 ## Privacy and policy
 

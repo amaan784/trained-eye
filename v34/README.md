@@ -11,25 +11,32 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v34 (M1 review): Fix: keyframes and generated images
+## Build stage v34 (M2): Keyframes, SAM boxes and the dataset
 
-Frame folders skip hidden files such as the ._ copies macOS writes on external drives
-(before, they crashed te teach), read WebP, and say clearly when they hold HEIC photos
-or an unreadable file. EXIF turns are applied by the tag alone, so an odd EXIF block
-can no longer crash the run. The image manifest is written even when generation stops
-for too many failures, so it always describes this run and lists what failed; those
-stops raise TooManyFailures, and near-misses that differ only in case or a full stop
-are planned once.
+backend/dataengine/sam_text.py reads SAM 3.1's output text. It is our own
+implementation of the grammar in Meta's SAM 3 protocol (protocol/sam3.md in
+meta-models/meta-sam): frame markers, object ids, box and mask tokens, inclusive boxes
+made half-open, confidences from 0 to 1, and the protocol's rules for unknown fields,
+malformed segments and prose lines. Mask payloads are checked but not decoded, since
+the region of interest needs only the box. roi.py uses it: boxes are scaled to the
+keyframe, problems are kept with each frame, and each box gives a crop with a 25%
+margin, at least 64 pixels a side. Frames from a folder are turned by their EXIF
+orientation and HEIC frames are refused with a message, and each dataset entry records
+where its image came from.
 
 Files added or changed in this stage:
 
+- `backend/dataengine/dataset.py` (changed): the Axolotl dataset writer, in Meta's
+  recipe format (image path part, then text; 512x512 padded PNGs)
 - `backend/dataengine/keyframes.py` (changed): the keyframe picker: 20 to 30 sharp,
   distinct frames from the 10 second teaching clip
-- `backend/dataengine/synth.py` (changed): the synthetic set: a deterministic plan of
-  Muse Image edits of the keyframes (positives, hard negatives, nuisance variation),
-  saved untouched with a manifest
+- `backend/dataengine/roi.py` (changed): the region of interest: SAM 3.1 on each
+  keyframe, its boxes scaled to the keyframe, and a crop around each box for the dataset
+- `backend/dataengine/sam_text.py` (new): our reader of SAM 3.1's output text, written
+  from the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences
 - `tests/test_keyframes.py` (changed): tests
-- `tests/test_synth.py` (changed): tests
+- `tests/test_roi.py` (changed): tests
+- `tests/test_sam_text.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -42,17 +49,19 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 19%]
+    ........................................................................ [ 12%]
+    ........................................................................ [ 25%]
     ........................................................................ [ 38%]
-    ........................................................................ [ 58%]
-    ........................................................................ [ 77%]
-    ........................................................................ [ 96%]
-    ............                                                             [100%]
-    372 passed in 5.63s
+    ........................................................................ [ 50%]
+    ........................................................................ [ 63%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 89%]
+    .............................................................            [100%]
+    565 passed in 8.89s
 
     $ ruff check .
     All checks passed!
@@ -85,8 +94,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -105,12 +116,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 372 tests, all offline; none calls a paid API.
+- `tests/`: 565 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v35 adds the label and SAM fixes: a label that needed the larger budget is free
-on a rerun, and SAM skips a rejected frame like the other steps.
+Stage v35 adds the watch trigger (3 of the last 4 frames over the threshold, then the
+cooldown) and the student scorer on an OpenAI-compatible endpoint.
 
 ## Privacy and policy
 

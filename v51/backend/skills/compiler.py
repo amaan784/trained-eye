@@ -34,6 +34,9 @@ NO_REASON = frozenset({"", "none", "null", "nil", "na", "n a", "no", "nothing",
 NO_REASON_GIVEN = "The model refused it without giving a reason."
 TEXT_FIELDS = ("sam_prompt", "target_description", "positive", "alert")
 MAX_REQUEST = 500  # SkillSpec.request
+# What SYSTEM asks for; a compiled cooldown is clamped to it (SkillSpec allows 0 to a day
+# for hand-written specs). Under a minute, a condition that stays true alerts every few frames.
+COOLDOWN_S = (60, 3600)
 # Rooms at home may come up in a description ("the bathroom light"); other sensitive
 # places may not.
 PLACES = tuple(w for w in SENSITIVE_WORDS if w not in ("bathroom", "restroom", "toilet"))
@@ -88,8 +91,10 @@ Refuse (refused=true, a one-sentence refusal_reason, other fields empty) if the 
 would identify or track a specific person by face, voice or other traits, including a
 named person's car, phone or belongings ("when Jake's car pulls in"); concerns
 people's bodies, health, medication or other sensitive traits; monitors anyone
-covertly or relates to a sensitive location; or is about sports performance or
-coaching. Skills may only cover objects, states, text, displays, signs and vehicles."""
+covertly or relates to a sensitive location; is about sports performance or
+coaching; or is about politics or war (campaigns, elections, protests, soldiers, the
+military or weapons). Skills may only cover objects, states, text, displays, signs and
+vehicles."""
 
 
 def compile_skill(
@@ -144,7 +149,7 @@ def compile_skill(
                 positive=_clip(condition_clause(data["positive"]), 300),
                 negatives=distinct([_clip(n, 300) for n in data["negatives"] if n.strip()])[:8],
                 alert=_clip(data["alert"], 120),
-                cooldown_s=min(max(int(data["cooldown_s"]), 0), 86_400),
+                cooldown_s=min(max(int(data["cooldown_s"]), COOLDOWN_S[0]), COOLDOWN_S[1]),
                 confirm_with_cloud=bool(data["confirm_with_cloud"]),
             )
         except (KeyError, OverflowError, TypeError, ValueError, ValidationError) as err:
@@ -155,8 +160,10 @@ def compile_skill(
         # also the person and sensitive-place rules.
         # The trigger is checked with its "when" put back, as the user would say it.
         description = spec.target.description
+        # With the request, so "the gun" in a negative reads as the request's glue gun.
         refusal = (policy_check(f"{spec.target.sam_prompt}. When {spec.positive}")
-                   or topic_check(". ".join([description, *spec.negatives, spec.alert])))
+                   or topic_check(". ".join([request, description, *spec.negatives,
+                                             spec.alert])))
         if not refusal and policy_check(description) == REFUSALS["person"]:
             refusal = REFUSALS["person"]
         if not refusal and _has_word(OBJECT_PHRASES.sub(" ", normalise(description)), PLACES):

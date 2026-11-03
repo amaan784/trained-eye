@@ -190,6 +190,11 @@ cython_debug/
 data/
 outputs/
 wandb/
+# playground clips are real footage: they live in data/playground/clips/ (te
+# playground-clip); a folder left in the old place is never committed either
+eval/clips/
+# te eval's failure galleries are frames of real footage (may show faces): local only
+eval/galleries/
 *.safetensors
 .DS_Store
 

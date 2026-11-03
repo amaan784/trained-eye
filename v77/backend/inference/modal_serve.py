@@ -1,13 +1,24 @@
-"""Serve the merged student with vLLM's OpenAI-compatible server on Modal.
-
-After backend/training/export.py has written /vol/runs/<run>/merged, deploy from the repo root:
+"""Serve the student with vLLM's OpenAI-compatible server on Modal: a run's merged model,
+the base model, or the base with several runs' adapters. From the repo root (te
+serve-student runs these and asks first):
 
     TE_SERVE_RUN=exp1-mixed modal deploy backend/inference/modal_serve.py
+    TE_SERVE_BASE=1 modal deploy backend/inference/modal_serve.py
+    TE_SERVE_LORAS=exp1-real,exp1-mixed modal deploy backend/inference/modal_serve.py
+
+The first serves /vol/runs/<run>/merged (backend/training/export.py writes it) as the app
+trained-eye-student, model name trained-eye. The other two deploy the app trained-eye-base,
+so a base and a fine-tuned endpoint can be up together (Experiment 4, te regress): the base
+from the Hub at the pinned revision, model name muse-glimmer, its download in the Hugging
+Face cache on the volume (/vol/hf, where training already put it) with HF_TOKEN from the
+Modal Secret "huggingface". TE_SERVE_LORAS also loads each run's QLoRA adapter
+(/vol/runs/<run>/out, from modal_train.py) with --enable-lora, each run a model name of its
+own (its run name), so Experiments 1 to 3 need no merge and no deploy per run.
 
 Modal prints the URL. Watch mode then uses TE_STUDENT_URL=<that URL>/v1 and the model name
-trained-eye, and every request needs the key in the Modal Secret "student" (STUDENT_API_KEY)
-as a Bearer token. The URL stays the same when another run is deployed;
-`modal app stop trained-eye-student` stops it.
+(TE_STUDENT_MODEL), and every request needs the key in the Modal Secret "student"
+(STUDENT_API_KEY) as a Bearer token. The URL stays the same when the app is deployed again;
+`modal app stop trained-eye-student` (or trained-eye-base) stops it.
 
 The command follows the cookbook (meta-oss-cookbook b30ca2c,
 muse-glimmer/inference-server/vllm.md): the vllm/vllm-openai:muse-glimmer image, as no
@@ -18,6 +29,10 @@ none); parser names with underscores. vllm.md budgets 72 GB of VRAM for bf16: on
 Unverified: vllm.md calls this path "unverified end to end" and has no attested image
 request; this image on Modal, and a merged fine-tune in place of Meta's checkpoint, have not
 been tried. Send one image request (te watch on a short clip) before relying on it.
+LoRA serving is not documented for Muse Glimmer at all (vllm.md has no --enable-lora), so
+the adapters on this image are untried too. vLLM serves the base in bf16 while the adapters
+were trained on the NF4 base: the same pairing as export.py's default bf16 reference (Meta
+evaluated its QLoRA adapters on an NF4 base only).
 """
 
 from __future__ import annotations
@@ -42,6 +57,13 @@ PORT = 8000  # vLLM's default port
 API_SECRET = "student"
 API_KEY_ENV = "STUDENT_API_KEY"
 SERVED_MODEL_NAME = "trained-eye"  # Settings.student_model (TE_STUDENT_MODEL)
+BASE_APP = "trained-eye-base"  # its own app, so it can be up next to APP
+BASE_MODEL_NAME = "muse-glimmer"  # vllm.md's --served-model-name label
+BASE_MODEL = "meta-models/Muse-Glimmer-30B"  # config.DEFAULT_MODELS["student_base"] (tests)
+BASE_REVISION = "a4e59da52a7bc87ae7251dd5545c0dd437c44b68"  # config.STUDENT_BASE_REVISION
+HF_SECRET = "huggingface"  # HF_TOKEN, for the base download
+MAX_LORA_RANK = 32  # the recipe's lora_r (backend/training/axolotl.py); vLLM's default is 16
+MAX_LORAS = 1  # our choice: adapters in one batch (GPU memory); te watch scores one run
 PARSER = "muse_glimmer"  # underscores: vLLM matches the name literally (vllm.md)
 # vLLM refuses a request whose top_logprobs is above --max-logprobs. The scorer asks for 10
 # (student.py). 20 is vLLM's usual default and the OpenAI API's top_logprobs limit; not
@@ -50,7 +72,9 @@ MAX_LOGPROBS = 20
 # From vllm.md's tighter-memory command. Training used sequence_len 4096 and the scorer asks
 # for at most 512 new tokens, so a frame request should fit (not measured).
 MAX_MODEL_LEN = 8300
-RUN_ENV = "TE_SERVE_RUN"  # read at deploy time and baked into the image
+RUN_ENV = "TE_SERVE_RUN"  # read at deploy time and baked into the image, as the two below
+BASE_ENV = "TE_SERVE_BASE"  # "1": the base model (app BASE_APP)
+LORAS_ENV = "TE_SERVE_LORAS"  # run names, comma-separated: the base with their adapters
 RUN_NAME = re.compile(r"[a-z0-9][a-z0-9-]{1,39}")  # as te train checks it
 
 
@@ -61,39 +85,77 @@ def model_dir(run: str) -> str:
     return f"{MOUNT}/runs/{run}/merged"
 
 
-def serve_command(model: str) -> list[str]:
+def lora_modules(runs: str) -> list[str]:
+    """vLLM's --lora-modules values for TE_SERVE_LORAS: <run>=/vol/runs/<run>/out."""
+    names = [name.strip() for name in runs.split(",") if name.strip()]
+    for name in names:
+        if not RUN_NAME.fullmatch(name):
+            raise ValueError(f"{LORAS_ENV}: bad run name {name!r}")
+    if len(set(names)) != len(names):
+        raise ValueError(f"{LORAS_ENV}: a run is named twice")
+    return [f"{name}={MOUNT}/runs/{name}/out" for name in names]
+
+
+def serve_command(model: str, name: str = SERVED_MODEL_NAME, revision: str | None = None,
+                  loras: list[str] | tuple = ()) -> list[str]:
     """The vLLM command. It never holds the key: vLLM logs its arguments at startup, so the
     key goes in the VLLM_API_KEY environment variable instead (read when --api-key is not
-    given)."""
-    return ["vllm", "serve", model, "--served-model-name", SERVED_MODEL_NAME,
-            # the recipe's single-card arguments (vllm.md); tool calling is unused here
-            "--tensor-parallel-size", str(GPU_COUNT), "--enable-auto-tool-choice",
-            "--tool-call-parser", PARSER, "--reasoning-parser", PARSER,
-            "--generation-config", "auto",
-            "--max-model-len", str(MAX_MODEL_LEN), "--max-logprobs", str(MAX_LOGPROBS),
-            # all interfaces, as Modal's web_server routes to the port inside the container
-            "--host", "0.0.0.0", "--port", str(PORT)]
+    given). A Hub model gets its pinned revision, for the weights and the tokenizer."""
+    command = ["vllm", "serve", model, "--served-model-name", name,
+               # the recipe's single-card arguments (vllm.md); tool calling is unused here
+               "--tensor-parallel-size", str(GPU_COUNT), "--enable-auto-tool-choice",
+               "--tool-call-parser", PARSER, "--reasoning-parser", PARSER,
+               "--generation-config", "auto",
+               "--max-model-len", str(MAX_MODEL_LEN), "--max-logprobs", str(MAX_LOGPROBS),
+               # all interfaces, as Modal's web_server routes to the port inside the container
+               "--host", "0.0.0.0", "--port", str(PORT)]
+    if revision:
+        command += ["--revision", revision, "--tokenizer-revision", revision]
+    if loras:  # each adapter is a model name; unverified for Muse Glimmer (module docstring)
+        command += ["--enable-lora", "--max-lora-rank", str(MAX_LORA_RANK),
+                    "--max-loras", str(MAX_LORAS), "--max-cpu-loras", str(len(loras)),
+                    "--lora-modules", *loras]
+    return command
 
 
-app = modal.App(APP)
-volume = modal.Volume.from_name(VOLUME)  # no create: export.py must have filled it
+def wants_base(env) -> bool:
+    """Whether this deploy serves the base (TE_SERVE_BASE or TE_SERVE_LORAS set)."""
+    return env.get(BASE_ENV, "") == "1" or bool(env.get(LORAS_ENV, "").strip())
+
+
+# The deploy's environment is baked into the image, so the container picks the same app.
+BASE = wants_base(os.environ)
+app = modal.App(BASE_APP if BASE else APP)
+volume = modal.Volume.from_name(VOLUME)  # no create: training or export.py filled it
 # The image's ENTRYPOINT is `vllm serve` (vllm.md); cleared so Modal can start the container.
 image = (modal.Image.from_registry(VLLM_IMAGE).entrypoint([])
-         .env({RUN_ENV: os.environ.get(RUN_ENV, "")}))
+         .env({name: os.environ.get(name, "") for name in (RUN_ENV, BASE_ENV, LORAS_ENV)})
+         .env({"HF_HOME": f"{MOUNT}/hf"}))  # the base's cache, as modal_train.py's
+SECRETS = [modal.Secret.from_name(API_SECRET)] + (
+    [modal.Secret.from_name(HF_SECRET)] if BASE else [])
 
 
 @app.function(image=image, gpu=f"{GPU_TYPE}:{GPU_COUNT}", volumes={MOUNT: volume},
-              secrets=[modal.Secret.from_name(API_SECRET)], scaledown_window=SCALEDOWN_S,
-              timeout=STARTUP_TIMEOUT_S)
+              secrets=SECRETS, scaledown_window=SCALEDOWN_S, timeout=STARTUP_TIMEOUT_S)
 @modal.concurrent(max_inputs=MAX_INPUTS)
 @modal.web_server(port=PORT, startup_timeout=STARTUP_TIMEOUT_S)
 def serve() -> None:
     """Start vLLM in the background; Modal sends requests to PORT once it listens."""
-    model = model_dir(os.environ.get(RUN_ENV, ""))
-    if not Path(model, "config.json").is_file():
-        raise RuntimeError(f"no merged model in {model}: run backend/training/export.py first")
+    if BASE:
+        loras = lora_modules(os.environ.get(LORAS_ENV, ""))
+        for module in loras:
+            adapter = module.split("=", 1)[1]
+            if not Path(adapter, "adapter_config.json").is_file():
+                raise RuntimeError(f"no adapter in {adapter}: train that run first")
+        command = serve_command(BASE_MODEL, BASE_MODEL_NAME, BASE_REVISION, loras)
+    else:
+        model = model_dir(os.environ.get(RUN_ENV, ""))
+        if not Path(model, "config.json").is_file():
+            raise RuntimeError(f"no merged model in {model}: run backend/training/export.py "
+                               "first")
+        command = serve_command(model)
     api_key = os.environ.get(API_KEY_ENV, "")
     if not api_key:
         raise RuntimeError(f"the Modal Secret {API_SECRET!r} has no {API_KEY_ENV}")
     # a list, no shell; the key only in the child's environment, never on its command line
-    subprocess.Popen(serve_command(model), env={**os.environ, "VLLM_API_KEY": api_key})
+    subprocess.Popen(command, env={**os.environ, "VLLM_API_KEY": api_key})

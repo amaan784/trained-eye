@@ -11,18 +11,32 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v73 (M2): iOS: Clips
+## Build stage v73 (M3): Session clips and Spark's error rate
 
-The app is SwiftUI for iOS 17.2 and has not been compiled: there is no Xcode here. A
-file may use types from a later iOS stage (the app model and the teach flow need each
-other), so the app builds only as a whole, from v73 on. Frames are held in memory
-only; Save clip keeps the last ten as a folder that te watch can replay. Nothing is
-stored without that tap.
+backend/dataengine/realclips.py turns the labelled session clips of the recording
+protocol into real examples for Experiment 1: session 1 clips train, session 2 clips
+only validate, and session 3 test clips are never read. Frames are sampled at 1 fps; a
+frame inside a labelled range answers yes and one outside no, and frames within 1.5 s
+of a change are left out, as the moment of change is unclear. The examples go to
+dataset-clips/ with the teach dataset's prompt layout, and clips without usable labels
+are listed as skipped. backend/eval/spark_errors.py compares Muse Spark's labels with
+the hand labels from the labelling page: Spark's error rate with a 95% Wilson
+interval, a confusion table, and the error rates of the generated-for labels and of
+the ones the filter keeps. write_unfiltered_dataset() writes dataset-unfiltered/,
+every generated image with the label it was made for. docs/recording-protocol.md gains
+notes on recording the teach look. The bundle tests for session clips and the keyframe
+crop test come back here; the te clips test arrives in v75 with that command.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Clips/ClipStore.swift` (new):
-- `ios/TrainedEye/UI/ClipsView.swift` (new):
+- `backend/dataengine/realclips.py` (new):
+- `backend/eval/spark_errors.py` (new):
+- `docs/recording-protocol.md` (changed): what real clips to record for the three
+  skills, and how to keep training and test sessions apart
+- `tests/test_realclips.py` (new): tests
+- `tests/test_spark_errors.py` (new): tests
+- `tests/test_teach.py` (changed): tests
+- `tests/test_training_prep.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -35,19 +49,23 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 26%]
-    ........................................................................ [ 39%]
-    ........................................................................ [ 52%]
-    ........................................................................ [ 65%]
-    ........................................................................ [ 78%]
+    ........................................................................ [  8%]
+    ........................................................................ [ 16%]
+    ........................................................................ [ 25%]
+    ........................................................................ [ 33%]
+    ........................................................................ [ 41%]
+    ........................................................................ [ 50%]
+    ........................................................................ [ 58%]
+    ........................................................................ [ 66%]
+    ........................................................................ [ 75%]
+    ........................................................................ [ 83%]
     ........................................................................ [ 91%]
-    .................................................                        [100%]
-    553 passed in 30.70s
+    .......................................................................  [100%]
+    863 passed in 48.69s
 
     $ ruff check .
     All checks passed!
@@ -64,6 +82,11 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -96,8 +119,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -110,6 +135,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   OpenAI-compatible endpoint, read at its yes or no answer token.
 - `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
   alert, alert messages and the frame log.
+- `backend/labeltool/clips.py`: the labelling tool for clips: where the condition is
+  true, saved as time ranges.
+- `backend/labeltool/images.py`: the labelling tool for generated images, for
+  Experiment 2.
+- `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
+- `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
+  and the SVG charts.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -122,11 +154,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 553 tests, all offline; none calls a paid API.
+- `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
+- `tests/`: 863 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v74 adds how to build the app in Xcode.
+Stage v74 adds the experiment plan: every training run of Experiments 1 to 3 at the
+same fixed steps, priced from the smoke with exports, serving and the Modal credit.
 
 ## Privacy and policy
 

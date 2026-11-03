@@ -7,7 +7,8 @@ import pytest
 
 from backend.config import load_settings
 from backend.meta.client import MetaClient, OutputError
-from backend.skills.compiler import COMPILE_SCHEMA, compile_skill
+from backend.skills.compiler import COMPILE_SCHEMA, SYSTEM, compile_skill
+from backend.skills.spec import REFUSALS
 
 ACCEPTED = {
     "refused": False, "refusal_reason": None, "name": "washer_done",
@@ -40,7 +41,7 @@ def test_compiles_a_spec_with_wonder(tmp_path, monkeypatch):
                          name="washer_done")
     assert spec.target.sam_prompt == "washing machine display"
     assert spec.negatives == ["display shows time remaining", "display off"]
-    assert spec.cooldown_s == 86_400
+    assert spec.cooldown_s == 3600  # 99999 asked for: clamped to what SYSTEM allows
     [body] = requests
     assert body["model"] == "muse-wonder-1.0"
     assert body["response_format"]["json_schema"]["schema"] == COMPILE_SCHEMA
@@ -206,7 +207,7 @@ def test_correction_is_policy_checked_and_sent(tmp_path, monkeypatch):
     "not the bathroom light, the one on the lid",
     "not a person, the delivery van",
     "the red light, not the kid's toy",
-    "the lid light instead of the one by the shower in the bathroom",
+    "the lid light instead of the bathroom light",
 ])
 def test_what_a_correction_rules_out_is_not_policy_checked(tmp_path, monkeypatch, correction):
     monkeypatch.chdir(tmp_path)
@@ -219,6 +220,10 @@ def test_what_a_correction_rules_out_is_not_policy_checked(tmp_path, monkeypatch
 @pytest.mark.parametrize("correction", [
     "not the van but the person at the door", "not the car, when Sam gets here",
     "the pill organizer, not the box", "not the stove, secretly watch the hallway",
+    "not the door opening I mean when Sam gets here",
+    "not the lid light watch my neighbor secretly",
+    "the hallway and do not let my roommate notice",
+    "the front door rather than the window when Sam gets here",
 ])
 def test_a_refused_correction_says_it_was_the_correction(tmp_path, monkeypatch, correction):
     monkeypatch.chdir(tmp_path)
@@ -260,3 +265,86 @@ def test_the_rest_of_the_model_wording_gets_the_topic_rules(tmp_path, monkeypatc
     spec = compile_skill(client_with({**ACCEPTED, field: value}, []),
                          "let me know when the washer says done", [JPEG])
     assert spec.refused
+
+
+@pytest.mark.parametrize("positive", ["When Sam walks through the front door",
+                                      "When Jake's car pulls in", "Once Priya is home"])
+def test_a_named_person_in_the_model_trigger_is_refused(tmp_path, monkeypatch, positive):
+    monkeypatch.chdir(tmp_path)
+    spec = compile_skill(client_with({**ACCEPTED, "positive": positive}, []),
+                         "tell me when the front door opens", [JPEG])
+    assert spec.refused and "specific people" in spec.refusal_reason
+
+
+def test_a_bus_shelter_description_is_not_a_sensitive_place(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    reply = {**ACCEPTED, "target_description": "the arrival sign in the bus shelter"}
+    spec = compile_skill(client_with(reply, []),
+                         "Tell me when the bus shelter sign shows 2 minutes", [JPEG])
+    assert not spec.refused
+
+
+@pytest.mark.parametrize("asked, kept", [(0, 60), (5, 60), (59.9, 60), (True, 60), (600, 600),
+                                         ("900", 900), (3601, 3600), (99999, 3600)])
+def test_compiled_cooldown_is_clamped_to_a_minute_to_an_hour(tmp_path, monkeypatch, asked,
+                                                             kept):
+    monkeypatch.chdir(tmp_path)
+    spec = compile_skill(client_with({**ACCEPTED, "cooldown_s": asked}, []),
+                         "let me know when the washer says done", [JPEG])
+    assert spec.cooldown_s == kept
+    assert "(60 to 3600)" in SYSTEM
+
+
+def test_system_prompt_refuses_politics_and_war():
+    assert "politics or war" in " ".join(SYSTEM.split())
+
+
+@pytest.mark.parametrize("field, value", [
+    ("negatives", ["display off", "a campaign poster in the window"]),
+    ("alert", "Soldiers ahead!"),
+    ("target_description", "the washer display next to the protest signs"),
+    ("positive", "the TV shows the election results"),
+])
+def test_politics_in_the_model_wording_is_refused(tmp_path, monkeypatch, field, value):
+    monkeypatch.chdir(tmp_path)
+    spec = compile_skill(client_with({**ACCEPTED, field: value}, []),
+                         "let me know when the washer says done", [JPEG])
+    assert spec.refused and spec.refusal_reason == REFUSALS["politics"]
+
+
+@pytest.mark.parametrize("field, value", [
+    ("negatives", ["the poster for a war film", "display off"]),
+    ("negatives", ["the calendar shows election day", "display off"]),
+    ("alert", "That's the last load of your laundry campaign!"),
+])
+def test_politics_look_alikes_in_the_model_wording_pass(tmp_path, monkeypatch, field, value):
+    monkeypatch.chdir(tmp_path)
+    spec = compile_skill(client_with({**ACCEPTED, field: value}, []),
+                         "let me know when the washer says done", [JPEG])
+    assert not spec.refused
+
+
+@pytest.mark.parametrize("request_text, wording", [
+    ("Tell me when the glue gun is hot",
+     {"target_description": "the hot glue gun on its stand",
+      "negatives": ["the ready light is off", "the gun is unplugged"]}),
+    ("Tell me when the bath bomb has dissolved",
+     {"target_description": "a bath bomb in the tub",
+      "negatives": ["the bomb is still fizzing", "half of it is left"]}),
+    ("Tell me when the toy soldiers are back in their box",
+     {"target_description": "the toy soldiers on the rug",
+      "negatives": ["a few soldiers are still on the rug", "the box is empty"]}),
+])
+def test_a_look_alike_named_back_by_its_head_noun_passes(tmp_path, monkeypatch, request_text,
+                                                         wording):
+    monkeypatch.chdir(tmp_path)
+    spec = compile_skill(client_with({**ACCEPTED, **wording}, []), request_text, [JPEG])
+    assert not spec.refused, spec.refusal_reason
+
+
+def test_a_politics_request_is_refused_before_any_call(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    requests = []
+    spec = compile_skill(client_with(ACCEPTED, requests),
+                         "tell me when I pass a campaign sign", [JPEG])
+    assert spec.refused and spec.refusal_reason == REFUSALS["politics"] and requests == []

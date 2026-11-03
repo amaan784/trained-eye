@@ -11,26 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v36 (M1 review): Fix: teach flow and te teach
+## Build stage v36 (M2): Training run records and the Modal spend ledger
 
-te teach now checks the clip, the audio file, the request (its length and the local
-policy) and the labels file before it shows the estimate, and the key before it asks;
-a mistake is one 'te:' line, never a traceback after you said yes. The estimate adds a
-worst case for labels that need the larger budget. A dataset that would hold only yes
-or only no stops the run, and the dataset line shows both counts. With training on
-model outputs off, your labels must include both answers. A new spec removes the old
-dataset, the clip may not be the skill's own keyframes folder, only keyframe files are
-cleaned up, contradicting labels are refused, and labels are saved when a run stops.
-After a stop for too many failures, te teach says a rerun pays for them again. te
-serve prints the address for the phone and keeps the server's own log lines.
+Two record keepers that the training and serving commands use later; neither calls
+Modal. backend/training/runs.py keeps a status file per training run in data/train
+(running, done or failed, its skills, start and finish). A run whose te train process
+has gone from this Mac reads as failed, unless it was launched detached, and
+serving.json says which run the student endpoint serves. GET /skills reads these for
+the app's Skills screen. backend/training/gpu_ledger.py keeps Modal GPU time in
+data/modal_ledger.jsonl, one line per training, export or serving job, priced at
+config.MODAL_GPU_USD_PER_HOUR, so te spend can print the Modal total and te train and
+te export can ask before the runs pass the $150 Modal credit. Serving time is an upper
+bound, and a row with a key is written only once.
 
 Files added or changed in this stage:
 
-- `backend/cli.py` (changed): the te command line
-- `backend/teach.py` (changed): the teach flow end to end, cached so a rerun costs
-  nothing
-- `tests/test_cli.py` (changed): tests
-- `tests/test_teach.py` (changed): tests
+- `backend/training/gpu_ledger.py` (new):
+- `backend/training/runs.py` (new):
+- `tests/test_gpu_ledger.py` (new): tests
+- `tests/test_training_runs.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -43,28 +42,23 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 18%]
+    ........................................................................ [ 12%]
+    ........................................................................ [ 24%]
     ........................................................................ [ 36%]
-    ........................................................................ [ 54%]
+    ........................................................................ [ 48%]
+    ........................................................................ [ 60%]
     ........................................................................ [ 72%]
-    ........................................................................ [ 90%]
-    ........................................                                 [100%]
-    400 passed in 7.47s
+    ........................................................................ [ 84%]
+    ........................................................................ [ 96%]
+    ...................                                                      [100%]
+    595 passed in 8.92s
 
     $ ruff check .
     All checks passed!
-
-    $ ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4
-
-    $ python -m backend.cli teach --skill washer_done --clip /tmp/te-demo.mp4 --request "let me know when the washer says done" --estimate-only
-    estimate for washer_done (before cache hits): transcribe $0.00, compile $0.10, sam $0.03, images $3.00, labels $2.05, total $5.18
-      at most $11.32 if every label has to be asked again with a larger budget
-    train on model outputs: yes
-    te: note: $10.00 is left under the spend caps for washer_done. If many labels need the larger budget the run could pass that, and the cap would stop it partway (a rerun with a higher cap continues).
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -94,14 +88,20 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
 - `backend/dataengine/labels.py`: Muse Spark labels for every image, the filter that
   keeps generated images only when Spark agrees, and agreement stats.
 - `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
+- `backend/watch/trigger.py`: when a skill fires: 3 of the last 4 frames over the
+  threshold, then the cooldown; the threshold calibration on labelled clips.
+- `backend/inference/student.py`: scores a frame with the trained model on an
+  OpenAI-compatible endpoint, read at its yes or no answer token.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -114,12 +114,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 400 tests, all offline; none calls a paid API.
+- `tests/`: 595 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v37 adds CI and setup: ffmpeg in CI, Python 3.12 and ffmpeg in the Mac setup,
-and the W&B team note.
+Stage v37 adds watch mode itself: the student's scores, the trigger, the Muse Spark
+check before an alert, cooldowns kept across sessions and the frame log.
 
 ## Privacy and policy
 

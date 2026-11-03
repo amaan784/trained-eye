@@ -20,7 +20,7 @@ build next. Last updated 2026-10-29, at the end of milestone M1 (code).
 
 - Repository: github.com/amaan784/trained-eye. All work is on the branch
   `build-stages` (the author chose the name). Its root is the finished code. The folders
-  v1 to v49 are the same code in cumulative stages, for the author to commit to `main`
+  v1 to v105 are the same code in cumulative stages, for the author to commit to `main`
   one at a time. `main` holds only what the author has committed from the stages so far;
   check with `git log origin/main`.
 - Hackathon: Meta Global AI Developer Hackathon, solo. Submission is due Wed Nov 4, 9 PM
@@ -33,29 +33,41 @@ Code map (all under `backend/`, namespace packages without `__init__.py`):
 |---|---|
 | `config.py` | Settings: model ID per job, prices, spend caps ($10 per skill, $120 global), data paths, keys from the environment or `.env` (never printed), the pinned Glimmer revision, `TE_*` overrides, the `-contributor` ban |
 | `meta/cache.py` | Content-addressed cache in `data/cache/`: SHA-256 of model, endpoint and normalized request, media replaced by its own hash |
-| `meta/ledger.py` | Spend ledger `data/ledger.jsonl`: caps checked before a call, actual cost after, report |
+| `meta/ledger.py` | Spend ledger `data/ledger.jsonl`: each call's estimate reserved before it runs (thread lock and `data/ledger.jsonl.lock`, so concurrent te processes cannot pass a cap), actual cost after, report, image tokens measured from past calls |
 | `meta/client.py` | `MetaClient`: structured output (Chat Completions, strict json_schema, optional validate hook), Voice Transcribe, SAM 3.1 (Responses API, streamed), Muse Image edit and generate, model list; retries 429/5xx/timeouts, never 4xx; conservative spend accounting; key redaction |
-| `cli.py` | `te`: spend, models, api-smoke, serve, ws-selftest, policy, teach, train, watch, calibrate |
+| `cli.py` | `te`: spend, models, api-smoke, serve, ws-selftest, policy, teach, the shared helpers (`ask`, `make_client`, `modal_ready`), and the registration of the commands in the other `cli_*.py` files |
 | `server.py` | Starlette backend: `/health`, WebSocket `/ws` protocol 1 (hello, JPEG frames, acks; watch mode with scores and alerts); frames never stored |
 | `training/wandb_smoke.py` | Modal app that logs one W&B run; key only from the Modal Secret `wandb` |
 | `training/axolotl.py` | The Axolotl config: Meta's QLoRA recipe with this run's paths and W&B names |
 | `training/prepare.py` | Bundles taught skills (real, synthetic or mixed) with a validation split for the Modal volume |
-| `training/modal_train.py` | Modal app that trains on one H100 with the recipe's pins; smoke mode |
+| `training/modal_train.py` | Modal app that trains on one H100 with the recipe's pins; smoke mode, detached runs, the processor preflight (`training/preflight.py`) |
+| `training/runs.py`, `training/gpu_ledger.py` | Training run status for GET /skills; the Modal spend ledger `data/modal_ledger.jsonl` checked against the $150 credit |
 | `inference/student.py` | Scores a frame on an OpenAI-compatible endpoint from the answer token's logprobs |
 | `watch/trigger.py` | 3-of-4 smoothing with a cooldown; threshold calibration on labelled clips |
 | `watch/watcher.py` | Watch mode: scores, the Muse Spark check, alerts, the frame log |
-| `skills/spec.py` | `SkillSpec` v1, read-back sentence, local `policy_check`, `check_name` |
+| `teach_api.py`, `teach_upload.py`, `teach_session.py` | Teaching from the phone: the upload, the checks before any spend, the session with its two questions |
+| `training/export.py`, `training/export_check.py` | Modal app that merges the adapter and checks the merged model's answers |
+| `inference/modal_serve.py` | Modal app serving the merged model with vLLM, behind STUDENT_API_KEY; also base Glimmer (`--base`) and several adapters on one base (`--runs`) |
+| `labeltool/` | The labelling tool: true time ranges in a clip, yes/no on generated images |
+| `eval/` | Metrics, SVG charts, results.md (`te eval`), Spark as a scorer, Spark's error rate, the experiment plan with its costs (`plan.py`) and `eval/plan.json` (`plan_file.py`), the regression check, `te replay`, Experiment 1 failure galleries, the README results block, the W&B report |
+| `regenerate.py`, `release/` | Prompt manifests and regeneration, face blurring (with manual boxes and blur records), the model card (`model_card.py`) and the release folder, upload and collection (`package.py`: base license, blurred keyframes), the test set as a dataset, weights from the Modal volume |
+| `playground/` | The web playground: clips with the live timeline, how each skill was built, teach it yourself (capped), results; a public mode and its Modal app (`modal_app.py`, `publish.py`) |
+| `cli_train.py`, `cli_watch.py`, `cli_serving.py`, `cli_eval.py` | te train; te watch and te calibrate; te export and te serve-student; te eval and te label |
+| `cli_experiments.py`, `cli_replay.py`, `cli_release.py`, `cli_playground.py` | te experiments, unfiltered, clips, spark-errors and regress; te replay; the M4 release commands; te playground and te playground-clip |
+| `skills/spec.py` | `SkillSpec` v1, read-back sentence, local `policy_check` (people, health, covert watching, the capture light, sensitive places, sports, politics and war), `check_name` |
 | `skills/compiler.py` | Muse Wonder compiler: request + 3 keyframes to a spec or a refusal; re-checks the model's wording |
 | `dataengine/keyframes.py` | 20 to 24 sharp, distinct keyframes from a video (ffmpeg, bit-exact) or a frame folder |
-| `dataengine/roi.py` | SAM 3.1 per keyframe; raw output stored; `parse_sam_output` is still a stub |
+| `dataengine/roi.py`, `dataengine/sam_text.py` | SAM 3.1 per keyframe, boxes read with our own reader of Meta's SAM 3 text format (masks not decoded), raw output stored; crops to the best box |
+| `dataengine/realclips.py` | `te clips`: labelled session 1 clips as training frames, session 2 as validation only |
 | `dataengine/synth.py` | Deterministic Muse Image edit plan (positives, hard negatives, 11 nuisances), images stored untouched, `manifest.jsonl` |
 | `dataengine/labels.py` | Muse Spark yes/no/unsure labels, keep-if-agrees filter, agreement stats |
 | `dataengine/dataset.py` | Axolotl JSONL in Meta's recipe format, 512x512 padded PNGs, manifest with provenance index |
 | `teach.py` | The teach flow end to end, cached; fallback switch `TE_TRAIN_ON_MODEL_OUTPUTS=0` |
 
-Other files: `tests/` (498 tests, all offline), `docs/glasses-check.md`,
-`docs/recording-protocol.md`, `.env.example`, `.github/workflows/ci.yml` (ruff and
-pytest on every push), `CLAUDE.md` (short conventions file the author asked for).
+Other files: `tests/` (707 tests, all offline; one skips without OpenCV),
+`docs/glasses-check.md`, `docs/recording-protocol.md`, `.env.example`,
+`.github/workflows/ci.yml` (ruff and pytest on every push), `CLAUDE.md` (short
+conventions file the author asked for).
 
 Local data, all under `data/` and gitignored: `cache/`, `ledger.jsonl`, and
 `skills/<skill>/` with `request.json`, `keyframes/`, `spec.json`, `roi.json`,
@@ -89,6 +101,16 @@ Local data, all under `data/` and gitignored: `cache/`, `ledger.jsonl`, and
   `te teach` checks the clip, audio, request and labels before it shows the estimate,
   stops if the dataset would hold only one answer, and says when a rerun would pay again
   for failed calls. `te serve` prints the address to type into the phone.
+- **M2 to M4, the code** (Nov 2; tested offline with fakes, never run against Meta,
+  Modal or a phone): teaching from the phone (`/teach/start`, `/teach/status`,
+  `/teach/answer`, behind `SERVER_TOKEN`; nothing is paid before the phone says yes),
+  `GET /skills`, export and
+  Modal serving (`te export`, `te serve-student`), the labelling tool (`te label`), the
+  evaluation harness (`te eval`, `make eval`, SVG charts), the experiments (`te
+  experiments`, `te unfiltered`, `te spark-errors`, `te regress`, `te watch --scorer
+  spark`), the release tools (`te manifests`, `te regenerate`, `te blur`, `te release`),
+  the web playground (`te playground`), the iOS app (`ios/`, not compiled) and
+  CONTRIBUTIONS.md.
 - **M2, the parts that run without the Mac or Modal** (tested offline with fakes): the
   watch trigger (3 of the last 4 frames over the threshold, then the cooldown) and the
   threshold calibration, the student scorer for an OpenAI-compatible endpoint (vLLM on
@@ -156,26 +178,74 @@ PROGRESS.md.
 10. **M2 on Modal and the Mac**, after the washer dataset exists (item 6):
    - Check the H100 price in `MODAL_GPU_USD_PER_HOUR` (backend/config.py) against
      modal.com/pricing; it could not be checked from the build sandbox.
+   - `te train --skills washer_done --run exp1-mixed --preflight` first (a CPU Modal job;
+     asks): it renders a few examples with the pinned processor and says whether to set
+     `TE_SYSTEM_IN_USER=1` before the datasets are written. `te clips --skill washer_done`
+     adds the labelled session 1 clips as training frames and session 2 as validation.
    - `te train --skills washer_done --run exp1-mixed --smoke` asks, then runs the recipe's
      two-step smoke. The first run builds the image (flash-attn compiles; the CUDA image
      tag `nvidia/cuda:13.0.0-devel-ubuntu24.04` is unverified) and downloads the 30B base
      to the volume. It saves the timing that prices the real run.
    - `te train --skills washer_done --run exp1-mixed` prints the estimate from that
-     timing and asks (always, if it is over $15).
-   - Export (not built yet): merge the adapter (`merge_and_unload()`), check the merged
-     model gives the same yes/no answers as the adapter on 50 frames.
-   - Serving (not built yet): after `sysctl hw.memsize`, either llama.cpp's llama-server
-     on the Mac (needs a GGUF conversion of the merged model, no documented path) or vLLM
-     on Modal (`vllm/vllm-openai:muse-glimmer`, an 80 GB GPU; protect the endpoint with a
-     token). Check first that the endpoint returns `logprobs` with `top_logprobs`, which
-     the scorer needs. Then set `TE_STUDENT_URL` and `TE_STUDENT_MODEL`.
+     timing and asks (always, if it is over $15). `--detach` keeps it running if the Mac
+     sleeps (`te train --collect <run>` fetches the result); `--wandb-entity` names the
+     team; `--wandb-artifacts` is off by default and asks every time. Modal spend is kept
+     in `data/modal_ledger.jsonl` (`te spend`), and te train and te export ask near the
+     $150 credit.
+   - `te export --run exp1-mixed` merges the adapter on Modal (asks; at most 3 hours,
+     not timed yet) and checks the merged model gives the same yes/no answers as base
+     plus adapter on 50 examples. The cookbook evaluated QLoRA adapters on an NF4 base
+     only, so `--reference nf4` exists too.
+   - Serving: the cookbook documents no conversion of a fine-tuned Glimmer for the Mac,
+     so the student is served from Modal. Make up a long random `STUDENT_API_KEY`, put it
+     in `.env` and in a Modal Secret named "student", then `te serve-student --run
+     exp1-mixed` (asks; billed while a container is up, `--stop` stops it). Check in the
+     first container log that the key is not printed (vLLM may log its arguments; if it
+     is, pass it as `VLLM_API_KEY` instead), and that a request returns `logprobs` with
+     `top_logprobs`. Then set `TE_STUDENT_URL` (the printed URL plus `/v1`).
+     `te serve-student --base` serves base Glimmer (Experiment 4, te regress) on its own
+     app; `--runs a,b,c` serves several adapters on one base, each run a model name
+     (untried: check that vLLM's LoRA serving works for Glimmer before relying on it).
    - `te watch --skills washer_done --clip <recorded clip>` replays a clip through watch
-     mode and writes a frame log; `te serve` then serves it to the phone. Thresholds
-     stay at 0.5 until `te calibrate --skill washer_done --log <frame log> --labels
-     <ranges.json>` (one pair per validation clip; the ranges are
-     `{"true": [[start_s, end_s], ...]}`, which M3's labelling tool will write) saves
-     `data/skills/<skill>/threshold.json`.
-   - `ios/` (not built yet: it needs Xcode on the Mac), as planned in section 6.
+     mode and writes a frame log; `te serve` then serves it to the phone. Thresholds stay
+     at 0.5 until `te calibrate` has labelled validation clips (`te label --clip`, M3);
+     `--run` keeps a threshold per training run. Teaching from the phone needs
+     `SERVER_TOKEN`; GET /skills tells the app which skills are training, trained or
+     served, and cooldowns survive reconnects (`data/watch/cooldowns.json`).
+   - The iOS app: `ios/README.md` (create the Xcode project, add DAT 1.0.1, the
+     Info.plist keys). It has never been compiled; its TODOs are listed there.
+11. **M3 on the Mac:** teach boil_over and bus_m4 as in item 4; record the clips in
+   `docs/recording-protocol.md`; label the test clips with `te label --clip <clip>` and
+   200 generated images with `te label --skill <skill> --sample 200`; then
+   `te experiments --skills washer_done,boil_over,bus_m4` prints every training run of
+   Experiments 1 to 3 with its price (steps stay fixed per run, see backend/eval/plan.py)
+   and `--write-plan` writes `eval/plan.json` for `make eval` (the $150 check counts the
+   final run, an export and serving per model and the Modal spend so far;
+   `--endpoint-hours` sets the serving guess). `te replay --plan eval/plan.json --run <run>`
+   calibrates a run on session 2 and replays its test clips into the plan's logs, once per
+   served model. Experiment 2 needs `te unfiltered --skill <skill>` and
+   `te spark-errors --skill <skill>`; Experiment 4 replays with `--scorer spark` (paid per
+   frame; asks) and with the base endpoint; the regression check is `te regress`.
+   `make eval` writes `eval/results.md` (with Spark's error rate, the regression check and
+   links to the local Experiment 1 failure galleries in `eval/galleries/`, which may show
+   faces) and the SVG charts; `te eval --readme README.md` writes the results block.
+12. **M4, after asking:** in this order: `te manifests` (commit `manifests/`);
+   `te fetch-weights --run <final>`; `te blur --src data/skills/<s>/keyframes --dst
+   data/skills/<s>/keyframes_blurred` for each skill (needs `pip install
+   opencv-python-headless`, approved; `--boxes <json>` adds faces the detector misses, and
+   a video gets a `.blur.json` record); `te release --run <final> --out <folder>
+   --keyframes <s>=<blurred folder>` (apache-2.0, the base model's license, its text as
+   `LICENSE`, Meta's Usage Policy linked); `te blur` each session 3 clip, then
+   `te release-test-set --clips <s>=<blurred folder> --out <folder> --license <id>`; the
+   uploads (`--upload`, each asks; `huggingface_hub` is not on the approved list yet);
+   `te release-collection`; `te wandb-report` (needs `wandb-workspaces`, not approved
+   yet), then publish the report in the W&B UI after asking. The playground: `te
+   playground --public` locally shows what the public copy holds (no generated images,
+   only blurred keyframes and clips); `te playground-clip` makes a blurred clip folder in
+   `data/playground/clips/`; `te playground --deploy` (asks) copies the public files to
+   the private Modal Volume `trained-eye-playground` and deploys `playground/modal_app.py`
+   (create the Modal Secret `meta` with `MODEL_API_KEY` first; `--total-cap` is the
+   all-time cap, default $10; `modal app stop trained-eye-playground` takes it down).
 
 ## 4. The author's rules (all still in force)
 
@@ -221,14 +291,17 @@ PROGRESS.md.
 ### Version stages
 
 The author reviews and commits the project one layer at a time. New work becomes new
-stages after the newest folder (v49 now). The rules, as the author gave them:
+stages after the newest folder (v105 now). The rules, as the author gave them:
 
 - Stages v1 to vN live in the root of `build-stages`, in the order a developer would
   build them: foundations first, docs and UI late.
-- Each stage is one commit and adds or changes at most 5 files compared with the stage
-  before. The README counts. If a layer needs more, split it into smaller stages that
-  each still run. If a change cannot stay under 5 files without breaking a stage, tell
-  the author before going over.
+- Each stage is one commit. From v50 on (the author's newer rule, Nov 2) a stage changes
+  150 to 300 lines compared with the stage before, counting added plus removed lines and
+  leaving out its README; `stagetools/check_stages.py` checks it. v1 to v49 were cut
+  under the earlier rule (at most 5 files per stage, README included) and stay as they
+  are. If a layer is bigger, split it into stages that each still run; if a small fix is
+  under 150 lines, put it in a stage with related work. If a change cannot fit without
+  breaking a stage, tell the author first.
 - Cumulative: vN has everything from v(N-1) plus what stage N adds. No stage deletes or
   renames a file the previous one had.
 - Each folder runs on its own: its own README, `pyproject.toml`, tests and CI file;
@@ -367,8 +440,8 @@ copied files, and list them in CONTRIBUTIONS.md.
   in every demo); send `{"type": "alert", "text": ...}` to the phone over the WebSocket;
   log every scored frame (time, probability, decision) for the timeline visual.
 - Built so far: everything in the first and third bullets except the threshold from
-  real footage, which needs M3's labels. Not built: the export, the serving endpoint and
-  `ios/` (see section 3, item 10).
+  real footage, which needs M3's labels. Since Nov 2 the export, serving on Modal and
+  `ios/` are written too (section 3, item 10); none of it has run yet.
 - `ios/` (SwiftUI, with the DAT facts above): Connect, Teach (hold to talk, 10 second
   capture with a countdown, read-back, confirm), Skills (list, on/off toggles, status:
   training or ready), Watch (live indicator, last alert, battery), Clips (saved by the
@@ -382,8 +455,9 @@ copied files, and list them in CONTRIBUTIONS.md.
   the condition is true and writes JSON; test labels are human only.
 - `backend/eval/` and `make eval`: frame precision, recall and F1; event recall within
   5 s; false alarms per hour; time to alert; latency per frame; dollars per hour. Writes
-  `eval/results.md` and PNG charts (one palette, values labelled, readable in dark and
-  light) and logs everything to W&B.
+  `eval/results.md` and charts (one palette, values labelled, readable in dark and
+  light) and logs everything to W&B. Built: the charts are SVG (matplotlib could not be
+  installed), W&B logging is optional (`te eval --wandb`).
 - Experiment 1: real only vs synthetic only vs mixed, with failure galleries.
   Experiment 2: hand-label 200 random training images to measure Spark's error rate;
   filtered vs unfiltered labels (`label_stats.json` already records agreement).
@@ -435,3 +509,13 @@ copied files, and list them in CONTRIBUTIONS.md.
   half of the review, F30 to F62, and a check of the v23 to v30 fixes themselves: stages
   v31 to v38. A review of those: v39 and v40. Then the parts of M2 that need neither the
   Mac nor Modal: v41 to v48. The review's last small fixes to te teach: v49.
+- 2026-11-02, cloud session 1 (continued): the author asked for the remaining
+  implementations, with stages from v50 on cut at 150 to 300 changed lines. The rest of
+  M2 (teaching from the phone, export and serving): v50 to v58; the iOS app, never
+  compiled: v59 to v74; M3 (labelling, evaluation, the four experiments): v75 to v89; M4
+  (release tools, the playground, these notes and CONTRIBUTIONS.md): v90 to v105.
+  Reviews of the teach API, the iOS code and the playground ran before staging, and
+  their fixes are in those stages: a token on the teach routes (SERVER_TOKEN), a clean
+  stop on shutdown, size and shape limits on uploads, one watch frame in flight on the
+  phone, cross-site and IPv6 checks in the playground, and a shared in-flight total for
+  its ledger cap.

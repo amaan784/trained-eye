@@ -11,18 +11,30 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v59 (M2): iOS: settings and protocol
+## Build stage v59 (M2): iOS: theme, components and the Inter fonts
 
-The app is SwiftUI for iOS 17.2 and has not been compiled: there is no Xcode here. A
-file may use types from a later iOS stage (the app model and the teach flow need each
-other), so the app builds only as a whole, from v73 on. Settings (the backend URL,
-stored on the phone, and the server token, in the keychain) and the WebSocket messages
-and the /health and /skills replies as Swift types.
+ios/TrainedEye/UI/Theme.swift sets the app's look in one place: a near-black ground,
+one raised surface, two greys for text and one accent colour for live states, the main
+action and the camera-on indicator, with flat shapes and no gradients. Text is set in
+Inter 4.1, whose four static faces (Regular, Medium, SemiBold and Bold) come in
+ios/TrainedEye/Fonts/ with their SIL Open Font License as LICENSE.txt; when a face is
+missing from the target, the system font in the same text style and weight is used.
+ThemeModifier applies the tokens once at the root, in a dark colour scheme, as in
+Meta's BirdSpotter sample; the app entry of v60 puts it there.
+ios/TrainedEye/UI/Components.swift has the building blocks every screen uses: a
+scrolling screen with its title, a flat card with an optional heading, a filled and an
+outlined button style, a status dot, a label and value row, a notice line for help or
+errors, and the preview of the newest frame.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Models/Protocol.swift` (new):
-- `ios/TrainedEye/Models/Settings.swift` (new):
+- `ios/TrainedEye/Fonts/Inter-Bold.ttf` (new):
+- `ios/TrainedEye/Fonts/Inter-Medium.ttf` (new):
+- `ios/TrainedEye/Fonts/Inter-Regular.ttf` (new):
+- `ios/TrainedEye/Fonts/Inter-SemiBold.ttf` (new):
+- `ios/TrainedEye/Fonts/LICENSE.txt` (new):
+- `ios/TrainedEye/UI/Components.swift` (new):
+- `ios/TrainedEye/UI/Theme.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -35,19 +47,22 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 26%]
-    ........................................................................ [ 39%]
-    ........................................................................ [ 52%]
-    ........................................................................ [ 65%]
-    ........................................................................ [ 78%]
-    ........................................................................ [ 91%]
-    .................................................                        [100%]
-    553 passed in 22.96s
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
+    ........................................................................ [ 28%]
+    ........................................................................ [ 38%]
+    ........................................................................ [ 47%]
+    ........................................................................ [ 57%]
+    ........................................................................ [ 66%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 95%]
+    ...................................                                      [100%]
+    755 passed in 31.22s
 
     $ ruff check .
     All checks passed!
@@ -64,6 +79,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -96,8 +115,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -122,11 +143,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 553 tests, all offline; none calls a paid API.
+- `tests/`: 755 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v60 adds the app's clients for the backend and the WebSocket.
+Stage v60 adds the app entry that configures the DAT SDK, the five tabs under a
+camera-on bar, and the Info.plist and entitlements, with the SDK's analytics and crash
+reporting off.
 
 ## Privacy and policy
 

@@ -163,7 +163,8 @@ def test_secrets_never_shown():
     assert FAKE_KEY not in repr(s)
     text = describe(s)
     assert FAKE_KEY not in text
-    assert "MODEL_API_KEY  set" in text and "WANDB_API_KEY  missing" in text
+    assert "MODEL_API_KEY    set" in text and "WANDB_API_KEY    missing" in text
+    assert "STUDENT_API_KEY  missing" in text
 
 
 def test_empty_values_mean_unset():
@@ -189,6 +190,46 @@ def test_module_entry_point(tmp_path):
     assert FAKE_KEY not in out
 
 
+def test_student_endpoint_settings():
+    s = load_settings(env={}, env_file=None)
+    assert s.student_url is None and s.student_model == "trained-eye"
+    assert "student: not set (TE_STUDENT_URL)" in describe(s)
+    s = load_settings(env={"TE_STUDENT_URL": " http://192.168.1.23:8080/v1/ ",
+                           "TE_STUDENT_MODEL": "washer-v1"}, env_file=None)
+    assert (s.student_url, s.student_model) == ("http://192.168.1.23:8080/v1", "washer-v1")
+
+
 def test_an_unknown_home_folder_is_a_config_error():
     with pytest.raises(ConfigError, match="TE_DATA_DIR"):
         load_settings(env={"TE_DATA_DIR": "~no_such_user_te_8f3/x"}, env_file=None)
+
+
+@pytest.mark.parametrize("raw, expected", [("", False), ("0", False), ("1", True), ("on", True)])
+def test_the_system_in_user_switch(raw, expected):
+    s = load_settings(env={"TE_SYSTEM_IN_USER": raw}, env_file=None)
+    assert s.system_in_user is expected
+    shown = "folded into the user text" if expected else "its own turn"
+    assert f"system prompt in new datasets: {shown}" in describe(s)
+
+
+@pytest.mark.parametrize("raw", ["2", "folded", "“1”"])
+def test_unknown_system_in_user_values_are_config_errors(raw):
+    with pytest.raises(ConfigError, match="TE_SYSTEM_IN_USER must be 1 or 0"):
+        load_settings(env={"TE_SYSTEM_IN_USER": raw}, env_file=None)
+
+
+def test_the_student_reply_budget():
+    import inspect
+
+    from backend.inference.student import OpenAIStudent
+
+    s = load_settings(env={}, env_file=None)
+    default = inspect.signature(OpenAIStudent).parameters["max_tokens"].default
+    assert s.student_max_tokens == default == 512  # the setting's default is the student's
+    assert "at most 512 tokens a reply" in describe(s)
+    s = load_settings(env={"TE_STUDENT_MAX_TOKENS": "2048"}, env_file=None)
+    assert s.student_max_tokens == 2048
+    for raw in ("0", "-5", "lots", "1.5"):
+        with pytest.raises(ConfigError, match="TE_STUDENT_MAX_TOKENS must be a whole number, "
+                           f"1 or more, got '{raw}'"):
+            load_settings(env={"TE_STUDENT_MAX_TOKENS": raw}, env_file=None)

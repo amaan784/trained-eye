@@ -10,7 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from backend.dataengine.dataset import user_prompt
-from backend.meta.client import MetaAPIError, MetaClient, OutputError, image_part, text_part
+from backend.meta.client import (
+    CacheMiss,
+    MetaAPIError,
+    MetaClient,
+    OutputError,
+    image_part,
+    text_part,
+)
 from backend.skills.spec import SkillSpec
 
 LABELS = ("yes", "no", "unsure")
@@ -47,28 +54,41 @@ class Label:
 def label_image(client: MetaClient, spec: SkillSpec, image: bytes) -> Label:
     """Spark's label for one image. A failure for this image alone (a refusal, an
     unusable or rejected reply) gives an "unsure" Label with error=True instead of
-    stopping the whole run; the failed call is billed but not cached."""
+    stopping the whole run; the failed call is billed but not cached.
+
+    A reply that needed the larger budget is looked up in the cache first, so a rerun
+    does not pay for the cut-off attempt again. `cost_usd` includes failed attempts."""
     prompt = user_prompt(spec.positive, spec.negatives)
-    for max_tokens in MAX_TOKENS:
-        try:
-            result = client.structured(
-                client.settings.model("labeler"), [image_part(image), text_part(prompt)],
-                LABEL_SCHEMA, name="frame_label", system=SYSTEM, skill=spec.name,
-                max_tokens=max_tokens,
-            )
-            break
-        except MetaAPIError as err:
-            if not (isinstance(err, OutputError) or err.status in SKIPPABLE_STATUSES):
-                raise
-            if "finish_reason=length" in str(err) and max_tokens != MAX_TOKENS[-1]:
-                continue
-            return Label("unsure", f"no label: {err}"[:300], 0.0, False, error=True)
+
+    def ask(max_tokens: int, cache_only: bool = False):
+        return client.structured(
+            client.settings.model("labeler"), [image_part(image), text_part(prompt)],
+            LABEL_SCHEMA, name="frame_label", system=SYSTEM, skill=spec.name,
+            max_tokens=max_tokens, cache_only=cache_only,
+        )
+
+    spent = 0.0
+    try:
+        result = ask(MAX_TOKENS[-1], cache_only=True)
+    except CacheMiss:
+        for max_tokens in MAX_TOKENS:
+            try:
+                result = ask(max_tokens)
+                break
+            except MetaAPIError as err:
+                spent += err.cost_usd
+                if not (isinstance(err, OutputError) or err.status in SKIPPABLE_STATUSES):
+                    raise
+                cut_off = isinstance(err, OutputError) and err.finish_reason == "length"
+                if cut_off and max_tokens != MAX_TOKENS[-1]:
+                    continue
+                return Label("unsure", f"no label: {err}"[:300], spent, False, error=True)
     data = result.data if isinstance(result.data, dict) else {}
     label = data.get("label")
     if label not in LABELS:
         label = "unsure"
-    return Label(label, str(data.get("reason", ""))[:300], result.info.cost_usd,
-                 result.info.cached)
+    return Label(label, str(data.get("reason", ""))[:300], spent + result.info.cost_usd,
+                 result.info.cached and not spent)
 
 
 def filter_generated(rows: list[dict]) -> tuple[list[dict], dict]:

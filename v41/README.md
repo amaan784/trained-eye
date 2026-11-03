@@ -11,20 +11,28 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v41 (M2): Watch trigger and calibration
+## Build stage v41 (M2): Teach checks, worst case and crops
 
-backend/watch/trigger.py decides when a skill fires: at least 3 of its last 4 frames
-(about one a second) at or over its threshold, then quiet for the skill's cooldown; a
-pause in the stream starts the window again, and a snooze serves the cloud check.
-calibrate() picks the lowest threshold with at most one false alarm per hour of
-labelled clips and reports the events caught and the median delay; labelled_frames()
-reads a watch frame log.
+te teach now checks everything it needs before any money is mentioned: the skill name,
+a --request of at most 500 characters that the policy allows, the audio and clip
+files, a clip outside the skill's own folder with usable frames, and --labels with no
+repeated key, naming only this clip's keyframes. With training on model outputs off,
+your labels must say both yes and no, or the keyframes are saved for labelling and
+nothing is spent. The estimate prices images at the tokens the ledger measured and
+shows the worst case, every label asked again with the larger budget; past $15 it asks
+even with --yes, and a missing MODEL_API_KEY stops before the question. te spend adds
+the Modal total. In backend/teach.py, each keyframe SAM found a box in adds a crop
+labelled like it, a new spec removes the old dataset, the labels so far are saved when
+labelling stops, and a dataset with only one answer stops instead of being written.
+The crop test comes in v73, with Experiment 2's unfiltered set.
 
 Files added or changed in this stage:
 
-- `backend/watch/trigger.py` (new): when a skill fires: 3 of the last 4 frames over
-  the threshold, then the cooldown; the threshold calibration on labelled clips
-- `tests/test_trigger.py` (new): tests
+- `backend/cli.py` (changed): the te command line
+- `backend/teach.py` (changed): the teach flow end to end, cached so a rerun costs
+  nothing
+- `tests/test_cli.py` (changed): tests
+- `tests/test_teach.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -37,21 +45,45 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 15%]
-    ........................................................................ [ 31%]
-    ........................................................................ [ 47%]
-    ........................................................................ [ 63%]
-    ........................................................................ [ 79%]
-    ........................................................................ [ 95%]
+    ........................................................................ [ 10%]
+    ........................................................................ [ 21%]
+    ........................................................................ [ 32%]
+    ........................................................................ [ 43%]
+    ........................................................................ [ 53%]
+    ........................................................................ [ 64%]
+    ........................................................................ [ 75%]
+    ........................................................................ [ 86%]
+    ........................................................................ [ 97%]
     ....................                                                     [100%]
-    452 passed in 9.29s
+    668 passed in 21.49s
 
     $ ruff check .
     All checks passed!
+
+    $ python -m backend.cli teach --help
+    usage: te teach [-h] --skill SKILL --clip CLIP [--audio AUDIO |
+                    --request REQUEST] [--correct CORRECT] [--positives POSITIVES]
+                    [--negatives NEGATIVES] [--labels LABELS] [--estimate-only]
+                    [--yes]
+
+    options:
+      -h, --help            show this help message and exit
+      --skill SKILL         skill name, e.g. washer_done
+      --clip CLIP           video file or folder of JPEG frames
+      --audio AUDIO         the spoken request (wav, m4a, ...)
+      --request REQUEST     the request as text, instead of --audio
+      --correct CORRECT     fix a wrong read-back, e.g. "the light on the lid"
+      --positives POSITIVES
+      --negatives NEGATIVES
+      --labels LABELS       JSON of your own keyframe labels
+                            {"kf_00_1a2b3c4d.jpg": "yes" or "no"}, names as in
+                            data/skills/<skill>/keyframes/
+      --estimate-only       print the cost estimate
+      --yes                 skip both confirmations
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -72,6 +104,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
+- `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
+  recipe with the run's paths, W&B names and gradient accumulation for one H100.
+- `backend/training/prepare.py`: bundles taught skills into one training set for Modal
+  (real, synthetic or mixed, with a validation split and volume paths).
+- `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
+  recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -81,8 +119,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -91,6 +131,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
 - `backend/watch/trigger.py`: when a skill fires: 3 of the last 4 frames over the
   threshold, then the cooldown; the threshold calibration on labelled clips.
+- `backend/inference/student.py`: scores a frame with the trained model on an
+  OpenAI-compatible endpoint, read at its yes or no answer token.
+- `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
+  alert, alert messages and the frame log.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -103,12 +147,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 452 tests, all offline; none calls a paid API.
+- `tests/`: 668 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v42 adds the student scorer: the trained model behind an OpenAI-compatible
-endpoint, read at its answer token.
+Stage v42 adds te train: the bundle, the two-step smoke on Modal, detached runs
+collected later, the processor preflight, and the real run's pricing from the smoke,
+which needs v74's experiment plan.
 
 ## Privacy and policy
 

@@ -2,7 +2,15 @@ import pytest
 from pydantic import ValidationError
 
 from backend.cli import main
-from backend.skills.spec import SkillSpec, Target, policy_check, read_back, slugify
+from backend.skills.spec import (
+    REFUSALS,
+    SkillSpec,
+    Target,
+    policy_check,
+    read_back,
+    slugify,
+    topic_check,
+)
 
 WASHER = {
     "name": "washer_done",
@@ -269,4 +277,73 @@ def test_policy_refuses_review_cases(request_text):
     "Tell me when the parent folder finishes syncing",
 ])
 def test_policy_allows_object_skills(request_text):
+    assert policy_check(request_text) is None
+
+
+@pytest.mark.parametrize("request_text", [
+    "tell me when I pass a campaign sign",
+    "Tell me when the campaign yard sign falls over",
+    "count the political yard signs on my street",
+    "tell me when the TV shows the election results",
+    "tell me when a yard sign says vote for Smith",
+    "tell me when the ballot box is full",
+    "tell me when the Republican billboard lights up",
+    "tell me when the protest reaches our block",
+    "count the protesters outside",
+    "alert me when a military convoy drives by",
+    "tell me when an army truck goes past",
+    "tell me when I see soldiers",
+    "watch for tanks and troops on the road",
+    "tell me if there's a gun on the table",
+    "spot weapons in the crowd",
+    "tell me when the air raid siren light flashes",
+    "tell me when a drone strike shows on the news",
+    "Tell me when the pistol is out of its case",
+    "Tell me when the shotgun is off the rack",
+    "Tell me when my gun is not in the safe",
+    "Tell me when guns are on the table",
+    "Tell me when the revolver is loaded",
+    "Tell me when the tank rolls past the window",
+    "Tell me when bullets are on the counter",
+    "Tell me when the ammo box is open",
+    "Tell me when war planes fly over",
+])
+def test_policy_refuses_politics_and_war(request_text):
+    assert policy_check(request_text) == REFUSALS["politics"]
+    assert topic_check(request_text) == REFUSALS["politics"]  # the model's wording too
+
+
+@pytest.mark.parametrize("request_text", [
+    "tell me when the war film poster comes on the TV",
+    "tell me when the war movie ends on the TV",
+    "tell me when the Star Wars movie starts on the TV",
+    "let me know when my campaign of laundry loads is done",
+    "remind me when the calendar shows election day",
+    "Tell me when Election Day shows on the calendar",
+    "tell me when the clock shows 1300 in military time",
+    "tell me when the glue gun is hot",
+    "tell me when the nail gun light turns green",
+    "tell me when the toy soldiers fall over",
+    "tell me when the water pistol is full",
+    "tell me when the Swiss army knife is back in the drawer",
+    "tell me when my army green backpack is on the hook",
+    "tell me when the bath bomb has dissolved",
+    "tell me when the fish tank light turns on",
+    "tell me when the chicken ballotine reaches 70 degrees",
+    "tell me when the dashboard shows the campaign results",
+    "tell me when the Salvation Army truck arrives",
+    "tell me when the black soldier fly bin is full",
+    "tell me when the toy fighter jet stops spinning",
+    "Tell me when the President's Choice cookies are on the shelf",
+    "Tell me when the Presidents' Day sale banner goes up",
+    "Tell me when my gun-metal grey kettle boils",
+    "Tell me when the ad campaign posters in the shop window change",
+    "Tell me when the marketing campaign banners are up in the store",
+    "Tell me when the fundraising campaign rally signs are delivered",
+    "Tell me when the 3D printer finishes the soldier figurine",
+    "Tell me when the demonstrator unit on the shelf turns on",
+    "Tell me when the staple gun is unplugged",
+    "Tell me when the pistol grip sprayer stops dripping",
+])
+def test_politics_rule_allows_look_alike_objects(request_text):
     assert policy_check(request_text) is None

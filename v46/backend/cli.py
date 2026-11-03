@@ -1,12 +1,19 @@
-"""The `te` command line.
+"""The `te` command line. The M0 and M1 commands (te spend to te teach) are here, with the
+helpers the other modules share; build_parser also registers the commands of the modules
+named below.
 
-  te spend          print Meta API spend from the ledger
+  te spend          print Meta API spend from the ledger, and Modal GPU spend
   te models         list the models your MODEL_API_KEY can use (free)
   te api-smoke      one tiny paid Muse Spark call through the cache and ledger
   te serve          run the backend (WebSocket at /ws)
   te ws-selftest    stream synthetic frames through the WebSocket, in process
   te policy         check a request against the local policy rules (free, offline)
   te teach          teach a skill: request + 10 s clip -> spec, generated data, labels, dataset
+  te train          bundle taught skills and train the student on Modal (asks first)
+                    (backend/cli_train.py)
+  te watch          replay a clip through watch mode: scores, alerts and the frame log
+  te calibrate      set a skill's threshold from replayed, labelled validation clips
+                    (backend/cli_watch.py)
 """
 
 from __future__ import annotations
@@ -21,9 +28,19 @@ import subprocess
 import sys
 from pathlib import Path
 
-from backend.config import ConfigError, load_settings
+# The cli_* modules take their settings imports from here, so PROJECT_ROOT and ASK_ABOVE_USD
+# are the values they had when backend.cli was loaded, as for the commands in this module.
+from backend.config import (  # noqa: F401 - some are used only by the cli_* modules
+    ASK_ABOVE_USD,
+    MODAL_GPU_USD_PER_HOUR,
+    PROJECT_ROOT,
+    ConfigError,
+    load_settings,
+    shown_path,
+)
 from backend.meta.client import MetaAPIError, MetaClient, OutputError
 from backend.meta.ledger import BudgetExceeded, Ledger, format_report, token_cost
+from backend.training import gpu_ledger
 
 SMOKE_SCHEMA = {
     "type": "object",
@@ -42,7 +59,9 @@ def make_client(settings) -> MetaClient:
 
 
 def cmd_spend(args) -> int:
-    print(format_report(make_ledger(load_settings())))
+    settings = load_settings()
+    print(format_report(make_ledger(settings)))
+    print(gpu_ledger.format_report(settings.data_dir))  # data/modal_ledger.jsonl
     return 0
 
 
@@ -109,6 +128,15 @@ def cmd_serve(args) -> int:
         host = lan_address() or "<this Mac's Wi-Fi IP>"
     print(f"Trained Eye backend: ws://{host}:{args.port}/ws  (check: "
           f"http://{host}:{args.port}/health; Ctrl+C to stop)")
+    try:
+        settings = load_settings()
+        teach = "off (set SERVER_TOKEN in .env to turn it on)"
+        if settings.has_secret("SERVER_TOKEN"):
+            settings.secret("SERVER_TOKEN")  # a token with spaces or smart quotes stops here
+            teach = "on (the app needs SERVER_TOKEN)"
+    except ConfigError as err:
+        teach = f"off ({err})"
+    print(f"teaching from the phone: {teach}")
     uvicorn.run("backend.server:app", host=args.host, port=args.port, log_level="info",
                 log_config=server_log_config())
     return 0
@@ -184,7 +212,7 @@ def ask(question: str) -> bool:
 RESUME_HINT = ("finished calls are cached, so running the same command again continues "
                "without paying for them twice")
 FAILURES_HINT = ("failed calls are not cached and are paid for again on a rerun: look at "
-                 "the reasons above (and in the skill folder) before running it again")
+                 "the reason above (and the skill folder) before running it again")
 
 
 class Stopped(ValueError):
@@ -218,9 +246,9 @@ def teach_inputs(args, settings) -> tuple[list, dict[str, str], float]:
     )
 
     check_name(args.skill)
-    if not (args.audio or args.request):
-        raise ValueError("pass --audio or --request")
     request = " ".join((args.request or "").split())
+    if not (args.audio or request):
+        raise ValueError("pass --audio or --request")
     if args.request and len(request) > MAX_REQUEST:
         raise ValueError(f"--request is {len(request)} characters, over the {MAX_REQUEST} "
                          "allowed: say it in one sentence")
@@ -258,6 +286,7 @@ def teach_inputs(args, settings) -> tuple[list, dict[str, str], float]:
 
 def cmd_teach(args) -> int:
     from backend.dataengine.synth import TooManyFailures
+    from backend.meta.ledger import image_tokens
     from backend.teach import TeachOptions, estimate, run_teach
 
     settings = load_settings()
@@ -281,6 +310,7 @@ def cmd_teach(args) -> int:
     print(f"estimate for {args.skill} (before cache hits): " + ", ".join(
         f"{k} ${v:.2f}" for k, v in parts.items()))
     print(f"  at most ${at_most:.2f} if every label has to be asked again with a larger budget")
+    print(f"  {image_tokens(settings, client.ledger).describe()}")  # what estimate() used
     print("train on model outputs: " + ("yes" if settings.train_on_model_outputs else
                                         "no (the dataset uses real frames with your own labels)"))
     ledger = make_ledger(settings)
@@ -298,8 +328,12 @@ def cmd_teach(args) -> int:
     if args.estimate_only:
         return 0
     settings.secret("MODEL_API_KEY")  # a missing key stops here, before the question
-    if not args.yes and not ask(f"Spend up to about ${parts['total']:.2f} "
-                                f"(at most ${at_most:.2f})?"):
+    over = at_most > ASK_ABOVE_USD
+    if over:
+        print(f"te: this could cost up to ${at_most:.2f}, over ${ASK_ABOVE_USD:.0f}, so it needs "
+              "your yes even with --yes")
+    if (over or not args.yes) and not ask(f"Spend up to about ${parts['total']:.2f} "
+                                          f"(at most ${at_most:.2f})?"):
         return 1
     opts = TeachOptions(skill=args.skill, clip=Path(args.clip),
                         audio=Path(args.audio) if args.audio else None, request=args.request,
@@ -311,9 +345,9 @@ def cmd_teach(args) -> int:
     except KeyboardInterrupt:
         print(f"\nte: stopped; {RESUME_HINT}", file=sys.stderr)
         return 130
-    except TooManyFailures:
-        print(f"te: teach stopped; {FAILURES_HINT}", file=sys.stderr)
-        raise
+    except TooManyFailures as err:
+        print(f"te: {err}\nte: teach stopped; {FAILURES_HINT}", file=sys.stderr)
+        return 2
     except MetaAPIError:
         print(f"te: teach stopped; {RESUME_HINT}", file=sys.stderr)
         raise
@@ -330,6 +364,38 @@ def cmd_teach(args) -> int:
         return 1
     print(format_report(make_ledger(settings)))
     return 0
+
+
+def modal_ready() -> bool:
+    if shutil.which("modal") is None:
+        print('te: the modal command is missing: pip install -e ".[train]", then modal token '
+              "set", file=sys.stderr)
+        return False
+    return True
+
+
+def positive(text: str) -> int:
+    """An argparse type: a whole number, 1 or more."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be 1 or more, got {value}")
+    return value
+
+
+def fraction(text: str) -> float:
+    """An argparse type: a number from 0 to 1."""
+    value = float(text)
+    if not 0.0 <= value <= 1.0:  # also false for nan
+        raise argparse.ArgumentTypeError(f"must be from 0 to 1, got {text}")
+    return value
+
+
+def count(text: str) -> int:
+    """An argparse type: a whole number, 0 or more."""
+    value = int(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be 0 or more, got {value}")
+    return value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -363,13 +429,21 @@ def build_parser() -> argparse.ArgumentParser:
     said.add_argument("--audio", help="the spoken request (wav, m4a, ...)")
     said.add_argument("--request", help="the request as text, instead of --audio")
     teach.add_argument("--correct", help='fix a wrong read-back, e.g. "the light on the lid"')
-    teach.add_argument("--positives", type=int, default=150)
-    teach.add_argument("--negatives", type=int, default=150)
+    teach.add_argument("--positives", type=count, default=150)
+    teach.add_argument("--negatives", type=count, default=150)
     teach.add_argument("--labels", help='JSON of your own keyframe labels {"kf_00_1a2b3c4d.jpg": '
                        '"yes" or "no"}, names as in data/skills/<skill>/keyframes/')
     teach.add_argument("--estimate-only", action="store_true", help="print the cost estimate")
     teach.add_argument("--yes", action="store_true", help="skip both confirmations")
     teach.set_defaults(func=cmd_teach)
+
+    from backend.cli_train import add_parsers as train_parsers
+
+    train_parsers(sub)
+
+    from backend.cli_watch import add_parsers as watch_parsers
+
+    watch_parsers(sub)
     return parser
 
 

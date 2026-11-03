@@ -11,29 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v40 (M1 review): Fix: policy check and compiler, third round
+## Build stage v40 (M2): The Modal training app
 
-The review of the second round found named people getting through again and new false
-refusals. Refused again: two names ('when Sam and Jake arrive'), full names, a title
-with a brand name ('Mr. Dyson'), 'Sam's at the door', 'the guys' and irregular
-plurals, and more ways to hide or switch off the glasses' capture light. Allowed
-again: brand readings ('Ecobee gets to 70 degrees', 'Brita's filter light comes on'),
-'my lift' and 'my pitch deck', 'a discreet alert', Snoopy, counting planks or Lego
-sets, a camcorder's recording light, the green men on a walk signal. A correction's
-'not' now covers at most five words and stops at a new clause, so 'not the light, tell
-me when Sam gets here' is refused; the model's trigger is checked with its 'when' put
-back; a bus shelter in a description is not a sensitive place; and a read-back no
-longer keeps a capital 'The' mid-sentence.
+backend/training/modal_train.py trains the student on Modal with Meta's Axolotl
+recipe. The container follows the recipe's setup (meta-oss-cookbook b30ca2c): Python
+3.12, CUDA 13.0, torch 2.12.1, Axolotl 0.19.0, flash-attn 2.8.3 and Cut Cross Entropy
+at the pinned commit, built for the H100. Bundles, runs and the Hugging Face cache
+live on the Modal volume trained-eye, so the 30B base is downloaded once;
+WANDB_API_KEY and HF_TOKEN come only from the Modal Secrets wandb and huggingface.
+--smoke runs the recipe's two-step check, whose seconds per step price the real run.
+Every run writes result.json on the volume, so a detached run can be collected later.
+W&B gets the run's tags, the bundle summary and, only when asked, the bundle and
+adapter as artifacts. --preflight runs no training: a CPU function loads the pinned
+processor and renders examples with preflight.py. Nothing here runs in the tests,
+which read the file's syntax tree; the te train check comes with te train.
 
 Files added or changed in this stage:
 
-- `backend/skills/compiler.py` (changed): the skill compiler: the request and 3
-  keyframes go to Muse Wonder (structured output), which returns a spec or a refusal
-- `backend/skills/spec.py` (changed): the skill spec (version 1), the local policy
-  check that refuses skills about people, health, covert monitoring or sports, and the
-  plain-English read-back
-- `tests/test_compiler.py` (changed): tests
-- `tests/test_skills.py` (changed): tests
+- `backend/training/modal_train.py` (new): the Modal app that trains on one H100 with
+  the recipe's pins, the trained-eye volume and the wandb and huggingface Secrets
+- `tests/test_modal_train.py` (new): tests
+- `tests/test_training_preflight.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -46,28 +44,23 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 16%]
-    ........................................................................ [ 32%]
-    ........................................................................ [ 48%]
-    ........................................................................ [ 65%]
-    ........................................................................ [ 81%]
-    ........................................................................ [ 97%]
-    ..........                                                               [100%]
-    442 passed in 8.84s
+    ........................................................................ [ 11%]
+    ........................................................................ [ 22%]
+    ........................................................................ [ 33%]
+    ........................................................................ [ 45%]
+    ........................................................................ [ 56%]
+    ........................................................................ [ 67%]
+    ........................................................................ [ 78%]
+    ........................................................................ [ 90%]
+    ..............................................................           [100%]
+    638 passed in 15.61s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli policy "Tell me when Sam and Jake get home"
-    refused: I can't watch for or recognize specific people. Skills can cover objects, states, text, displays, signs and vehicles.
-    (exit code 1)
-
-    $ python -m backend.cli policy "Tell me when Ecobee gets to 70 degrees"
-    ok: no local policy objection (the skill compiler checks again)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -88,6 +81,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
+- `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
+  recipe with the run's paths, W&B names and gradient accumulation for one H100.
+- `backend/training/prepare.py`: bundles taught skills into one training set for Modal
+  (real, synthetic or mixed, with a validation split and volume paths).
+- `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
+  recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -97,14 +96,22 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
 - `backend/dataengine/labels.py`: Muse Spark labels for every image, the filter that
   keeps generated images only when Spark agrees, and agreement stats.
 - `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
+- `backend/watch/trigger.py`: when a skill fires: 3 of the last 4 frames over the
+  threshold, then the cooldown; the threshold calibration on labelled clips.
+- `backend/inference/student.py`: scores a frame with the trained model on an
+  OpenAI-compatible endpoint, read at its yes or no answer token.
+- `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
+  alert, alert messages and the frame log.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -117,12 +124,11 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 442 tests, all offline; none calls a paid API.
+- `tests/`: 638 tests, all offline; none calls a paid API.
 
 ## Next
 
-Milestone M2, the parts that need neither the Mac nor Modal, starting with the watch
-trigger: 3 of the last 4 frames over the threshold, then the cooldown.
+The next stages add the teach flow with SAM crops and te teach, then te train.
 
 ## Privacy and policy
 

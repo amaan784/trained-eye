@@ -1,8 +1,11 @@
-"""CLI tests for the commands that talk to the Meta API. The client is swapped for one
-backed by httpx.MockTransport, so nothing is sent or billed."""
+"""CLI tests for the commands in backend/cli.py (te spend, models, api-smoke, serve,
+ws-selftest, teach), and the fixtures and helpers the other CLI tests import from here. The
+client is swapped for one backed by httpx.MockTransport, so nothing is sent or billed."""
 
 import io
 import json
+import subprocess
+from pathlib import Path
 
 import httpx
 import pytest
@@ -313,24 +316,73 @@ def test_teach_prompt_with_stdin_closed_is_a_clean_no(env, monkeypatch, capsys):
     assert cli.main([*TEACH, "--clip", str(write_clip(env / "clip"))]) == 1
 
 
-def test_serve_prints_an_address_the_phone_can_use_and_keeps_server_logs(monkeypatch, capsys):
-    import uvicorn
+def taught(env, skill="washer_done", n=40):
+    from backend.cli import synthetic_jpeg
+    from backend.dataengine.dataset import Example, write_dataset
+    from backend.skills.spec import SkillSpec, Target
 
-    ran = {}
-    monkeypatch.setattr(cli, "lan_address", lambda: "192.168.1.23")
-    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: ran.update(kw))
-    assert cli.main(["serve"]) == 0
-    assert "ws://192.168.1.23:8765/ws" in capsys.readouterr().out
-    assert ran["host"] == "0.0.0.0"
-    assert ran["log_config"]["loggers"]["trained_eye"]["level"] == "INFO"
-    monkeypatch.setattr(cli, "lan_address", lambda: None)
-    cli.main(["serve", "--port", "9000"])
-    assert "ws://<this Mac's Wi-Fi IP>:9000/ws" in capsys.readouterr().out
+    root = env / "data/skills" / skill
+    examples = [Example(f"{skill}-{'real' if i < 10 else 'synt'}-{i:03d}",
+                        synthetic_jpeg(i, size=(64, 48)), "yes" if i % 2 else "no",
+                        "real" if i < 10 else "synthetic", skill, "the display shows End",
+                        ["display off"]) for i in range(n)]
+    write_dataset(examples, root / "dataset", f"{skill}-teach")
+    (root / "spec.json").write_text(SkillSpec(
+        name=skill, request="tell me when the washer says End",
+        target=Target(sam_prompt="washer display", description="the display"),
+        positive="the display shows End", negatives=["display off"],
+        alert="Laundry's done.", confirm_with_cloud=False).model_dump_json())
+    return root
 
 
-def test_server_log_lines_reach_the_console_handler(capsys):
-    import logging.config
+def fake_modal(monkeypatch, result=None, code=0):
+    runs = []
 
-    logging.config.dictConfig(cli.server_log_config())
-    logging.getLogger("trained_eye.server").info("session opened")
-    assert "session opened" in capsys.readouterr().err
+    def run(command, cwd=None, check=False, **kw):
+        if command[0] != "modal":
+            return subprocess.CompletedProcess(command, 0, stdout="abc1234\n", stderr="")
+        runs.append(command)
+        path = command[command.index("--result") + 1]
+        if result is not None:
+            Path(path).write_text(json.dumps(result))
+        return subprocess.CompletedProcess(command, code)
+
+    monkeypatch.setattr(cli.subprocess, "run", run)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
+    return runs
+
+
+TRAIN = ["train", "--skills", "washer_done", "--run", "exp1-mixed"]
+
+
+def test_teach_rejects_a_blank_request_and_negative_counts_before_any_estimate(env, monkeypatch,
+                                                                               capsys):
+    calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    clip = str(write_clip(env / "clip"))
+    assert cli.main(["teach", "--skill", "washer_done", "--clip", clip, "--request", "   "]) == 2
+    captured = capsys.readouterr()
+    assert "pass --audio or --request" in captured.err and "estimate" not in captured.out
+    with pytest.raises(SystemExit) as stop:
+        cli.main([*TEACH, "--clip", clip, "--positives", "-100"])
+    assert stop.value.code == 2 and "must be 0 or more" in capsys.readouterr().err
+    assert calls == []
+
+
+def test_teach_over_fifteen_dollars_asks_even_with_yes(env, monkeypatch, capsys):
+    calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
+    prompts = answer(monkeypatch, "n")
+    code = cli.main([*TEACH, "--clip", str(write_clip(env / "clip")), "--positives", "600",
+                     "--negatives", "600", "--yes"])
+    assert code == 1 and calls == [] and len(prompts) == 1
+    assert "so it needs your yes even with --yes" in capsys.readouterr().out
+
+
+def test_spend_prints_the_modal_total(env, capsys):
+    from backend.training import gpu_ledger
+
+    gpu_ledger.record(env / "data", "train", "exp1-mixed", 3600)
+    assert cli.main(["spend"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("Meta API spend")
+    assert ("Modal GPU spend (data/modal_ledger.jsonl, at config prices): $3.95 of $150 credit"
+            in out)

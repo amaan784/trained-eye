@@ -11,17 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v68 (M2): iOS: theme and components
+## Build stage v68 (M3): Regression check and Spark as scorer
 
-The app is SwiftUI for iOS 17.2 and has not been compiled: there is no Xcode here. A
-file may use types from a later iOS stage (the app model and the teach flow need each
-other), so the app builds only as a whole, from v73 on. A dark, minimal theme with one
-accent colour and the shared views, including the camera-on bar shown on every screen.
+backend/eval/regression.py asks whether fine-tuning on yes or no frames costs general
+visual skill. It reads a JSON-lines file of questions written by hand, each with an
+optional image, an answer and a match rule (exact, contains or choice), asks the base
+and the fine-tuned model each one through an OpenAI-compatible endpoint, at
+temperature 0 by default, and grades the replies, ignoring case, spaces and end
+punctuation. A failed request counts as wrong and is listed, and the report gives
+accuracy with and without images, the questions whose result changed and a markdown
+table. backend/eval/spark_scorer.py makes Muse Spark a per-frame judge with the
+student's shape, so the watcher uses it unchanged: yes is 1.0, no 0.0 and unsure 0.5,
+and each request is cached and billed to the skill. A latency log keeps the seconds of
+the frames actually sent, so a cached frame reports the latency measured when it was
+sent, and one cached by another caller is marked as having none.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/UI/Components.swift` (new):
-- `ios/TrainedEye/UI/Theme.swift` (new):
+- `backend/eval/regression.py` (new):
+- `backend/eval/spark_scorer.py` (new):
+- `tests/test_regression.py` (new): tests
+- `tests/test_spark_scorer.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -34,19 +44,23 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
+    ........................................................................ [  8%]
+    ........................................................................ [ 17%]
     ........................................................................ [ 26%]
-    ........................................................................ [ 39%]
+    ........................................................................ [ 35%]
+    ........................................................................ [ 43%]
     ........................................................................ [ 52%]
-    ........................................................................ [ 65%]
+    ........................................................................ [ 61%]
+    ........................................................................ [ 70%]
     ........................................................................ [ 78%]
-    ........................................................................ [ 91%]
-    .................................................                        [100%]
-    553 passed in 24.80s
+    ........................................................................ [ 87%]
+    ........................................................................ [ 96%]
+    ..............................                                           [100%]
+    822 passed in 35.19s
 
     $ ruff check .
     All checks passed!
@@ -63,6 +77,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -95,8 +113,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -109,6 +129,11 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   OpenAI-compatible endpoint, read at its yes or no answer token.
 - `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
   alert, alert messages and the frame log.
+- `backend/labeltool/clips.py`: the labelling tool for clips: where the condition is
+  true, saved as time ranges.
+- `backend/labeltool/images.py`: the labelling tool for generated images, for
+  Experiment 2.
+- `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -121,11 +146,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 553 tests, all offline; none calls a paid API.
+- `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
+- `tests/`: 822 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v69 adds the app entry, the Info.plist and the entitlements.
+Stage v69 adds the results write-up: the SVG charts and results.md, one section per
+experiment with its tables of accuracy, speed and cost.
 
 ## Privacy and policy
 

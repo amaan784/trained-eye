@@ -11,23 +11,28 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v45 (M2): Training bundle and config
+## Build stage v45 (M2): Watch mode and teaching on the server
 
-backend/training/prepare.py bundles taught skills into one training set (one adapter
-learns every skill, since the condition is in the prompt): real, synthetic or mixed
-examples, an optional limit per skill for the image-count curve, a deterministic
-validation split, and image paths pointing where the bundle will be on the Modal
-volume. backend/training/axolotl.py writes the Axolotl config: Meta's QLoRA recipe
-value for value, with this run's paths, W&B names and gradient accumulation 32 to keep
-the global batch of 32 on one H100, and the recipe's two-step smoke.
+In backend/server.py, a hello whose "watch" lists skill names starts watch mode for
+that session: the student scores every frame, each ack carries the scores, and an
+alert goes to the phone as a message of its own, to be spoken through the glasses; a
+watch request that cannot be met gets an error. The default watcher reads the student
+endpoint from the settings and takes thresholds and the prompt layout from the served
+run in serving.json; every session shares one cooldown book, saved in
+data/watch/cooldowns.json, so a reconnect or a second phone does not announce a
+condition again too soon. GET /skills lists the taught skills for the Skills screen,
+with their threshold, training run and whether the served run has them. The teach
+routes are mounted, and on shutdown a teach run stops before its next paid call. te
+serve prints this Mac's address on the local network and the /health check, says
+whether teaching from the phone is on, and keeps the server's log lines.
 
 Files added or changed in this stage:
 
-- `backend/training/axolotl.py` (new): the Axolotl config for a training run: Meta's
-  QLoRA recipe with the run's paths, W&B names and gradient accumulation for one H100
-- `backend/training/prepare.py` (new): bundles taught skills into one training set for
-  Modal (real, synthetic or mixed, with a validation split and volume paths)
-- `tests/test_training_prep.py` (new): tests
+- `backend/cli.py` (changed): the te command line
+- `backend/server.py` (changed): the backend the iPhone app talks to: JPEG frames
+  arrive over a WebSocket at /ws and each one is acknowledged; frames stay in memory
+- `tests/test_cli.py` (changed): tests
+- `tests/test_server.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -40,21 +45,33 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 14%]
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
     ........................................................................ [ 29%]
-    ........................................................................ [ 44%]
+    ........................................................................ [ 39%]
+    ........................................................................ [ 49%]
     ........................................................................ [ 59%]
-    ........................................................................ [ 74%]
-    ........................................................................ [ 89%]
-    .................................................                        [100%]
-    481 passed in 11.17s
+    ........................................................................ [ 69%]
+    ........................................................................ [ 78%]
+    ........................................................................ [ 88%]
+    ........................................................................ [ 98%]
+    ..........                                                               [100%]
+    730 passed in 32.41s
 
     $ ruff check .
     All checks passed!
+
+    $ python -m backend.cli serve --help
+    usage: te serve [-h] [--host HOST] [--port PORT]
+
+    options:
+      -h, --help   show this help message and exit
+      --host HOST
+      --port PORT
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -68,17 +85,27 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
 - `backend/server.py`: the backend the iPhone app talks to: JPEG frames arrive over a
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
+- `backend/teach_session.py`: a phone teach session: the spend question before any
+  paid call, the read-back, progress lines and timeouts.
+- `backend/teach_upload.py`: the phone's teach upload: a multipart parser, the input
+  checks, the saved capture and the estimate.
+- `backend/teach_api.py`: the teach routes for the phone: /teach/start, /teach/status
+  and /teach/answer, behind SERVER_TOKEN.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
 - `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
   recipe with the run's paths, W&B names and gradient accumulation for one H100.
 - `backend/training/prepare.py`: bundles taught skills into one training set for Modal
   (real, synthetic or mixed, with a validation split and volume paths).
+- `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
+  recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -88,8 +115,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -114,12 +143,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 481 tests, all offline; none calls a paid API.
+- `tests/`: 730 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v46 adds the Modal training app: one H100, the recipe's pins, the volume and
-both Modal Secrets.
+Stage v46 adds te watch, which replays a clip through watch mode with the trained
+model, and te calibrate, which sets a skill's or a run's threshold from labelled frame
+logs.
 
 ## Privacy and policy
 

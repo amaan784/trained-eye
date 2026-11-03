@@ -18,7 +18,7 @@ import hashlib
 import io
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -50,6 +50,9 @@ class Example:
     skill: str
     positive: str
     negatives: list[str]
+    # Where it came from, added to its provenance index entry: a crop's keyframe and box,
+    # a clip frame's clip, time and session.
+    provenance: dict = field(default_factory=dict)
 
 
 def build_record(example: Example, image_path: Path, system_in_user: bool = False) -> dict:
@@ -88,7 +91,7 @@ def write_dataset(
         key = f"{ex.skill}/{ex.source}/{ex.answer}"
         counts[key] = counts.get(key, 0) + 1
         # Provenance: the padded PNG is a derived copy; this points back to the original.
-        index.append({"id": ex.id, "source": ex.source, "answer": ex.answer,
+        index.append({**ex.provenance, "id": ex.id, "source": ex.source, "answer": ex.answer,
                       "original_sha256": hashlib.sha256(ex.image).hexdigest()})
     jsonl = out_dir / f"{name}.jsonl"
     body = "\n".join(lines) + "\n"

@@ -11,23 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v35 (M1 review): Fix: labels and region of interest
+## Build stage v35 (M2): Watch trigger and the student scorer
 
-A label that had to be asked again with the larger token budget is now looked up under
-that budget first, so a rerun no longer pays for the cut-off attempt each time
-(before, a finished run kept paying for it on every rerun). A label cut off halfway
-through its JSON is asked again too. Progress lines count what failed attempts cost.
-SAM skips a frame it rejects (400 or 422) or answers unreadably, and stops after the
-same number of failures as the other steps.
+The first two parts of watch mode. backend/watch/trigger.py decides when a skill
+fires: at least 3 of its last 4 frames at or over the threshold, frames more than 10
+seconds apart not counted together, then the skill's cooldown; calibrate() picks the
+lowest threshold that gives at most one false alarm an hour on labelled validation
+clips. backend/inference/student.py scores a frame with the trained model on an
+OpenAI-compatible endpoint (vLLM on Modal or llama-server on the Mac), sent exactly as
+the training examples were built. The probability is read at the answer token, the
+last yes or no, from its top logprobs; a reply without one, or one cut off at the
+reply budget, is an error, never a guess. Sampling follows Meta's serving notes.
 
 Files added or changed in this stage:
 
-- `backend/dataengine/labels.py` (changed): Muse Spark labels for every image, the
-  filter that keeps generated images only when Spark agrees, and agreement stats
-- `backend/dataengine/roi.py` (changed): the region of interest: SAM 3.1 on each
-  keyframe; the raw output is kept and parsing is still to come
-- `tests/test_labels.py` (changed): tests
-- `tests/test_roi.py` (changed): tests
+- `backend/inference/student.py` (new): scores a frame with the trained model on an
+  OpenAI-compatible endpoint, read at its yes or no answer token
+- `backend/watch/trigger.py` (new): when a skill fires: 3 of the last 4 frames over
+  the threshold, then the cooldown; the threshold calibration on labelled clips
+- `tests/test_config.py` (changed): tests
+- `tests/test_student.py` (new): tests
+- `tests/test_trigger.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -40,17 +44,20 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 19%]
-    ........................................................................ [ 38%]
-    ........................................................................ [ 57%]
-    ........................................................................ [ 76%]
-    ........................................................................ [ 95%]
-    .................                                                        [100%]
-    377 passed in 5.35s
+    ........................................................................ [ 12%]
+    ........................................................................ [ 24%]
+    ........................................................................ [ 36%]
+    ........................................................................ [ 48%]
+    ........................................................................ [ 61%]
+    ........................................................................ [ 73%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 97%]
+    ............                                                             [100%]
+    588 passed in 8.57s
 
     $ ruff check .
     All checks passed!
@@ -83,14 +90,20 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
 - `backend/dataengine/labels.py`: Muse Spark labels for every image, the filter that
   keeps generated images only when Spark agrees, and agreement stats.
 - `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
+- `backend/watch/trigger.py`: when a skill fires: 3 of the last 4 frames over the
+  threshold, then the cooldown; the threshold calibration on labelled clips.
+- `backend/inference/student.py`: scores a frame with the trained model on an
+  OpenAI-compatible endpoint, read at its yes or no answer token.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -103,12 +116,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 377 tests, all offline; none calls a paid API.
+- `tests/`: 588 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v36 adds the teach flow and te teach fixes: inputs checked before the estimate,
-a worst-case figure, and datasets that must hold both answers.
+Stage v36 adds the training run records (running, done or failed, and which run is
+served) and the Modal spend ledger with its check against the $150 credit.
 
 ## Privacy and policy
 

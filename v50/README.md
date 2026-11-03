@@ -11,24 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v50 (M2): Phone teach session
+## Build stage v50 (M2): iOS: backend and WebSocket clients
 
-backend/teach_session.py runs one teach for the iPhone app in a background thread. It
-asks the spend question first and calls nothing paid until the phone says yes, then
-runs the teach flow, whose read-back the phone answers too (a correction recompiles).
-It keeps the progress lines, times out an unanswered question after 10 minutes as a no
-and sums up the dataset at the end. When the server stops, it refuses the next paid
-call, cuts a retry's backoff short and waits for the call in flight, so the ledger
-records it; the Meta client now checks the caps before every retry, not only after one
-that may have been billed. Its tests come two stages later.
+ios/TrainedEye/Network/BackendClient.swift makes the plain HTTP calls to te serve: GET
+/health and GET /skills with a 10 second timeout, and the request helpers the teach
+calls use later. Every request carries the server token as a Bearer header when one is
+set, and a status outside 200 to 299 becomes an error with the backend's own message.
+ios/TrainedEye/Network/WatchSocket.swift speaks the watch protocol: a hello naming the
+camera, the watched skills and a pace of one frame a second, then each JPEG frame as a
+binary message, and it reads the welcome, the acks with each skill's score, the alerts
+and the errors. One frame is in flight at a time, so a frame that would have to wait
+is dropped rather than queued. A dropped connection is opened again after 1, 2, 4, 8,
+then 15 seconds, each time as a new server session. After the welcome a ping goes
+every 20 seconds; no pong within 10 seconds, or no ack for 90 seconds, drops the
+socket and reconnects.
 
 Files added or changed in this stage:
 
-- `backend/meta/client.py` (changed): MetaClient, the only way the code calls Meta's
-  API: cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and
-  spend recorded from the reported usage
-- `backend/teach_session.py` (new): a phone teach session: the spend question before
-  any paid call, the read-back, progress lines and timeouts
+- `ios/TrainedEye/Network/BackendClient.swift` (new):
+- `ios/TrainedEye/Network/WatchSocket.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -41,18 +42,22 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 14%]
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
     ........................................................................ [ 28%]
-    ........................................................................ [ 43%]
+    ........................................................................ [ 38%]
+    ........................................................................ [ 47%]
     ........................................................................ [ 57%]
-    ........................................................................ [ 72%]
-    ........................................................................ [ 86%]
-    ..................................................................       [100%]
-    498 passed in 19.20s
+    ........................................................................ [ 66%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 95%]
+    ...................................                                      [100%]
+    755 passed in 30.76s
 
     $ ruff check .
     All checks passed!
@@ -69,6 +74,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -76,6 +85,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
 - `backend/teach_session.py`: a phone teach session: the spend question before any
   paid call, the read-back, progress lines and timeouts.
+- `backend/teach_upload.py`: the phone's teach upload: a multipart parser, the input
+  checks, the saved capture and the estimate.
+- `backend/teach_api.py`: the teach routes for the phone: /teach/start, /teach/status
+  and /teach/answer, behind SERVER_TOKEN.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
 - `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
@@ -84,6 +97,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   (real, synthetic or mixed, with a validation split and volume paths).
 - `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
   recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
+- `backend/training/export.py`: the Modal app that merges a trained adapter and checks
+  the merged model's answers.
+- `backend/inference/modal_serve.py`: the Modal app that serves the merged model with
+  vLLM behind STUDENT_API_KEY.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -93,8 +110,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -119,11 +138,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 498 tests, all offline; none calls a paid API.
+- `tests/`: 755 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v51 adds the phone's teach upload: the capture, its checks and the estimate.
+Stage v51 adds the HEVC frame decoder and keyframe check from Meta's CameraAccess
+sample, copied unchanged with Meta's LICENSE, and the teach API's messages as Swift
+types.
 
 ## Privacy and policy
 

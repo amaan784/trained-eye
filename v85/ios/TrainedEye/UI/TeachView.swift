@@ -3,7 +3,9 @@
 //
 // Teaching a new skill: a name, the request (hold to talk, or type it), a 10 second
 // capture with a countdown, then the Mac's estimate to agree to, the read-back to confirm
-// or correct, and the run's progress lines.
+// or correct, and the run's progress lines. A session picked up again after a relaunch
+// shows the same way. The capture card shows the frames' size (504x896 asked from the
+// glasses; the SDK lowers it when Bluetooth bandwidth is short).
 //
 
 import SwiftUI
@@ -55,7 +57,7 @@ struct TeachView: View {
           })
       if let seconds = flow.requestSeconds {
         HStack {
-          Notice(text: String(format: "Recorded %.1f s, %@ mic.", seconds, micName))
+          Notice(text: String(format: "Recorded %.1f s, %@ mic.", seconds, flow.requestMicrophone))
           Spacer()
           Button("Clear") { flow.clearRecording() }.font(Theme.label)
         }
@@ -69,6 +71,9 @@ struct TeachView: View {
 
     Card(title: "3. Show it for 10 seconds") {
       FramePreview(jpeg: app.lastFrame)
+      if let size = app.lastFrameSize, app.lastFrame != nil {
+        InfoRow(label: "Frame size", value: size)
+      }
       Text(captureText).font(Theme.big).frame(maxWidth: .infinity)
       Button("Start the capture") { flow.startCapture() }
         .buttonStyle(PrimaryButtonStyle())
@@ -84,8 +89,6 @@ struct TeachView: View {
       .buttonStyle(PrimaryButtonStyle())
       .disabled(!flow.canSend)
   }
-
-  private var micName: String { flow.requestFromGlasses ? "glasses" : "iPhone" }
 
   private var captureText: String {
     switch flow.phase {

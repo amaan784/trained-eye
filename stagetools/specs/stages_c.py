@@ -1126,14 +1126,14 @@ STAGES.update({
              'the clip, or without ffmpeg for a video, the page lists the frames without '
              'pictures. The frames may show faces, so galleries/ holds its own .gitignore, '
              'nothing goes to W&B, and the page says to run te blur before publishing any '
-             'frame. Its tests come in v71 with report.py, as they run galleries through '
-             'run_eval.',
+             'frame. Its tests come in v71 with the evaluation runner, as they run galleries '
+             'through run_eval.',
         summary='Add the failure galleries for Experiment 1',
         paragraph='Adds backend/eval/gallery.py: the worst false alarms and misses of each scored '
                   'Experiment 1 evaluation, spread at least 5 s apart, read again from the '
                   'recorded clips as thumbnails, on one local HTML page per run with a .gitignore '
-                  'beside it. Its own tests arrive in v71 with report.py, since they run the '
-                  'galleries through run_eval.',
+                  'beside it. Its own tests arrive in v71 with the evaluation runner, since they '
+                  'run the galleries through run_eval.',
         commands=[PYTEST, RUFF],
     ),
     71: stage(
@@ -1415,7 +1415,7 @@ STAGES.update({
              'one asked for; huggingface_hub is imported only then, and the token never '
              'shows in an error. make_collection groups model and dataset repos into a '
              "collection, again only with the author's yes and only when every repo has the "
-             'visibility asked for. The test that regenerate.py finds the shipped keyframes '
+             'visibility asked for. The test that te regenerate finds the shipped keyframes '
              'comes in stage v81.',
         summary='Add the release folder, upload and collection',
         paragraph="Adds backend/release/package.py and the base model's license text: "
@@ -1426,7 +1426,7 @@ STAGES.update({
                   "repo's visibility is not the one asked for, and make_collection() checks the "
                   "yes and every repo's visibility; neither shows the token in an error. Tests "
                   'cover the folder, the refusals and the collection against a fake Hugging Face '
-                  'Hub; the keyframe test that needs regenerate.py comes in v81.',
+                  'Hub; the keyframe test that needs te regenerate comes in v81.',
         commands=[PYTEST, RUFF],
     ),
     81: stage(
@@ -1622,9 +1622,9 @@ STAGES.update({
         commands=[PYTEST, RUFF],
     ),
     88: stage(
-        next='the playground page: index.html with its clips, skills, teach it yourself, '
-             'results and privacy sections, the stylesheet with dark and light themes, and '
-             'the bundled Inter font.',
+        next='the playground page, with its clips, skills, teach it yourself, results and '
+             'privacy sections, the stylesheet with dark and light themes, and the bundled '
+             'Inter font.',
         layer='Playground: the page and its style',
         adds="The playground's page arrives in backend/playground/static/. index.html has a "
              'section for each part: the recorded clips, with the video, the skill picker '
@@ -1663,7 +1663,7 @@ STAGES.update({
              "another, each tagged with Muse Spark's label; the ones Spark disagreed with "
              "fade and are marked rejected, and each image's alt text says what it was made "
              'to show. Wall.add adds tiles one at a time for a live run, and Wall.summary '
-             'counts them in a sentence. app.js uses both in the next stage.',
+             "counts them in a sentence. The page's script uses both in the next stage.",
         summary="Add the playground's timeline and training wall",
         paragraph='Adds backend/playground/static/timeline.js (scores, threshold, true ranges and '
                   'spoken alerts over a clip, with a playhead that follows the video, hover, and '
@@ -1727,8 +1727,8 @@ STAGES.update({
     ),
     92: stage(
         next='te playground and te playground-clip, the public playground on Modal, and the '
-             'notes in their final form, with CONTRIBUTIONS.md for the credits, licenses and '
-             'copied Meta sample files.',
+             'notes in their final form, with the credits, licenses and copied Meta sample '
+             'files.',
         layer='Playground commands, Modal app and notes',
         adds='This is the last stage. backend/cli_playground.py adds te playground, which '
              'serves the playground on 127.0.0.1 port 8100 by default (--public for the '

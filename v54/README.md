@@ -11,32 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v54 (M2): Server, keys and sampling
+## Build stage v54 (M2): iOS: the glasses stream and frame throttle
 
-The server now mounts the teach routes, stops them when it shuts down, and answers GET
-/skills for the app's Skills screen. Two new secrets: STUDENT_API_KEY guards the
-trained model's endpoint, which watch mode sends, and SERVER_TOKEN guards the teach
-routes. The scorer stops sending temperature 0: Meta's serving notes advise against
-greedy decoding for Glimmer, so the server's published sampling applies, with
-reasoning_strength low. The training bundle can read the unfiltered dataset folder for
-Experiment 2.
+ios/TrainedEye/Glasses/GlassesCamera+Stream.swift is the stream half of the glasses
+camera. Once the session has started and the camera permission is granted, it adds a
+camera streaming HEVC (hvc1) at 7 fps, at low resolution (360x640) or medium
+(504x896), and decodes every frame on the SDK's thread with Meta's decoder. An image
+the decoder hands back unchanged went out already, so it is skipped and counted rather
+than sent as a new frame. A stream that stops on its own while the session is up is
+added again, up to 3 times 750 ms apart, as BirdSpotter's bringCameraBack does; frames
+flowing again reset the counts. ios/TrainedEye/Camera/FrameThrottle.swift turns frames
+into JPEGs (quality 0.7) at the pace it is set to, one a second unless told otherwise;
+the app model of v58 sets three a second for a teach capture. Only due frames are
+encoded, and the schedule moves on one interval at a time, so a 7 fps stream thinned
+to three a second gives three a second.
 
 Files added or changed in this stage:
 
-- `.env.example` (changed): template for the keys (copy to .env)
-- `backend/config.py` (changed): settings: model IDs for every job, prices, spend caps
-  and data paths; secrets come from the environment or a local .env file and are never
-  printed
-- `backend/inference/student.py` (changed): scores a frame with the trained model on
-  an OpenAI-compatible endpoint, read at its yes or no answer token
-- `backend/server.py` (changed): the backend the iPhone app talks to: JPEG frames
-  arrive over a WebSocket at /ws and each one is acknowledged; frames stay in memory
-- `backend/training/prepare.py` (changed): bundles taught skills into one training set
-  for Modal (real, synthetic or mixed, with a validation split and volume paths)
-- `tests/test_config.py` (changed): tests
-- `tests/test_server.py` (changed): tests
-- `tests/test_student.py` (changed): tests
-- `tests/test_training_prep.py` (changed): tests
+- `ios/TrainedEye/Camera/FrameThrottle.swift` (new):
+- `ios/TrainedEye/Glasses/GlassesCamera+Stream.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -49,19 +42,22 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 27%]
-    ........................................................................ [ 41%]
-    ........................................................................ [ 54%]
-    ........................................................................ [ 68%]
-    ........................................................................ [ 82%]
-    ........................................................................ [ 96%]
-    .....................                                                    [100%]
-    525 passed in 19.89s
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
+    ........................................................................ [ 28%]
+    ........................................................................ [ 38%]
+    ........................................................................ [ 47%]
+    ........................................................................ [ 57%]
+    ........................................................................ [ 66%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 95%]
+    ...................................                                      [100%]
+    755 passed in 36.95s
 
     $ ruff check .
     All checks passed!
@@ -78,6 +74,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -97,6 +97,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   (real, synthetic or mixed, with a validation split and volume paths).
 - `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
   recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
+- `backend/training/export.py`: the Modal app that merges a trained adapter and checks
+  the merged model's answers.
+- `backend/inference/modal_serve.py`: the Modal app that serves the merged model with
+  vLLM behind STUDENT_API_KEY.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -106,8 +110,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -132,11 +138,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 525 tests, all offline; none calls a paid API.
+- `tests/`: 755 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v55 adds the teach routes' tests over HTTP.
+Stage v55 adds the iPhone camera for when the glasses are not there, and spoken alerts
+that play only over Bluetooth, never from the phone's speaker.
 
 ## Privacy and policy
 

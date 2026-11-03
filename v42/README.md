@@ -11,20 +11,29 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v42 (M2): Student scorer
+## Build stage v42 (M2): te train on Modal
 
-backend/inference/student.py scores one frame for one skill on an OpenAI-compatible
-chat endpoint (vLLM on Modal or llama.cpp's llama-server on the Mac). The frame is
-sent exactly as the training examples were built: the system prompt, the padded
-512x512 image and the condition text. Glimmer reasons first, so the probability is
-read at the last generated yes or no, from its top logprobs, renormalised over the
-two; a reply without one is an error, never a guess.
+backend/cli_train.py adds te train, which bundles taught skills and trains the student
+with the Modal training app. --smoke runs the recipe's two-step check on one H100 and
+saves its timing. A real run is priced from that timing, the smoke's setup time plus
+the examples at its measured samples per second at config.py's H100 price, and asks
+past $15 even with --yes, but that path reads backend/eval/plan.py, so it works from
+v74, where its tests come. A job that would pass the Modal credit asks even with
+--yes, and so does --wandb-artifacts, after saying what becomes visible on W&B. Each
+run is tagged with its experiment, skills, mix, data hash and commit, its status file
+in data/train says running and then done or failed, and its GPU time goes into the
+Modal ledger, also when it fails or is interrupted. --detach leaves the run going in
+Modal and --collect fetches its result from the volume later; --preflight runs the
+processor check on a CPU. The training app's test now checks the volume name te train
+uses.
 
 Files added or changed in this stage:
 
-- `backend/inference/student.py` (new): scores a frame with the trained model on an
-  OpenAI-compatible endpoint, read at its yes or no answer token
-- `tests/test_student.py` (new): tests
+- `backend/cli.py` (changed): the te command line
+- `backend/cli_train.py` (new): te train: the smoke, the priced run, detach and
+  collect, the preflight
+- `tests/test_cli_train.py` (new): tests
+- `tests/test_modal_train.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -37,21 +46,61 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 15%]
+    ........................................................................ [ 10%]
+    ........................................................................ [ 21%]
     ........................................................................ [ 31%]
-    ........................................................................ [ 46%]
-    ........................................................................ [ 62%]
-    ........................................................................ [ 78%]
-    ........................................................................ [ 93%]
-    .............................                                            [100%]
-    461 passed in 7.93s
+    ........................................................................ [ 42%]
+    ........................................................................ [ 53%]
+    ........................................................................ [ 63%]
+    ........................................................................ [ 74%]
+    ........................................................................ [ 84%]
+    ........................................................................ [ 95%]
+    ...............................                                          [100%]
+    679 passed in 31.54s
 
     $ ruff check .
     All checks passed!
+
+    $ python -m backend.cli train --help
+    usage: te train [-h] [--skills SKILLS] [--run RUN]
+                    [--variant {mixed,real,synthetic}] [--limit LIMIT]
+                    [--max-steps MAX_STEPS]
+                    [--dataset {dataset,dataset-unfiltered}] [--smoke]
+                    [--preflight] [--detach] [--collect RUN]
+                    [--wandb-entity WANDB_ENTITY] [--wandb-artifacts]
+                    [--estimate-only] [--yes]
+
+    options:
+      -h, --help            show this help message and exit
+      --skills SKILLS       comma-separated, e.g. washer_done (needed but with
+                            --collect)
+      --run RUN             run name, e.g. exp1-mixed (needed but with --collect)
+      --variant {mixed,real,synthetic}
+      --limit LIMIT         at most this many examples per skill
+      --max-steps MAX_STEPS
+                            fixed optimizer steps for Experiments 1 to 3
+                            (backend/eval/plan.py)
+      --dataset {dataset,dataset-unfiltered}
+                            the skill's dataset folder (Experiment 2: dataset-
+                            unfiltered)
+      --smoke               the recipe's two-step check
+      --preflight           instead of training: render a few examples with the
+                            pinned processor on Modal (CPU): lengths, the system
+                            turn, the yes/no target
+      --detach              modal run --detach: the run goes on if this Mac sleeps
+                            or disconnects (then te train --collect)
+      --collect RUN         fetch a detached run's result from the Modal volume
+                            and print it as te train does
+      --wandb-entity WANDB_ENTITY
+                            the W&B team for the run (default: your own account)
+      --wandb-artifacts     also upload the bundle and the adapter as W&B
+                            Artifacts (asks first, even with --yes)
+      --estimate-only       bundle and price only
+      --yes                 no question (not over $15)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -65,6 +114,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -72,6 +123,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
+- `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
+  recipe with the run's paths, W&B names and gradient accumulation for one H100.
+- `backend/training/prepare.py`: bundles taught skills into one training set for Modal
+  (real, synthetic or mixed, with a validation split and volume paths).
+- `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
+  recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -81,8 +138,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -93,6 +152,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   threshold, then the cooldown; the threshold calibration on labelled clips.
 - `backend/inference/student.py`: scores a frame with the trained model on an
   OpenAI-compatible endpoint, read at its yes or no answer token.
+- `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
+  alert, alert messages and the frame log.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -105,12 +166,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 461 tests, all offline; none calls a paid API.
+- `tests/`: 679 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v43 adds the watcher: frames in, alerts out, with the Muse Spark check and a
-frame log.
+Stage v43 adds the teach session behind teaching from the phone: run_teach in a
+background thread, the spend question first, read-back corrections, timeouts and a
+clean stop.
 
 ## Privacy and policy
 

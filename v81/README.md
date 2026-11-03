@@ -11,15 +11,31 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v81 (M3): Timeline chart
+## Build stage v81 (M4): Regeneration and fetching the weights
 
-backend/eval/timeline.py draws the student's probability over a clip, the threshold
-dashed, the labelled true ranges shaded and the alerts with their spoken text.
+Generated images are never published, so backend/regenerate.py ships what rebuilds
+them. export_manifests copies each skill's synthetic/manifest.jsonl into a committed
+folder with only the fields that remake an image and check its provenance (no image
+bytes, file names or costs), sorted so reruns give the same file. regenerate runs the
+same edits again through MetaClient, so every call is cached, capped and in the
+ledger, and free where the images were made. It finds the keyframes by SHA-256, or
+face-blurred copies through the sources.json blur_folder writes, hands the plan and
+the estimate to a confirm callback before any call, so a no spends nothing, and counts
+how many images match the manifest's hashes, never failing on a difference.
+backend/release/weights.py downloads a run's adapter or merged build from the Modal
+volume trained-eye: only the top-level weight and config files, each checked against
+the size the volume lists, into a hidden folder first, so the result is always
+complete. The release test of the blurred keyframes, held back in v80, comes back
+here.
 
 Files added or changed in this stage:
 
-- `backend/eval/timeline.py` (new):
-- `tests/test_eval_timeline.py` (new): tests
+- `backend/regenerate.py` (new): the prompt manifests and regenerating images from
+  them
+- `backend/release/weights.py` (new):
+- `tests/test_regenerate.py` (new): tests
+- `tests/test_release_package.py` (changed): tests
+- `tests/test_release_weights.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -32,20 +48,25 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 12%]
-    ........................................................................ [ 24%]
-    ........................................................................ [ 36%]
-    ........................................................................ [ 48%]
-    ........................................................................ [ 60%]
-    ........................................................................ [ 72%]
-    ........................................................................ [ 85%]
-    ........................................................................ [ 97%]
-    ................                                                         [100%]
-    592 passed in 27.32s
+    ........................................................................ [  7%]
+    ........................................................................ [ 15%]
+    ........................................................................ [ 22%]
+    ........................................................................ [ 30%]
+    ....................................s................................... [ 38%]
+    ........................................................................ [ 45%]
+    ........................................................................ [ 53%]
+    ........................................................................ [ 61%]
+    ........................................................................ [ 68%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 84%]
+    ........................................................................ [ 91%]
+    ........................................................................ [ 99%]
+    ....                                                                     [100%]
+    939 passed, 1 skipped in 57.16s
 
     $ ruff check .
     All checks passed!
@@ -62,6 +83,14 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
+- `backend/cli_experiments.py`: te experiments, te unfiltered, te clips, te
+  spark-errors and te regress.
+- `backend/cli_replay.py`: te replay: the recorded test clips through watch mode.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -94,8 +123,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -113,6 +144,16 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/labeltool/images.py`: the labelling tool for generated images, for
   Experiment 2.
 - `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
+- `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
+  and the SVG charts.
+- `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
+  its price.
+- `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
+  reads.
+- `backend/regenerate.py`: the prompt manifests and regenerating images from them.
+- `backend/release/model_card.py`: the Hugging Face model card.
+- `backend/release/package.py`: the release folder (base license, blurred keyframes),
+  the upload and the collection.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -126,11 +167,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 592 tests, all offline; none calls a paid API.
+- `tests/`: 939 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v82 adds results.md and the chart files.
+Stage v82 adds the human-labelled session 3 test clips as a Hugging Face dataset
+folder: only blurred videos with a matching blur record, under the license the author
+chooses.
 
 ## Privacy and policy
 

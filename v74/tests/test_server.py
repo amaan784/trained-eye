@@ -1,4 +1,6 @@
 import io
+import json
+import time
 
 import pytest
 from starlette.testclient import TestClient
@@ -156,7 +158,7 @@ class FakeWatcher:
 def test_watch_mode_scores_frames_and_sends_alerts():
     made = []
 
-    def factory(names, session):
+    def factory(names, session, cooldowns):
         made.append((names, session))
         return FakeWatcher(names)
 
@@ -176,8 +178,8 @@ def test_watch_mode_scores_frames_and_sends_alerts():
 
 @pytest.mark.parametrize("watch, factory, message", [
     (["washer_done"], None, "not set up"),
-    ("washer_done", lambda n, s: FakeWatcher(n), "list of skill names"),
-    (["nope"], lambda n, s: (_ for _ in ()).throw(ValueError("no taught skill named 'nope'")),
+    ("washer_done", lambda n, s, c: FakeWatcher(n), "list of skill names"),
+    (["nope"], lambda n, s, c: (_ for _ in ()).throw(ValueError("no taught skill named 'nope'")),
      "no taught skill"),
 ])
 def test_a_watch_request_that_cannot_be_met_is_an_error_and_frames_are_still_acked(
@@ -242,13 +244,14 @@ def test_skills_lists_taught_skills_for_the_app(tmp_path):
     taught("hot_pan", threshold="NaN")  # JSON reads NaN; it cannot be sent back
     with TestClient(create_app(data_dir=lambda: tmp_path)) as c:
         listed = c.get("/skills").json()["skills"]
+    untrained = {"training": None, "served": None}  # no deploy recorded: unknown
     assert listed == [
         {"name": "hot_pan", "alert": "Laundry's done.", "cooldown_s": 600, "dataset": False,
-         "calibrated": False, "threshold": None},
+         "calibrated": False, "threshold": None, **untrained},
         {"name": "pot_boils", "alert": "Laundry's done.", "cooldown_s": 600, "dataset": False,
-         "calibrated": False, "threshold": None},
+         "calibrated": False, "threshold": None, **untrained},
         {"name": "washer_done", "alert": "Laundry's done.", "cooldown_s": 600, "dataset": True,
-         "calibrated": True, "threshold": 0.82},
+         "calibrated": True, "threshold": 0.82, **untrained},
     ]
 
 
@@ -265,3 +268,177 @@ def test_shutdown_hooks_run_when_the_server_stops():
     with TestClient(create_app(on_shutdown=[lambda: stopped.append("teach")])) as client:
         assert client.get("/health").status_code == 200 and stopped == []
     assert stopped == ["teach"]
+
+
+
+def watch_skill(name, threshold=0.5):
+    from backend.skills.spec import SkillSpec, Target
+    from backend.watch.trigger import Trigger
+    from backend.watch.watcher import WatchedSkill
+
+    spec = SkillSpec(name=name, request=f"tell me when {name}", positive="it is so",
+                     target=Target(sam_prompt="thing", description="the thing"),
+                     negatives=["it is not"], alert=f"{name}!", confirm_with_cloud=False)
+    return WatchedSkill(spec, Trigger(threshold, 600.0), True, "skill")
+
+
+class Always:
+    """A student that sees the condition in every frame."""
+
+    def score(self, image, spec):
+        from backend.inference.student import Score
+
+        return Score(0.9, "yes", 0.01)
+
+
+def real_watchers(names, session, cooldowns):
+    from backend.watch.watcher import Watcher
+
+    return Watcher([watch_skill(n) for n in names], Always(), cooldowns=cooldowns)
+
+
+def alerts_in_a_session(client, names, frames=4):
+    alerts = []
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({**HELLO, "watch": names})
+        assert ws.receive_json()["watching"] == sorted(names)
+        for i in range(frames):
+            ws.send_bytes(synthetic_jpeg(i, size=(64, 48)))
+        ws.send_text("{}")  # its error reply comes after every ack and alert
+        while (message := ws.receive_json())["type"] != "error":
+            if message["type"] == "alert":
+                alerts.append(message["skill"])
+        ws.send_json({"type": "bye"})
+    return alerts
+
+
+def test_a_reconnect_or_a_skills_toggle_does_not_alert_again_inside_the_cooldown(tmp_path):
+    app = create_app(real_watchers, data_dir=lambda: tmp_path)
+    with TestClient(app) as c:
+        assert alerts_in_a_session(c, ["washer_done"]) == ["washer_done"]
+        assert alerts_in_a_session(c, ["washer_done"]) == []  # the phone reconnected
+        # a toggle opens a new session with the new list: only the new skill alerts
+        assert alerts_in_a_session(c, ["washer_done", "pot_boils"]) == ["pot_boils"]
+    saved = json.loads((tmp_path / "watch/cooldowns.json").read_text())["quiet_until"]
+    assert set(saved) == {"washer_done", "pot_boils"}
+    assert all(until > time.time() + 590 for until in saved.values())
+    with TestClient(create_app(real_watchers, data_dir=lambda: tmp_path)) as c:
+        assert alerts_in_a_session(c, ["washer_done"]) == []  # te serve restarted
+
+
+def test_each_app_shares_one_book_with_every_session():
+    from backend.watch.watcher import CooldownBook
+
+    books = []
+    book = CooldownBook()
+
+    def factory(names, session, cooldowns):
+        books.append(cooldowns)
+        return FakeWatcher(names)
+
+    with TestClient(create_app(factory, cooldowns=book)) as c:
+        for _ in range(2):
+            with c.websocket_connect("/ws") as ws:
+                ws.send_json({**HELLO, "watch": ["washer_done"]})
+                ws.receive_json()
+    assert books == [book, book]
+
+
+def taught_skill(data_dir, name, threshold=None):
+    from backend.skills.spec import SkillSpec, Target
+
+    folder = data_dir / "skills" / name
+    (folder / "dataset").mkdir(parents=True)
+    folder.joinpath("spec.json").write_text(SkillSpec(
+        name=name, request="tell me when the washer says End",
+        target=Target(sam_prompt="washer display", description="the display"),
+        positive="the display shows End", negatives=["display off"],
+        alert="Laundry's done.").model_dump_json())
+    if threshold is not None:
+        folder.joinpath("threshold.json").write_text(json.dumps({"threshold": threshold}))
+    return folder
+
+
+def test_skills_report_training_runs_and_what_is_served(tmp_path, monkeypatch):
+    from backend.training import runs
+
+    for name in ("washer_done", "pot_boils", "hot_pan", "door_open"):
+        taught_skill(tmp_path, name, threshold=0.6 if name == "washer_done" else None)
+    runs.write_status(tmp_path, "exp1-mixed", "done", ["washer_done", "pot_boils"],
+                      started="2026-11-01T10:00:00Z", finished="2026-11-01T11:00:00Z")
+    runs.write_status(tmp_path, "exp1-real", "failed", ["washer_done"],
+                      started="2026-11-02T10:00:00Z", finished="2026-11-02T10:05:00Z")
+    runs.write_status(tmp_path, "exp3-n100", "running", ["pot_boils"],
+                      started="2026-11-03T09:00:00Z")
+    runs.write_status(tmp_path, "smoke-check", "done", ["hot_pan"], smoke=True,
+                      started="2026-11-03T08:00:00Z", finished="2026-11-03T08:20:00Z")
+    ours = json.loads(runs.status_path(tmp_path, "exp1-real").read_text())["pid"]
+    runs.write_status(tmp_path, "exp2-unfiltered", "running", ["door_open"],
+                      started="2026-11-03T07:00:00Z")
+    stale = runs.status_path(tmp_path, "exp2-unfiltered")  # its te train was killed
+    stale.write_text(json.dumps({**json.loads(stale.read_text()), "pid": 2**22 + 12345}))
+    monkeypatch.setattr(runs, "_alive", lambda pid: pid == ours)
+    (tmp_path / "train/exp1-mixed").mkdir()
+    (tmp_path / "train/exp1-mixed/manifest.json").write_text('{"skills": {}}')
+    (tmp_path / "train/broken.status.json").write_text("not json")
+
+    def listed():
+        with TestClient(create_app(data_dir=lambda: tmp_path)) as c:
+            return {s["name"]: s for s in c.get("/skills").json()["skills"]}
+
+    skills = listed()
+    assert skills["washer_done"]["training"] == {
+        "run": "exp1-real", "state": "failed", "started": "2026-11-02T10:00:00Z",
+        "finished": "2026-11-02T10:05:00Z"}  # the newest run that lists it
+    assert skills["pot_boils"]["training"] == {
+        "run": "exp3-n100", "state": "running", "started": "2026-11-03T09:00:00Z",
+        "finished": None}
+    assert skills["hot_pan"]["training"] is None  # a finished smoke leaves no adapter
+    assert skills["door_open"]["training"]["state"] == "failed"  # running, but te train died
+    assert all(s["served"] is None for s in skills.values())  # nothing recorded: unknown
+
+    runs.write_serving(tmp_path, "exp1-mixed")
+    run_file = tmp_path / "watch/exp1-mixed/washer_done/threshold.json"
+    run_file.parent.mkdir(parents=True)
+    run_file.write_text('{"threshold": 0.75}')
+    skills = listed()
+    assert {n for n, s in skills.items() if s["served"]} == {"washer_done", "pot_boils"}
+    assert (skills["washer_done"]["calibrated"], skills["washer_done"]["threshold"]) == (
+        True, 0.75)  # the served run's own threshold, as watch mode uses it
+    runs.clear_serving(tmp_path)  # te serve-student --stop
+    skills = listed()
+    assert skills["washer_done"]["threshold"] == 0.6
+    assert not any(s["served"] for s in skills.values()) and skills["washer_done"]["served"] is False
+
+
+def test_the_default_watcher_follows_the_served_run_and_the_settings(tmp_path, monkeypatch):
+    from backend.server import default_watcher
+    from backend.training import runs
+    from backend.watch.watcher import CooldownBook
+
+    monkeypatch.setenv("TE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("TE_STUDENT_URL", "http://127.0.0.1:8080/v1")
+    monkeypatch.setenv("TE_STUDENT_MAX_TOKENS", "1024")
+    folder = taught_skill(tmp_path, "washer_done", threshold=0.6)
+    (folder / "dataset/washer_done-teach.manifest.json").write_text(
+        '{"system_in_user": true}')
+    book = CooldownBook()
+    watcher = default_watcher(["washer_done"], "s1", book)
+    assert watcher.cooldowns is book and watcher.scorer.max_tokens == 1024
+    assert watcher.scorer.system_in_user is True  # as the dataset was written
+    assert watcher.skills["washer_done"].threshold_source == "skill"
+    assert watcher.log.fields == {}
+
+    runs.write_status(tmp_path, "exp1-mixed", "done", ["washer_done"], started=runs.now_iso())
+    (tmp_path / "train/exp1-mixed").mkdir()
+    (tmp_path / "train/exp1-mixed/manifest.json").write_text(
+        '{"skills": {"washer_done": "x"}, "system_in_user": false}')
+    runs.write_serving(tmp_path, "exp1-mixed")
+    run_file = tmp_path / "watch/exp1-mixed/washer_done/threshold.json"
+    run_file.parent.mkdir(parents=True)
+    run_file.write_text('{"threshold": 0.8}')
+    watcher = default_watcher(["washer_done"], "s2")
+    skill = watcher.skills["washer_done"]
+    assert (skill.trigger.threshold, skill.threshold_source) == (0.8, "run")
+    assert watcher.scorer.system_in_user is False  # what the served run trained on
+    assert watcher.log.fields == {"run": "exp1-mixed"}

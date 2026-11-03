@@ -11,20 +11,30 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v64 (M2): iOS: phone camera and speech
+## Build stage v64 (M3): Hand labels for generated images
 
-The app is SwiftUI for iOS 17.2 and has not been compiled: there is no Xcode here. A
-file may use types from a later iOS stage (the app model and the teach flow need each
-other), so the app builds only as a whole, from v73 on. PhoneCamera is the fallback
-when the glasses are not there; FrameThrottle keeps one frame a second (three during a
-teach capture, on an even schedule); Speaker says alerts only when the audio goes to
-Bluetooth.
+backend/labeltool/images.py is the first of two local labelling tools, for Experiment
+2's question of how often Muse Spark is wrong. sample_images() picks generated images
+at random from a skill's labels.jsonl, the same ones in the same order for the same
+seed, and never a real keyframe. The page shows one image at a time with the question
+Spark was asked, taken from the skill's spec.json, but never Spark's answer or the
+file name, since generated files are named for the answer they were made to show. The
+keys y, n and u answer yes, no or unsure, and Backspace goes back. Each answer is
+saved at once to a JSON file written in one step, the page resumes at the first image
+without an answer, and labels in the file for other images are kept. The page is
+static/images.html; static/style.css is the look both labelling tools share, with
+Inter bundled in static/fonts/ under the SIL Open Font License. te label, which starts
+the page, comes with te eval.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Audio/Speaker.swift` (new):
-- `ios/TrainedEye/Camera/FrameThrottle.swift` (new):
-- `ios/TrainedEye/Camera/PhoneCamera.swift` (new):
+- `backend/labeltool/images.py` (new): the labelling tool for generated images, for
+  Experiment 2
+- `backend/labeltool/static/fonts/InterVariable.woff2` (new):
+- `backend/labeltool/static/fonts/LICENSE.txt` (new):
+- `backend/labeltool/static/images.html` (new):
+- `backend/labeltool/static/style.css` (new):
+- `tests/test_labeltool_images.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -37,19 +47,22 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 13%]
-    ........................................................................ [ 26%]
-    ........................................................................ [ 39%]
-    ........................................................................ [ 52%]
-    ........................................................................ [ 65%]
-    ........................................................................ [ 78%]
-    ........................................................................ [ 91%]
-    .................................................                        [100%]
-    553 passed in 20.73s
+    ........................................................................ [  9%]
+    ........................................................................ [ 18%]
+    ........................................................................ [ 28%]
+    ........................................................................ [ 37%]
+    ........................................................................ [ 47%]
+    ........................................................................ [ 56%]
+    ........................................................................ [ 66%]
+    ........................................................................ [ 75%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 94%]
+    .......................................                                  [100%]
+    759 passed in 35.44s
 
     $ ruff check .
     All checks passed!
@@ -66,6 +79,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -98,8 +115,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -112,6 +131,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   OpenAI-compatible endpoint, read at its yes or no answer token.
 - `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
   alert, alert messages and the frame log.
+- `backend/labeltool/images.py`: the labelling tool for generated images, for
+  Experiment 2.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -124,11 +145,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 553 tests, all offline; none calls a paid API.
+- `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
+- `tests/`: 759 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v65 adds the teach client and the request recorder.
+Stage v65 adds the clip labelling page: marking where a skill's condition is true in a
+recorded clip, saved as the time ranges te calibrate reads.
 
 ## Privacy and policy
 

@@ -11,17 +11,30 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v80 (M3): Experiment charts
+## Build stage v80 (M4): The release folder and its upload
 
-backend/eval/charts.py draws grouped bars (Experiments 1 and 2), F1 against the number
-of synthetic images with the cost of each point (Experiment 3), and accuracy against
-dollars per hour with the fine-tuned point highlighted (Experiment 4).
+backend/release/package.py assembles and publishes the Hugging Face release.
+prepare_release writes the folder and uploads nothing: the model card, the run's
+top-level weight and config files (no pickles, checkpoints or trainer README), the
+prompt manifests of the skills with generated images, the base model's license as
+LICENSE (backend/release/BASE_LICENSE.txt, the Apache-2.0 text) and release.json with
+every file's SHA-256. Given a blur_folder output per skill, it also ships that skill's
+face-blurred keyframes: only those its sources.json lists whose originals the
+manifest's edits start from, and a generated image among them or a missing keyframe
+stops it. upload() refuses without the author's yes, without LICENSE or weights, with
+any other image or video in the folder, and when an existing repo has another
+visibility than the one asked for; huggingface_hub is imported only then, and the
+token never shows in an error. make_collection groups model and dataset repos into a
+collection, again only with the author's yes and only when every repo has the
+visibility asked for. The test that te regenerate finds the shipped keyframes comes in
+stage v81.
 
 Files added or changed in this stage:
 
-- `backend/eval/charts.py` (new):
-- `tests/test_eval_charts.py` (new): tests
-- `tests/test_eval_svg.py` (new): tests
+- `backend/release/BASE_LICENSE.txt` (new):
+- `backend/release/package.py` (new): the release folder (base license, blurred
+  keyframes), the upload and the collection
+- `tests/test_release_package.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -34,20 +47,24 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 12%]
-    ........................................................................ [ 24%]
-    ........................................................................ [ 36%]
-    ........................................................................ [ 48%]
+    ........................................................................ [  7%]
+    ........................................................................ [ 15%]
+    ........................................................................ [ 23%]
+    ........................................................................ [ 30%]
+    ....................................s................................... [ 38%]
+    ........................................................................ [ 46%]
+    ........................................................................ [ 54%]
     ........................................................................ [ 61%]
-    ........................................................................ [ 73%]
+    ........................................................................ [ 69%]
+    ........................................................................ [ 77%]
     ........................................................................ [ 85%]
-    ........................................................................ [ 97%]
-    .............                                                            [100%]
-    589 passed in 27.30s
+    ........................................................................ [ 92%]
+    ...................................................................      [100%]
+    930 passed, 1 skipped in 63.45s (0:01:03)
 
     $ ruff check .
     All checks passed!
@@ -64,6 +81,14 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
+- `backend/cli_experiments.py`: te experiments, te unfiltered, te clips, te
+  spark-errors and te regress.
+- `backend/cli_replay.py`: te replay: the recorded test clips through watch mode.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -96,8 +121,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -115,6 +142,15 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/labeltool/images.py`: the labelling tool for generated images, for
   Experiment 2.
 - `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
+- `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
+  and the SVG charts.
+- `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
+  its price.
+- `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
+  reads.
+- `backend/release/model_card.py`: the Hugging Face model card.
+- `backend/release/package.py`: the release folder (base license, blurred keyframes),
+  the upload and the collection.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -128,11 +164,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 589 tests, all offline; none calls a paid API.
+- `tests/`: 930 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v81 adds the live timeline chart.
+Stage v81 adds regeneration from the prompt manifests (copied out of data/ without
+images, then the edits run again) and the download of a run's weights from the Modal
+volume.
 
 ## Privacy and policy
 

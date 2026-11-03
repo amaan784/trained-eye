@@ -11,20 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v43 (M2): Watcher
+## Build stage v43 (M2): Teach sessions from the phone
 
-backend/watch/watcher.py runs watch mode for a set of taught skills: the student
-scores each frame, the skill's trigger decides, and Muse Spark checks the frame before
-an alert goes out if the skill asks for it. A Spark no snoozes the skill for a minute;
-a failed check still alerts, marked unconfirmed. Every scored frame is logged as one
-JSON line (time, probability, decision, the cloud answer); frames are never written.
-load_skill() reads a taught skill and its calibrated threshold.
+backend/teach_session.py runs one teach started from the phone:
+backend.teach.run_teach in a background thread, with its questions answered later over
+HTTP. The spend question comes first, here, because run_teach's first paid step, the
+transcription, comes before its only question, the read-back. A no to the read-back
+that carries a correction, at most 300 characters, compiles the spec again with it
+from the cached transcript, and each correction replaces the one before, as with te
+teach --correct. A question nobody answers within 600 seconds counts as no. status()
+gives the state (waiting for the spend, running, waiting for the read-back, then done,
+stopped or failed), the open question, the progress lines, what was spent and, at the
+end, a summary of the dataset and the labels. stop(), for when the server shuts down,
+refuses the next paid call, cuts a retry's wait short, answers an open question no and
+waits for the call in flight, so the ledger records it. Failed calls and spend caps
+end the run with what to do next. Its HTTP routes come in v44.
 
 Files added or changed in this stage:
 
-- `backend/watch/watcher.py` (new): watch mode: scores, the Muse Spark check before an
-  alert, alert messages and the frame log
-- `tests/test_watcher.py` (new): tests
+- `backend/teach_session.py` (new): a phone teach session: the spend question before
+  any paid call, the read-back, progress lines and timeouts
+- `tests/test_teach_session.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -37,18 +44,21 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 15%]
-    ........................................................................ [ 30%]
-    ........................................................................ [ 46%]
-    ........................................................................ [ 61%]
-    ........................................................................ [ 76%]
-    ........................................................................ [ 92%]
-    ....................................                                     [100%]
-    468 passed in 9.15s
+    ........................................................................ [ 10%]
+    ........................................................................ [ 20%]
+    ........................................................................ [ 31%]
+    ........................................................................ [ 41%]
+    ........................................................................ [ 52%]
+    ........................................................................ [ 62%]
+    ........................................................................ [ 73%]
+    ........................................................................ [ 83%]
+    ........................................................................ [ 94%]
+    .........................................                                [100%]
+    689 passed in 27.06s
 
     $ ruff check .
     All checks passed!
@@ -65,13 +75,23 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
 - `backend/server.py`: the backend the iPhone app talks to: JPEG frames arrive over a
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
+- `backend/teach_session.py`: a phone teach session: the spend question before any
+  paid call, the read-back, progress lines and timeouts.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
+- `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
+  recipe with the run's paths, W&B names and gradient accumulation for one H100.
+- `backend/training/prepare.py`: bundles taught skills into one training set for Modal
+  (real, synthetic or mixed, with a validation split and volume paths).
+- `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
+  recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -81,8 +101,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -107,12 +129,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 468 tests, all offline; none calls a paid API.
+- `tests/`: 689 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v44 adds watch mode on the WebSocket: the phone names the skills, and the server
-sends scores and alerts.
+Stage v44 adds the phone's teach API: the capture uploaded, checked and priced, then
+the spend and read-back questions answered over HTTP, each request with the server
+token.
 
 ## Privacy and policy
 

@@ -9,10 +9,8 @@ Each call runs the same steps:
 
 Spend is counted conservatively: a retried attempt that may have reached the server
 (a read timeout, a 500/502/504) is charged at the estimate, and so is a reply that
-cannot be priced or a call stopped with Ctrl+C. The caps are checked again before each
-such retry. Unusable outputs are charged but never cached, and a cached reply that
-today's checks reject is fetched again. A failed call's error carries what it was
-charged as `cost_usd`.
+cannot be priced. The caps are checked again before each such retry. Unusable outputs
+are charged but never cached.
 
 Request shapes are OpenAI-compatible. Structured output uses Chat Completions with a
 json_schema response_format, as in Meta's cookbook recipes. SAM 3.1 uses the Responses
@@ -52,8 +50,6 @@ IMAGE_TOKENS_GUESS = 1500  # per image, for estimates only; actual cost uses rep
 
 
 class MetaAPIError(RuntimeError):
-    cost_usd: float = 0.0  # what the failed call was charged in the ledger
-
     def __init__(self, status: int | None, message: str):
         super().__init__(f"Meta API error {status}: {message}" if status else message)
         self.status = status
@@ -62,13 +58,8 @@ class MetaAPIError(RuntimeError):
 class OutputError(MetaAPIError):
     """The call succeeded (and was billed) but the output is unusable."""
 
-    def __init__(self, message: str, finish_reason: str | None = None):
+    def __init__(self, message: str):
         super().__init__(None, message)
-        self.finish_reason = finish_reason  # "length": the reply ran out of max_tokens
-
-
-class CacheMiss(LookupError):
-    """A cache-only lookup found nothing; no request was sent."""
 
 
 def sniff_mime(data: bytes) -> str:
@@ -333,13 +324,11 @@ class MetaClient:
         send: Callable[[_Tally], tuple[dict, dict[str, bytes]]],
         cost: Callable[[dict], float],
         check: Callable[[dict], Any],
-        cache_only: bool = False,
     ) -> tuple[dict, dict[str, bytes], CallInfo, Any]:
         """Shared cache / ledger / send logic.
 
         `check(response)` returns the parsed output or raises OutputError. Returns
-        (response, blobs, info, parsed). With `cache_only`, a miss raises CacheMiss
-        instead of sending.
+        (response, blobs, info, parsed).
         """
         check_model_allowed(model)
         key = cache_key(model, endpoint, key_request)
@@ -347,12 +336,7 @@ class MetaClient:
         if hit is not None:
             blobs = {name: self.cache.blob(key, name) for name in hit.get("blobs", [])}
             info = CallInfo(model, key, True, 0.0, hit.get("usage", {}), hit.get("cost_usd"))
-            try:
-                return hit["response"], blobs, info, check(hit["response"])
-            except OutputError:
-                pass  # cached under older, looser checks: fetch it again
-        if cache_only:
-            raise CacheMiss(key)
+            return hit["response"], blobs, info, check(hit["response"])
 
         self.settings.secret("MODEL_API_KEY")  # fail before touching the ledger
         self.ledger.check(estimate_usd, skill)
@@ -361,22 +345,19 @@ class MetaClient:
         tally.guard = lambda: self.ledger.check(estimate_usd * (1 + tally.maybe_billed), skill)
         try:
             response, blobs = send(tally)
-        except OutputError as err:
+        except OutputError:
             # Served (so billed) but unreadable.
             entry.status = "output_error"
-            entry.actual_usd = err.cost_usd = estimate_usd * (1 + tally.maybe_billed)
+            entry.actual_usd = estimate_usd * (1 + tally.maybe_billed)
             self.ledger.record(entry)
             raise
-        except (MetaAPIError, BudgetExceeded) as err:
+        except (MetaAPIError, BudgetExceeded):
             entry.status = "error"
             entry.actual_usd = estimate_usd * tally.maybe_billed
-            if isinstance(err, MetaAPIError):
-                err.cost_usd = entry.actual_usd
             self.ledger.record(entry)
             raise
-        except BaseException:
-            # The request went through but handling the reply failed, or Ctrl+C stopped
-            # the call while Meta was working on it: assume it was billed.
+        except Exception:
+            # The request went through but handling the reply failed: assume it was billed.
             entry.status = "error"
             entry.actual_usd = estimate_usd * (1 + tally.maybe_billed)
             self.ledger.record(entry)
@@ -400,10 +381,8 @@ class MetaClient:
         info = CallInfo(model, key, False, entry.actual_usd, usage, entry.actual_usd)
         try:
             parsed = check(response)
-        except BaseException as err:  # served and billed, whatever went wrong reading it
+        except Exception:  # served and billed, whatever went wrong reading it
             entry.status = "output_error"
-            if isinstance(err, MetaAPIError):
-                err.cost_usd = entry.actual_usd
             self.ledger.record(entry)
             raise
         self.ledger.record(entry)
@@ -425,13 +404,11 @@ class MetaClient:
         max_tokens: int = 2048,
         reasoning_effort: str | None = None,
         validate: Callable[[Any], None] | None = None,
-        cache_only: bool = False,
     ) -> StructuredResult:
         """JSON output constrained by `schema`, via Chat Completions.
 
         `validate(data)` may raise OutputError for output that parses but is unusable;
-        such output is billed like any other but never cached. With `cache_only`, only the
-        cache is asked (CacheMiss if the reply is not there).
+        such output is billed like any other but never cached.
         """
         endpoint = "/chat/completions"
         messages = _messages(input, system)
@@ -462,27 +439,25 @@ class MetaClient:
             message = choice.get("message")
             message = message if isinstance(message, dict) else {}
             content = message.get("content") or ""
-            reason = choice.get("finish_reason")
-            reason = reason if isinstance(reason, str) else None
             if message.get("refusal"):
                 raise OutputError(f"model refused: {message['refusal']}")
             if not isinstance(content, str):
                 raise OutputError(f"output content is not text ({type(content).__name__})")
             if not content.strip():
+                reason = choice.get("finish_reason")
                 hint = " (raise max_tokens: reasoning used the budget)" if reason == "length" else ""
-                raise OutputError(f"empty output, finish_reason={reason}{hint}", reason)
+                raise OutputError(f"empty output, finish_reason={reason}{hint}")
             try:
                 data = _parse_json_text(content)
             except json.JSONDecodeError:
-                raise OutputError(f"output is not JSON, finish_reason={reason}: "
-                                  f"{content[:200]!r}", reason) from None
+                raise OutputError(f"output is not JSON: {content[:200]!r}") from None
             if validate is not None:
                 validate(data)
             return data
 
         _, _, info, data = self._call(endpoint=endpoint, model=model, key_request=payload,
                                       skill=skill, estimate_usd=estimate, send=send, cost=cost,
-                                      check=check, cache_only=cache_only)
+                                      check=check)
         details = info.usage.get("completion_tokens_details")
         reasoning = details.get("reasoning_tokens") if isinstance(details, dict) else None
         return StructuredResult(data, info, reasoning)
@@ -519,23 +494,16 @@ class MetaClient:
         def cost(r):
             return unit_cost(price, audio_s=float(r.get("duration") or duration))
 
-        def check(r):
-            text = r.get("text")
-            if not isinstance(text, str) or not text.strip():
-                raise OutputError("the recording transcribed to no words: check the audio, "
-                                  "or pass the request as text with --request")
-            return text
-
-        response, _, info, text = self._call(
+        response, _, info, _ = self._call(
             endpoint=endpoint, model=model, key_request={"file": audio}, skill=skill,
-            estimate_usd=estimate, send=send, cost=cost, check=check,
+            estimate_usd=estimate, send=send, cost=cost, check=lambda r: None,
         )
         try:
             seconds = float(response.get("duration") or duration)
         except (TypeError, ValueError):
             seconds = duration
         return Transcript(
-            text=text,
+            text=response.get("text", ""),
             segments=response.get("segments") or [],
             duration_s=seconds,
             info=info,
@@ -633,7 +601,9 @@ class MetaClient:
                 if item.get("b64_json"):
                     raw = base64.b64decode(item["b64_json"])
                 elif item.get("url"):
-                    raw = self._download(item["url"])
+                    download = self._plain.get(item["url"])
+                    download.raise_for_status()
+                    raw = download.content
                 else:
                     continue
                 blob = f"{i}.{EXTENSIONS.get(sniff_mime(raw), 'bin')}"
@@ -647,29 +617,14 @@ class MetaClient:
                 raise OutputError("no images returned")
             return r["data"]
 
-        # A reply without usable images is still billed for the n images asked for.
         _, blobs, info, items = self._call(
             endpoint=endpoint, model=model, key_request={**fields, "images": images},
             skill=skill, estimate_usd=unit_cost(price, images=n), send=send,
-            cost=lambda r: unit_cost(price, images=len(r.get("data") or []) or n), check=check,
+            cost=lambda r: unit_cost(price, images=len(r.get("data") or [])), check=check,
         )
         ordered = [blobs[item["blob"]] for item in items]
         prompts = [item.get("revised_prompt", "") for item in items]
         return ImageResult(ordered, info, [p for p in prompts if p])
-
-    def _download(self, url: str, tries: int = 2) -> bytes:
-        """A generated image by URL. The edit is billed already, so a failed download is
-        an unusable output (OutputError), not a crash."""
-        for attempt in range(tries):
-            try:
-                resp = self._plain.get(url)
-                resp.raise_for_status()
-                return resp.content
-            except httpx.HTTPError as err:
-                if attempt == tries - 1:
-                    raise OutputError(f"image download failed: {type(err).__name__}") from None
-                self._sleep(1.0)
-        raise AssertionError("unreachable")
 
 
 def _with_usage(result: tuple[dict, dict], fallback: dict) -> tuple[dict, dict]:

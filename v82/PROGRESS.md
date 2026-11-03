@@ -1,16 +1,14 @@
 # Progress
 
 The source of truth between sessions. Updated at the end of every milestone.
-Last update: 2026-10-31, the review fixes after M1 (v23 to v40, v49) and the offline parts of M2 (v41 to v48).
+Last update: 2026-10-31, fixes from the review after M1 (stages v23 to v30).
 
 ## Status
 
-M0 and M1 code are done and tested offline (498 tests, none calls a paid API). A full
+M0 and M1 code are done and tested offline (297 tests, none calls a paid API). A full
 review after M1 (bugs, version compatibility, functionality against SPEC.md, the UI)
-found 27 confirmed problems in F1 to F29, fixed in stages v23 to v30. The rest, F30 to
-F62, and a second check of those fixes are fixed in stages v31 to v38, and a review of
-those in v39, v40 and v49 (see "Review after M1" below). The parts of M2 that need neither
-the Mac nor Modal are stages v41 to v48; training, serving and the iOS app come next.
+found 27 confirmed problems in F1 to F29; their fixes are stages v23 to v30 (see "Review
+after M1" below). Findings F30 to F62 were still being verified when this was written.
 HANDOVER.md explains how to pick the project up; SETUP.md covers setup. What is still
 open needs the Mac, the keys, the glasses or new footage:
 
@@ -18,11 +16,10 @@ open needs the Mac, the keys, the glasses or new footage:
 2. the first live Meta calls: `te models` (free), then `te api-smoke` (under $0.01)
 3. the W&B smoke run from Modal: `modal run backend/training/wandb_smoke.py`
 4. the first real washer teach run: `te teach --skill washer_done --clip <10 s clip>
-   --audio <request>`. For a 10 s clip (20 to 24 keyframes) and the default 150 positives
-   and 150 negatives the estimator prints about $5.25 to $5.28, and at most $11.52 to
-   $11.63 if every label has to be asked again with the larger budget (over the $10 skill
-   cap, which would then stop the run partway). Run a small batch first
-   (`--positives 6 --negatives 6`) and check the SAM output and the images by eye.
+   --audio <request>`. Its own estimate for the default 150 positives and 150 negatives is
+   $5.26 at most (labels are priced at their full token budget), under the $10 skill cap.
+   Run a small batch first (`--positives 6 --negatives 6`) and check the SAM output and
+   the images by eye.
 5. real clips for all three skills (`docs/recording-protocol.md`)
 
 ## Milestones
@@ -71,63 +68,12 @@ open needs the Mac, the keys, the glasses or new footage:
   exclusive; `te api-smoke` never caches a failed check
 - [x] Docs: the glasses check tests reachability while streaming; HANDOVER has SPEC.md's
   visual design rules
-- [x] Client (v31): Ctrl+C during a call is charged; an empty transcript is billed, not
-  cached; a cached reply that today's checks reject is fetched again; a failed image
-  download is a skippable output error; every failed call carries its charge; a label cut
-  off mid-answer is asked again; a cache-only lookup
-- [x] Settings and spend report (v32): `~` in `TE_DATA_DIR`; long skill names line up
-- [x] Policy and compiler (v33): plurals and more relatives; hiding the capture light,
-  covert, nutrition and more sports phrasings; named people with "gets ready" or a
-  possessive refused again (a v25 regression); corrections that rule something out
-  ("not the bathroom light") are allowed, and a refused one says so; requests over 500
-  characters stop before the call; read-back wording; duplicate near-misses; the topic
-  rules over all of the model's wording
-- [x] Keyframes and images (v34): macOS `._` files skipped, WebP read, clear errors for
-  HEIC and unreadable frames, EXIF turns without rewriting EXIF; the image manifest is
-  written even when generation stops
-- [x] Labels and SAM (v35): a label that needed the larger budget is free on a rerun; SAM
-  skips a rejected frame like the other steps; progress counts failed attempts' cost
-- [x] Teach and CLI (v36): the estimate gives a worst case; a one-answer dataset stops
-  the run; fallback labels need both answers; a new spec removes the old dataset; the
-  clip folder is never the output folder; contradicting labels; labels saved when a run
-  stops; inputs and the key checked before the spend question; the failures hint; closed
-  stdin; `te serve` prints the phone address and keeps the server's log lines
-- [x] CI and setup (v37): CI installs ffmpeg, so the video tests run there; Mac setup
-  with python3.12 and ffmpeg; the `.env.example` W&B note
-- [x] Docs (v38): estimator figures for a real clip, the recording protocol (both states
-  in the teaching clip), M2 and M4 notes, open questions
-- [x] A review of v31 to v38 (v39 and v40): a reported cost of NaN or below zero is
-  charged at the estimate instead (it would have switched the caps off); an unknown
-  `~user` in `TE_DATA_DIR` is a settings error; the policy check refuses two names ("Sam
-  and Jake arrive"), titles with brand names, "Sam's at the door" and more ways to hide
-  the glasses' light, and no longer refuses brand readings, "my lift", "discreet" alerts,
-  object counts or other devices' recording lights; a correction's "not" covers at most
-  five words; the model's trigger is checked with its "when"
-- [x] The same review's small `te teach` fixes (v49): a blank `--request` and negative
-  counts are refused before the estimate, the failure reason prints before the hint, and
-  a repeated label with a bad value gets the right message
+- [ ] F30 to F62: verdicts pending
 
 ### M2, Fri to Sat: training and watching
 
-- [x] Watch trigger: 3 of the last 4 frames over the threshold, then the cooldown; a
-  stream pause starts the window again; `calibrate()` picks the lowest threshold with at
-  most one false alarm per hour of labelled footage
-- [x] Student scorer for an OpenAI-compatible endpoint, sending each frame as the
-  training examples were built and reading the answer token's logprobs
-- [x] Watcher: Muse Spark checks an alert first (a no snoozes the skill for a minute, a
-  failed check alerts unconfirmed); every scored frame goes to a JSON-lines log
-- [x] Watch mode on the WebSocket: `"watch"` in the hello, scores in each ack, alerts
-- [x] Training bundle (skills combined, real, synthetic or mixed, a validation split,
-  image paths on the Modal volume) and the Axolotl config, which is Meta's QLoRA recipe
-  with this run's paths, W&B names and gradient accumulation 32 on one H100
-- [x] Modal training app with the recipe's pins; `te train` (smoke first, then a run
-  priced from the smoke, asking always over $15) and `te watch` (replay a clip)
-- [ ] The two-step smoke and the first real run on Modal (asks first)
-- [ ] Export (merge) and serving on the Mac or Modal, then `TE_STUDENT_URL`
-- [ ] The iOS app (needs Xcode on the Mac)
-- [x] `te calibrate`: a skill's threshold from replayed validation clips and their true
-  time ranges
-- [ ] Thresholds from real labelled validation footage (needs footage and M3's labels)
+- [ ] Modal QLoRA training on the washer skill, export, serving (Mac or Modal)
+- [ ] Watch loop: smoothing, Spark confirmation, spoken alerts on the glasses
 
 ### M3, Sat to Sun: all skills and experiments
 
@@ -190,17 +136,7 @@ open needs the Mac, the keys, the glasses or new footage:
   switch to fold it into the user text if the processor preflight shows a problem.
 - **Fallback switch:** `TE_TRAIN_ON_MODEL_OUTPUTS=0` keeps generating and labelling (for
   evaluation) but trains only on real frames with the user's own labels. Without those
-  labels, or with labels that are all one answer, it stops after writing the keyframes,
-  before any paid call.
-- **A dataset needs both answers.** If the examples would all be yes or all be no (for
-  example when Spark rejects every positive edit), teach stops instead of writing a
-  dataset that cannot train a yes/no check, and warns when one answer is under 10 percent.
-- **Failed calls carry their charge** (`MetaAPIError.cost_usd`), so progress lines count
-  them; after a stop for too many failures, the hint says a rerun pays for them again.
-- **The model's wording is checked in two parts.** The target and the trigger get the
-  request's full local check; everything else it wrote (description, near-misses, alert)
-  gets the covert, health and sports rules, and the description also the person and
-  sensitive-place rules except rooms at home.
+  labels it stops after writing the keyframes, before any paid call.
 - **Project folder:** `.env`, `data/` (ledger, cache, skills) and a relative `TE_DATA_DIR`
   are taken inside the checkout `backend/` is imported from, so `te` sees the same spend
   and caps from any folder. Tests point this at a temporary folder (tests/conftest.py).
@@ -210,16 +146,6 @@ open needs the Mac, the keys, the glasses or new footage:
   Auth, rate-limit, server and budget errors always stop it.
 - **Keyframe names** are `kf_<position>_<first 8 hex of the SHA-256>.<ext>`, so a labels
   file made for another take of the clip cannot label the wrong frames.
-- **The student is scored at its answer token.** The scorer asks the endpoint for
-  logprobs and reads the last generated yes or no, renormalised over the two; a reply
-  without one is an error, never a guess. It needs no chat template, so it works the same
-  on vLLM and on llama-server.
-- **Alerts:** a skill fires on 3 of its last 4 frames at or over its threshold, then waits
-  for its cooldown. If Muse Spark says no, the skill waits a minute instead; if the check
-  fails, the alert goes out marked unconfirmed (missing the washer is worse than one
-  unchecked alert). Frames are never written; the log holds times, scores and decisions.
-- **Training config as JSON:** the Axolotl config is Meta's recipe written as JSON (YAML
-  reads it), with only the paths, the W&B names and gradient accumulation changed.
 - **Provenance:** generated images are stored exactly as returned; the padded dataset PNGs
   are derived copies, and the dataset manifest maps every example back to its source and
   the SHA-256 of the original image. Only real, approved footage is ever published.
@@ -236,7 +162,7 @@ sources disagree with SPEC.md, the sources win.
 |---|---|---|---|
 | 1 | Base URL `https://api.meta.ai/v1`, model IDs, prices, SAM output format, image and audio endpoints | None of it is in the cookbook or the DAT repo (they cover only open-weight models) | Kept from SPEC.md, marked unverified; `te models` checks the IDs on the first live call |
 | 2 | `structured(model, input, schema)`, request shape not given | Cookbook recipes use Chat Completions with `response_format` json_schema | Implemented that way |
-| 3 | Score frames by the probability that the first token is yes or no | Glimmer and Spark always reason first (`to=self` channel), so the first token is not the answer; the recipe's targets are an explanation followed by the answer, not a bare yes or no | M2: the scorer generates with logprobs and reads the answer token (the last yes or no), renormalised over the two; prefilling up to the answer channel is a later speed-up; check how a bare yes/no target renders before training |
+| 3 | Score frames by the probability that the first token is yes or no | Glimmer and Spark always reason first (`to=self` channel), so the first token is not the answer; the recipe's targets are an explanation followed by the answer, not a bare yes or no | M2: prefill up to the answer channel and read the yes/no logits there; check how a bare yes/no target renders before training |
 | 4 | Base model pinned "to the revision the guide uses" | Cookbook pins `a4e59da52a7bc87ae7251dd5545c0dd437c44b68` | Pinned in `backend/config.py` |
 | 5 | Dataset: images inline, system prompt in every example | Recipe uses image parts with an absolute local PNG `path`; its examples have no system turn; images padded to 512x512 | M1 follows the recipe; system turn kept but can be folded into the user text |
 | 6 | QLoRA verified on one H100; L40S or A100 if needed | Meta verified quality on 8x H100; 1x H100 only as a 2-step smoke (peak about 27 GB, on a 96 GB H100); L40S and A100 untested; no merge step in the cookbook | M2: own 2-step smoke on Modal first; merge is our own step |
@@ -268,13 +194,9 @@ sources disagree with SPEC.md, the sources win.
 - `meta-sam-parser` (SAM output parsing) could not be installed or read; M1 stores SAM's
   raw output and parses it once a real cached response shows the format.
 - SPEC.md is not in the repository, so a fresh session needs it uploaded again.
-- From the review, for the author: whether to add `httpx2` (Starlette 1.2 and later warn
-  without it in `TestClient`) or cap `starlette<1.2`, and whether the project's own
-  dependencies count as approved downloads (HANDOVER.md, "Not done yet", item 9).
-- In fallback mode the condition text in every example is still Muse Wonder's (ask the
-  organizers with the training question).
-- The dataset JSONL holds absolute image paths (the recipe's format); M2 writes it again
-  under the Modal volume mount.
+- Review findings F30 to F62 (client, CLI, policy wording, dataset paths, dependency
+  bounds, tests, docs) were not verified yet when stages v23 to v30 were cut; the
+  confirmed ones become the next stages, before M2.
 - SAM output parsing: the first live run stores SAM's raw text (cached); write the parser
   against it, then the boxes feed crops and the outline visual.
 - Image token counts are unknown, so estimates assume 1,500 tokens per image; the real

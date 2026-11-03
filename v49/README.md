@@ -11,22 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v49 (M1 review): Fix: te teach messages
+## Build stage v49 (M2): iOS: settings and the protocol
 
-te teach now refuses a --request of only spaces and negative --positives or
---negatives before it shows the estimate (before, the first was only noticed after the
-spend question, and the second printed a negative estimate). After a stop for too many
-failures it prints the reason first, then the hint, and exits with code 2. A --labels
-file that names a keyframe twice, the second time with an unusable value, now says the
-value is the problem. The keyframe warning says what it checks: fewer than 20.
+The iPhone app starts here. ios/TrainedEye/Models/Settings.swift keeps what the app
+remembers between launches in UserDefaults: the backend address
+(http://192.168.1.20:8765 until one is typed), the skills switched on for watching and
+which camera to use (by default the glasses, else the iPhone). The server token, which
+the teach routes need, goes to the keychain, readable only on this phone after the
+first unlock. The address may be http, https, ws or wss; the settings turn it into the
+HTTP base and the WebSocket address at /ws, and say whether it is on the local network
+(a private IPv4 address or a .local name) or taken to be a tunnel.
+ios/TrainedEye/Models/Protocol.swift has the WebSocket protocol's messages (the hello,
+the welcome, acks with scores, alerts and errors), the /health and /skills replies,
+and the status line the Skills screen shows for each skill. The training and served
+fields are read leniently, so an older backend still decodes.
 
 Files added or changed in this stage:
 
-- `backend/cli.py` (changed): the te command line
-- `backend/teach.py` (changed): the teach flow end to end, cached so a rerun costs
-  nothing
-- `tests/test_cli.py` (changed): tests
-- `tests/test_teach.py` (changed): tests
+- `ios/TrainedEye/Models/Protocol.swift` (new):
+- `ios/TrainedEye/Models/Settings.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -39,18 +42,22 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 14%]
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
     ........................................................................ [ 28%]
-    ........................................................................ [ 43%]
+    ........................................................................ [ 38%]
+    ........................................................................ [ 47%]
     ........................................................................ [ 57%]
-    ........................................................................ [ 72%]
-    ........................................................................ [ 86%]
-    ..................................................................       [100%]
-    498 passed in 14.58s
+    ........................................................................ [ 66%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 95%]
+    ...................................                                      [100%]
+    755 passed in 31.45s
 
     $ ruff check .
     All checks passed!
@@ -67,11 +74,21 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
 - `backend/server.py`: the backend the iPhone app talks to: JPEG frames arrive over a
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
+- `backend/teach_session.py`: a phone teach session: the spend question before any
+  paid call, the read-back, progress lines and timeouts.
+- `backend/teach_upload.py`: the phone's teach upload: a multipart parser, the input
+  checks, the saved capture and the estimate.
+- `backend/teach_api.py`: the teach routes for the phone: /teach/start, /teach/status
+  and /teach/answer, behind SERVER_TOKEN.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
 - `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
@@ -80,6 +97,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   (real, synthetic or mixed, with a validation split and volume paths).
 - `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
   recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
+- `backend/training/export.py`: the Modal app that merges a trained adapter and checks
+  the merged model's answers.
+- `backend/inference/modal_serve.py`: the Modal app that serves the merged model with
+  vLLM behind STUDENT_API_KEY.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -89,8 +110,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -115,13 +138,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 498 tests, all offline; none calls a paid API.
+- `tests/`: 755 tests, all offline; none calls a paid API.
 
 ## Next
 
-The rest of M2 on Modal and the Mac: the two-step smoke and the first training run
-(asking first), export and serving, the iOS app, and thresholds from labelled
-validation footage.
+Stage v50 adds the app's two clients: plain HTTP calls to te serve with the server
+token, and the watch WebSocket with one frame in flight, reconnects and a keepalive.
 
 ## Privacy and policy
 

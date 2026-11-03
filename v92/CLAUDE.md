@@ -17,6 +17,7 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
     ruff check .
     te spend                         # Meta API spend from data/ledger.jsonl
     te serve                         # backend; prints the ws:// address for the phone
+                                     # (phone teaching needs SERVER_TOKEN in .env)
     te ws-selftest                   # synthetic frames through the WebSocket, in process
     te api-smoke                     # one tiny paid Muse Spark call (needs MODEL_API_KEY)
     te policy "<request>"            # local policy check, free
@@ -26,11 +27,31 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
                                      # --labels <json> with names from keyframes/
     te train --skills washer_done --run exp1-mixed --smoke
                                      # the recipe's two-step smoke on Modal; asks first.
-                                     # Without --smoke: the real run, priced from the smoke
+                                     # Without --smoke: the real run, priced from the smoke.
+                                     # --preflight renders examples with the pinned processor
+                                     # (CPU job, asks); --detach, then --collect <run>
+    te clips --skill washer_done     # labelled session1_/session2_ clips -> dataset-clips (free)
     te watch --skills washer_done --clip <video or frame folder>
-                                     # replay a clip through watch mode (needs TE_STUDENT_URL)
+                                     # replay a clip through watch mode (needs TE_STUDENT_URL);
+                                     # --run <run> uses that run's threshold
     te calibrate --skill washer_done --log <frame log> --labels <true ranges json>
-                                     # threshold from labelled validation clips
+                                     # threshold from labelled validation clips (--run: per run)
+    te export --run exp1-mixed       # merge the adapter on Modal and check it (asks)
+    te serve-student --run exp1-mixed  # the trained model on Modal (asks); --stop stops it;
+                                     # --base: base Glimmer; --runs a,b: adapters on one base
+    te label --clip <clip>           # mark where the condition is true (writes <clip>.labels.json)
+    te label --skill washer_done --sample 200   # hand-label generated images (Experiment 2)
+    te experiments --skills washer_done [--write-plan]  # every training run with its price
+    te unfiltered / te spark-errors  # Experiment 2: the unfiltered arm, Spark's error rate
+    te watch ... --scorer spark      # Experiment 4: Muse Spark on every frame (paid; asks)
+    te regress                       # the regression check on general questions
+    make eval                        # te eval: eval/results.md and the SVG charts
+    te manifests / te regenerate / te blur / te release   # M4 release (upload asks)
+    te fetch-weights --run <run>     # a run's adapter from the Modal volume into data/weights/
+    te release-test-set / te release-collection / te wandb-report   # more releases (all ask)
+    te playground                    # the web playground, locally (--public: no generated
+                                     # images, blurred keyframes only; --deploy: Modal, asks)
+    te playground-clip --clip <clip> --log <log> --labels <json> --name <n>  # a blurred clip
     modal run backend/training/wandb_smoke.py   # one W&B run from Modal
 
 ## Conventions
@@ -41,8 +62,8 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
 - Local data (footage, cache, ledger, generated images, weights) lives in data/ and is gitignored.
 - Packages under backend/ are namespace packages (no __init__.py files).
 - Ask before any job over $15, before publishing anything, and before anything physical.
-- Policy: no skills about specific people; never hide the capture LED; keep Muse Image
-  provenance; blur faces in anything published.
+- Policy: no skills about specific people, and none about politics or war; never hide the
+  capture LED; keep Muse Image provenance; blur faces in anything published.
 - Numbers in docs come only from eval scripts.
 
 ## Pointers
@@ -50,6 +71,9 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
 - docs/glasses-check.md: how to verify the glasses with Meta's DAT sample app.
 - docs/recording-protocol.md: what real clips to record for the experiments.
 - Teach-flow outputs go to data/skills/<skill>/ (gitignored): spec, keyframes, roi,
-  synthetic images with manifest.jsonl, labels.jsonl, label_stats.json, dataset/.
+  synthetic images with manifest.jsonl, labels.jsonl, label_stats.json, dataset/ (with SAM
+  crops), and dataset-clips/ from te clips (session 1 train, session 2 validation only).
 - Meta cookbook: github.com/meta-models/meta-oss-cookbook (muse-glimmer/post-training).
 - DAT iOS SDK: github.com/facebook/meta-wearables-dat-ios (samples/CameraAccess).
+- ios/README.md: how to build the iPhone app in Xcode (never compiled yet).
+- CONTRIBUTIONS.md: credits, licenses and the copied Meta sample files.

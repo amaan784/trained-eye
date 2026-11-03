@@ -5,12 +5,18 @@
 // or the iPhone), where its frames go (the WebSocket while watching, the teach flow while
 // capturing), what an alert does (speak it on the glasses, show it), and saving a clip.
 // The last 10 frames are held in memory only, for Save clip; nothing is written to disk
-// unless the user taps it.
+// unless the user taps it. The glasses stream at low resolution (360x640) while watching
+// and at medium (504x896) during the teach capture; the iPhone camera keeps its own size.
+// While watching, each stay in the background (the screen locked, or another app in front)
+// is counted, as CameraAccess observes didEnterBackgroundNotification, so the screen-locked
+// check on the glasses can read what went out and what came back acked. At launch, a teach
+// session still running on the Mac is picked up again.
 //
 
 import Foundation
 import MWDATCore
 import Observation
+import UIKit
 
 enum FrameSourceKind: String {
   case glasses
@@ -24,6 +30,18 @@ enum FrameSourceKind: String {
     case .phone: return "iPhone camera"
     }
   }
+}
+
+/// One stay in the background while watching, for the screen-locked check on the glasses:
+/// did frames keep coming from the camera, going out and coming back acked?
+struct BackgroundStay: Equatable {
+  var seconds: TimeInterval
+  /// Frames the camera delivered (one a second while watching).
+  var framesFromCamera: Int
+  var framesSent: Int
+  var framesAcked: Int
+  /// Images the glasses' decoder handed back unchanged, skipped rather than sent again.
+  var repeatsSkipped: Int
 }
 
 @MainActor
@@ -46,15 +64,26 @@ final class AppModel {
   private(set) var lastAlert: AlertEvent?
   /// The newest frame (JPEG, in memory only), for the preview on the Watch and Teach screens.
   private(set) var lastFrame: Data?
+  /// The newest frame's size in pixels, as "504x896".
+  private(set) var lastFrameSize: String?
   private(set) var skills: [SkillInfo] = []
   private(set) var skillsError: String?
   /// A one-line notice for the user.
   var message: String?
+  /// The latest stay in the background since watching started, and how many there were.
+  private(set) var lastBackgroundStay: BackgroundStay?
+  private(set) var backgroundStays = 0
 
   static let clipFrames = 10
 
   @ObservationIgnored private let throttle: FrameThrottle
   @ObservationIgnored private var recentFrames: [Data] = []
+  /// Frames that reached the app from any camera, for the background counts.
+  @ObservationIgnored private var framesReceived = 0
+  /// The counters when the app went to the background while watching.
+  @ObservationIgnored private var backgroundStart:
+    (date: Date, received: Int, sent: Int, acked: Int, skipped: Int)?
+  @ObservationIgnored private var lifecycleTasks: [Task<Void, Never>] = []
 
   init() {
     let wearables = Wearables.shared
@@ -70,6 +99,10 @@ final class AppModel {
     socket.onAlert = { [weak self] message in
       self?.handleAlert(message)
     }
+    startLifecycleMonitoring()
+    // Once at launch: a session waiting on its spend or read-back question would otherwise
+    // sit until the server's answer timeout counts it as a no.
+    Task { [weak self] in await self?.teach.resumeIfRunning() }
   }
 
   var backend: BackendClient? {
@@ -78,6 +111,15 @@ final class AppModel {
 
   /// True while any camera is on: the watch-mode indicator shows on every screen.
   var isCameraOn: Bool { source != nil }
+
+  /// The glasses' camera is on but sends nothing: folded, out of reach, or the link
+  /// dropped. It comes back by itself when the glasses are back.
+  var isGlassesInterrupted: Bool {
+    switch source {
+    case .glasses, .mock: return glassesCamera.isInterrupted
+    case .phone, nil: return false
+    }
+  }
 
   var isMockActive: Bool {
     #if DEBUG
@@ -99,11 +141,14 @@ final class AppModel {
     throttle.setInterval(1)
     isWatching = true
     message = nil
+    lastBackgroundStay = nil
+    backgroundStays = 0
     socket.connect(to: url, hello: Hello(source: source.rawValue, watch: watchList()))
   }
 
   func stopWatching() {
     isWatching = false
+    backgroundStart = nil
     socket.disconnect()
     recentFrames.removeAll()
     if !teach.isCapturing { stopCamera() }
@@ -140,13 +185,23 @@ final class AppModel {
 
   // MARK: - Teach capture
 
-  /// Starts a camera for the teach capture, switches to three frames a second, and waits
-  /// (up to 20 seconds, not counting the camera permission step) for the first frame.
+  /// Starts a camera for the teach capture, the glasses at medium resolution (504x896),
+  /// switches to three frames a second, and waits (up to 20 seconds, not counting the
+  /// camera permission step) for the first frame.
   func startCameraForTeach() async -> Bool {
     guard !isWatching else {
       message = "Stop watching before teaching."
       return false
     }
+    // Before the start, so the first camera is added at that size; a camera already on is
+    // stopped and added again at it.
+    glassesCamera.setResolution(.medium)
+    let started = await startTeachCamera()
+    if !started { glassesCamera.setResolution(.low) }  // the camera is off by now
+    return started
+  }
+
+  private func startTeachCamera() async -> Bool {
     lastFrame = nil
     guard await startCamera() != nil else { return false }
     throttle.setInterval(TeachFlow.captureInterval)
@@ -171,16 +226,14 @@ final class AppModel {
     return true
   }
 
+  /// Back to one frame a second and, for watching, the low resolution.
   func endTeachCapture() {
     throttle.setInterval(1)
     if !isWatching { stopCamera() }
+    glassesCamera.setResolution(.low)  // after a stop it only sets the next camera's size
   }
 
   // MARK: - Cameras
-
-  // TODO: no sample shows starting a new session after the glasses fold or the link
-  // drops mid-watch (AGENTS.md: start a new session once the device is available again).
-  // Today the Watch screen shows the state, and the user stops and starts watching.
 
   /// Starts the camera the setting asks for: the glasses when they are available (or
   /// the setting says glasses), else the iPhone.
@@ -218,11 +271,14 @@ final class AppModel {
     }
     source = nil
     lastFrame = nil
+    lastFrameSize = nil
   }
 
   private func receive(_ frame: CapturedFrame) {
     guard source != nil else { return }
+    framesReceived += 1
     lastFrame = frame.jpeg
+    lastFrameSize = "\(frame.width)x\(frame.height)"
     if teach.isCapturing {
       teach.add(frame)
       return
@@ -241,6 +297,49 @@ final class AppModel {
     lastAlert = AlertEvent(
       skill: alert.skill ?? "", text: text, probability: alert.p, confirmed: alert.confirmed,
       receivedAt: Date(), spoken: spoken)
+  }
+
+  // MARK: - In the background
+
+  private func startLifecycleMonitoring() {
+    lifecycleTasks = [
+      Task { [weak self] in
+        for await _ in NotificationCenter.default.notifications(
+          named: UIApplication.didEnterBackgroundNotification)
+        {
+          self?.didEnterBackground()
+        }
+      },
+      Task { [weak self] in
+        for await _ in NotificationCenter.default.notifications(
+          named: UIApplication.willEnterForegroundNotification)
+        {
+          self?.willEnterForeground()
+        }
+      },
+    ]
+  }
+
+  private func didEnterBackground() {
+    guard isWatching else { return }
+    backgroundStart = (
+      date: Date(), received: framesReceived, sent: socket.framesSent,
+      acked: socket.framesAcked, skipped: glassesCamera.repeatedFramesSkipped
+    )
+  }
+
+  /// The counts since the app went to the background. The socket's counters start again
+  /// on a new hello, so a count is never taken below zero.
+  private func willEnterForeground() {
+    guard let start = backgroundStart, isWatching else { return }
+    backgroundStart = nil
+    lastBackgroundStay = BackgroundStay(
+      seconds: Date().timeIntervalSince(start.date),
+      framesFromCamera: framesReceived - start.received,
+      framesSent: max(0, socket.framesSent - start.sent),
+      framesAcked: max(0, socket.framesAcked - start.acked),
+      repeatsSkipped: max(0, glassesCamera.repeatedFramesSkipped - start.skipped))
+    backgroundStays += 1
   }
 
   // MARK: - Skills

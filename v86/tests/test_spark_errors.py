@@ -117,3 +117,17 @@ def test_the_unfiltered_arm_needs_a_finished_teach_run_with_model_outputs(taught
     (tmp_path / "skills/boil_over").mkdir()
     with pytest.raises(ValueError, match="no finished teach run"):
         write_unfiltered_dataset(tmp_path / "skills/boil_over")
+
+
+def test_the_unfiltered_arm_puts_the_system_prompt_where_te_teach_did(taught):
+    manifest = taught / "dataset/washer_done-teach.manifest.json"
+    assert write_unfiltered_dataset(taught, system_in_user=False)["system_in_user"] is False
+    teach = json.loads(manifest.read_text())
+    manifest.write_text(json.dumps({**teach, "system_in_user": True}))  # as if folded
+    folded = write_unfiltered_dataset(taught)  # no setting given: follow te teach
+    assert folded["system_in_user"] is True
+    record = json.loads((taught / "dataset-unfiltered/washer_done-teach.jsonl").read_text()
+                        .splitlines()[0])
+    assert [m["role"] for m in record["messages"]] == ["user", "assistant"]
+    with pytest.raises(ValueError, match="TE_SYSTEM_IN_USER=1, but it is 0 now"):
+        write_unfiltered_dataset(taught, system_in_user=False)

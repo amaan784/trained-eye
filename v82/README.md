@@ -11,15 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v82 (M3): Results write-up
+## Build stage v82 (M4): The test clips as a dataset
 
-backend/eval/writeup.py writes results.md (tables per experiment, a note where an
-experiment has no runs yet) and the chart files, every number from the metrics.
+backend/release/test_set.py prepares the held-out test clips for a dataset repo. Only
+session 3 clips go in (session3_test_<name>, recorded apart from the training clips),
+and only .mp4 videos blur_video wrote, whose blur record's output SHA-256 is the
+video's. Each clip needs the author's own labels from te label, found next to the
+blurred video or beside the original under a labels root, <root>/<skill>/. They are
+checked against the video's length from ffprobe, with 1.0 second of slack, and, when
+the original is there, its hash against the blur record. prepare_test_set writes
+<skill>/<clip>.mp4 with its labels, metadata.jsonl, a dataset card that states the
+labels are human only and lists the privacy steps, and release.json with each clip's
+blur record. There is no default license: the author picks one. check_folder, which
+package.upload runs for a test set, refuses any image, an unlisted or unblurred video,
+and metadata that does not match release.json.
 
 Files added or changed in this stage:
 
-- `backend/eval/writeup.py` (new):
-- `tests/test_eval_writeup.py` (new): tests
+- `backend/release/test_set.py` (new):
+- `tests/test_test_set.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -32,20 +42,25 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 12%]
-    ........................................................................ [ 24%]
-    ........................................................................ [ 36%]
-    ........................................................................ [ 48%]
-    ........................................................................ [ 60%]
-    ........................................................................ [ 72%]
-    ........................................................................ [ 84%]
-    ........................................................................ [ 96%]
-    ...................                                                      [100%]
-    595 passed in 24.95s
+    ........................................................................ [  7%]
+    ........................................................................ [ 15%]
+    ........................................................................ [ 22%]
+    ........................................................................ [ 30%]
+    ....................................s................................... [ 38%]
+    ........................................................................ [ 45%]
+    ........................................................................ [ 53%]
+    ........................................................................ [ 61%]
+    ........................................................................ [ 68%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 83%]
+    ........................................................................ [ 91%]
+    ........................................................................ [ 99%]
+    .......                                                                  [100%]
+    942 passed, 1 skipped in 62.77s (0:01:02)
 
     $ ruff check .
     All checks passed!
@@ -62,6 +77,14 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
+- `backend/cli_experiments.py`: te experiments, te unfiltered, te clips, te
+  spark-errors and te regress.
+- `backend/cli_replay.py`: te replay: the recorded test clips through watch mode.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -94,8 +117,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -113,6 +138,16 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/labeltool/images.py`: the labelling tool for generated images, for
   Experiment 2.
 - `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
+- `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
+  and the SVG charts.
+- `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
+  its price.
+- `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
+  reads.
+- `backend/regenerate.py`: the prompt manifests and regenerating images from them.
+- `backend/release/model_card.py`: the Hugging Face model card.
+- `backend/release/package.py`: the release folder (base license, blurred keyframes),
+  the upload and the collection.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -126,11 +161,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 595 tests, all offline; none calls a paid API.
+- `tests/`: 942 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v83 adds the evaluation plan and te eval's engine.
+Stage v83 adds the M4 release commands: te manifests, te regenerate, te blur, te
+fetch-weights, te release, te release-test-set, te release-collection and te
+wandb-report, each asking before it spends or publishes unless given --yes.
 
 ## Privacy and policy
 

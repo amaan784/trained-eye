@@ -46,13 +46,3 @@ spoken request recorded as audio (for example on the phone's voice memo app).
 
     data/teach/washer_done/teach.mp4
     data/teach/washer_done/request.m4a
-
-Move your head a little during the look (closer, a step aside, a slight tilt): the
-teach flow keeps 20 to 24 sharp, different keyframes and says so when it finds fewer than 20.
-Video works best; a folder of frames must be JPEG, PNG or WebP (export iPhone HEIC photos
-as JPEG first).
-
-If training on model outputs is switched off (`TE_TRAIN_ON_MODEL_OUTPUTS=0`), the
-dataset is only the keyframes you label yourself, and it needs both answers. Then record
-the look so that the condition becomes true during it (the washer display changes to
-End, the pot starts to boil) and label frames from before and after.

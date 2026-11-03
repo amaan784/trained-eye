@@ -3,7 +3,10 @@
 //
 // Watch mode: start and stop it, see that the camera is on and what the backend sees, the
 // last alert (and whether it was spoken on the glasses), each skill's latest score, the
-// connection, the glasses' battery, and Save clip for the last 10 seconds.
+// connection, the glasses' state and battery, and Save clip for the last 10 seconds. While
+// the glasses are folded or out of reach it says so (watching goes on when they are back),
+// and after a stay in the background (the screen locked) it shows what went out and came
+// back acked meanwhile, for the screen-locked check on the glasses.
 //
 
 import SwiftUI
@@ -15,7 +18,7 @@ struct WatchView: View {
     Screen(title: "Watch") {
       Card {
         HStack(spacing: 10) {
-          StatusDot(on: app.isWatching)
+          StatusDot(on: app.isWatching && !app.isGlassesInterrupted)
           Text(app.isWatching ? "Watching" : "Not watching").font(Theme.title)
         }
         Text(cameraText).foregroundStyle(Theme.secondary)
@@ -41,7 +44,8 @@ struct WatchView: View {
             InfoRow(label: "Probability", value: String(format: "%.2f", p))
           }
           InfoRow(label: "Cloud check", value: cloudText(alert.confirmed))
-          InfoRow(label: "Spoken", value: alert.spoken ? "On the glasses" : "No, no Bluetooth audio")
+          InfoRow(
+            label: "Spoken", value: alert.spoken ? "On the glasses" : "No, no Bluetooth audio")
         } else {
           Notice(text: "No alert yet.")
         }
@@ -66,9 +70,33 @@ struct WatchView: View {
         if let error = app.socket.lastError { Notice(text: error, isError: true) }
       }
 
+      if let stay = app.lastBackgroundStay {
+        Card(title: "Last time in the background") {
+          InfoRow(label: "For", value: durationText(stay.seconds))
+          InfoRow(label: "Frames from the camera", value: "\(stay.framesFromCamera)")
+          InfoRow(label: "Frames sent", value: "\(stay.framesSent)")
+          InfoRow(label: "Frames acked", value: "\(stay.framesAcked)")
+          InfoRow(label: "Repeated frames skipped", value: "\(stay.repeatsSkipped)")
+          Notice(
+            text: "Times in the background while watching: \(app.backgroundStays). About one "
+              + "frame a second should go out and come back acked with the screen locked.")
+        }
+      }
+
       Card(title: "Glasses") {
         InfoRow(label: "Camera", value: app.glassesCamera.statusText)
+        if let size = app.lastFrameSize, app.source == .glasses || app.source == .mock {
+          InfoRow(label: "Frame size", value: size)
+        }
+        if app.glassesCamera.recoveries > 0 {
+          let times = app.glassesCamera.recoveries
+          InfoRow(label: "Came back by itself", value: times == 1 ? "Once" : "\(times) times")
+        }
         InfoRow(label: "Battery", value: app.glasses.batteryLevel.map { "\($0)%" } ?? "Unknown")
+        if let interruption = app.glassesCamera.interruptionText {
+          Notice(text: interruption)
+        }
+        if let error = app.glassesCamera.errorMessage { Notice(text: error, isError: true) }
       }
 
       Button("Save the last 10 seconds") { app.saveClip() }
@@ -85,6 +113,7 @@ struct WatchView: View {
     case .phone:
       return "The iPhone camera is on. Keep the app open: iOS stops it in the background."
     case .glasses, .mock:
+      if let interruption = app.glassesCamera.interruptionText { return interruption }
       return "The \(app.source?.label ?? "glasses") camera is on: \(app.glassesCamera.statusText)."
     case nil:
       return "The camera is off."
@@ -97,6 +126,11 @@ struct WatchView: View {
     let threshold = app.skills.first { $0.name == name }?.threshold
     return threshold.map { String(format: "%.2f, threshold %.2f", p, $0) }
       ?? String(format: "%.2f", p)
+  }
+
+  private func durationText(_ seconds: TimeInterval) -> String {
+    let whole = max(0, Int(seconds))
+    return whole < 60 ? "\(whole) s" : "\(whole / 60) min \(whole % 60) s"
   }
 
   private func cloudText(_ confirmed: Bool?) -> String {

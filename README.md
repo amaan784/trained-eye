@@ -11,12 +11,21 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v105 (M4): Notes and credits
+## Build stage v92 (M4): Playground commands, Modal app and notes
 
-HANDOVER.md, PROGRESS.md and CLAUDE.md record what M2 to M4 now have, the steps that
-need the Mac, Modal or footage, the decisions taken and the questions for the author.
-CONTRIBUTIONS.md credits Meta's cookbook recipe and dataset format, the DAT SDK with
-the two copied sample files, Axolotl and the Meta models used.
+This is the last stage. backend/cli_playground.py adds te playground, which serves the
+playground on 127.0.0.1 port 8100 by default (--public for the public copy) and
+refuses --forwarded-allow-ips "*", which would let a visitor reset their cap, and te
+playground-clip, which blurs a test clip, or copies one te blur already blurred, and
+checks that its frame log and labels fit the video's length before it adds the clip's
+folder. te playground --deploy lists what the public copy may hold, asks first (even
+with --yes when the total cap is over $15), clears the published folders on a private
+Modal Volume, copies the files and deploys backend/playground/modal_app.py: one
+container, the Modal Secret meta for the key, the caps baked into the image, and the
+budget and ledger committed to the Volume every 30 seconds while they change.
+CLAUDE.md, HANDOVER.md and PROGRESS.md take their final form, and CONTRIBUTIONS.md
+gives the credits and licenses: Meta's cookbook recipe, the copied DAT sample files,
+the SAM 3 protocol, Inter, Axolotl and the Meta models.
 
 Files added or changed in this stage:
 
@@ -27,6 +36,11 @@ Files added or changed in this stage:
   facts from the docs
 - `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
   open issues and spend
+- `backend/cli.py` (changed): the te command line
+- `backend/cli_playground.py` (new): te playground and te playground-clip
+- `backend/playground/modal_app.py` (new):
+- `tests/test_cli_playground.py` (new): tests
+- `tests/test_playground_modal.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -39,24 +53,68 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-11-02 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 10%]
-    ........................................................................ [ 20%]
-    ........................................................................ [ 30%]
-    ........................................s............................... [ 40%]
-    ........................................................................ [ 50%]
-    ........................................................................ [ 61%]
+    ........................................................................ [  7%]
+    ........................................................................ [ 14%]
+    ........................................................................ [ 21%]
+    ........................................................................ [ 28%]
+    ..................................................s..................... [ 35%]
+    ........................................................................ [ 42%]
+    ........................................................................ [ 49%]
+    ........................................................................ [ 56%]
+    ........................................................................ [ 63%]
     ........................................................................ [ 71%]
-    ........................................................................ [ 81%]
-    ........................................................................ [ 91%]
-    ...........................................................              [100%]
-    706 passed, 1 skipped in 47.94s
+    ........................................................................ [ 78%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 92%]
+    ........................................................................ [ 99%]
+    .....                                                                    [100%]
+    1012 passed, 1 skipped in 78.54s (0:01:18)
 
     $ ruff check .
     All checks passed!
+
+    $ python -m backend.cli playground --help
+    usage: te playground [-h] [--host HOST] [--port PORT] [--eval-dir EVAL_DIR]
+                         [--public] [--deploy] [--total-cap TOTAL_CAP] [--yes]
+                         [--visitor-cap VISITOR_CAP] [--daily-cap DAILY_CAP]
+                         [--forwarded-allow-ips FORWARDED_ALLOW_IPS]
+
+    options:
+      -h, --help            show this help message and exit
+      --host HOST
+      --port PORT
+      --eval-dir EVAL_DIR   *.svg and results.md from te eval
+      --public              the public copy: no generated images, only blurred
+                            keyframes
+      --deploy              publish the public copy on Modal (asks first)
+      --total-cap TOTAL_CAP
+                            --deploy: USD in all for live teaching (default
+                            TE_SKILL_CAP_USD's $10)
+      --yes                 --deploy: the author's OK
+      --visitor-cap VISITOR_CAP
+                            USD per visitor a day
+      --daily-cap DAILY_CAP
+                            USD a day for everyone
+      --forwarded-allow-ips FORWARDED_ALLOW_IPS
+                            the proxies trusted to give the visitor's address,
+                            comma separated (never "*")
+
+    $ python -m backend.cli playground-clip --help
+    usage: te playground-clip [-h] --clip CLIP --log LOG [--labels LABELS]
+                              --name NAME [--blurred] [--fps FPS]
+
+    options:
+      -h, --help       show this help message and exit
+      --clip CLIP      the test clip (a video)
+      --log LOG        its frame log from te watch
+      --labels LABELS  its labels from te label (<clip>.labels.json)
+      --name NAME      the clip's name on the page
+      --blurred        the clip is a te blur output with its blur record: copy it
+      --fps FPS        frames per second, blurred
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -70,6 +128,16 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
+- `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
+- `backend/cli_experiments.py`: te experiments, te unfiltered, te clips, te
+  spark-errors and te regress.
+- `backend/cli_replay.py`: te replay: the recorded test clips through watch mode.
+- `backend/cli_release.py`: the M4 release commands.
+- `backend/cli_playground.py`: te playground and te playground-clip.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -102,8 +170,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -125,8 +195,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   and the SVG charts.
 - `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
   its price.
+- `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
+  reads.
 - `backend/regenerate.py`: the prompt manifests and regenerating images from them.
-- `backend/release/model_card.py`: the Hugging Face model card and release folder.
+- `backend/release/model_card.py`: the Hugging Face model card.
+- `backend/release/package.py`: the release folder (base license, blurred keyframes),
+  the upload and the collection.
 - `backend/playground/app.py`: the web playground.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
@@ -142,12 +216,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
 - `CONTRIBUTIONS.md`: credits, licenses and the copied Meta sample files.
-- `tests/`: 706 tests, all offline; none calls a paid API.
+- `tests/`: 1012 tests, all offline; none calls a paid API.
 
 ## Next
 
-The runs on the Mac and Modal: the first teach, the training smoke and runs, export
-and serving, the first Xcode build, the experiments, then the release and the demo.
+This is the last stage: the folder is the finished project, the same as the repository
+root.
 
 ## Privacy and policy
 

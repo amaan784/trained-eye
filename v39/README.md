@@ -11,24 +11,22 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v39 (M1 review): Fix: client and settings, third round
+## Build stage v39 (M2): The processor preflight
 
-A reply whose reported cost works out to NaN, infinity or below zero (Voice
-Transcribe's duration is taken from the reply) is now charged at the estimate and
-marked unpriced; before, a NaN entry switched both spend caps off for every later
-call. TE_DATA_DIR with ~ and a user that does not exist is a settings error with the
-setting's name instead of a traceback.
+backend/training/preflight.py checks, before the paid smoke, how training will see a
+few bundle examples. On Modal (a CPU job, no weights) the pinned Muse Glimmer
+processor renders each example in both layouts, with the system prompt as its own turn
+and folded into the user text, counting tokens the way the cookbook does. On this Mac
+summarize() judges the result: every example within the recipe's sequence length, the
+system prompt rendered once, the yes and no token IDs, the stop tokens, and which
+TE_SYSTEM_IN_USER to use. The file imports nothing from backend, so the training app
+can copy it into the container; the test of that Modal call comes with the training
+app.
 
 Files added or changed in this stage:
 
-- `backend/config.py` (changed): settings: model IDs for every job, prices, spend caps
-  and data paths; secrets come from the environment or a local .env file and are never
-  printed
-- `backend/meta/client.py` (changed): MetaClient, the only way the code calls Meta's
-  API: cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and
-  spend recorded from the reported usage
-- `tests/test_client.py` (changed): tests
-- `tests/test_config.py` (changed): tests
+- `backend/training/preflight.py` (new):
+- `tests/test_training_preflight.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -41,31 +39,23 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 17%]
-    ........................................................................ [ 35%]
-    ........................................................................ [ 53%]
-    ........................................................................ [ 71%]
-    ........................................................................ [ 89%]
-    ............................................                             [100%]
-    404 passed in 8.40s
+    ........................................................................ [ 11%]
+    ........................................................................ [ 23%]
+    ........................................................................ [ 34%]
+    ........................................................................ [ 46%]
+    ........................................................................ [ 57%]
+    ........................................................................ [ 69%]
+    ........................................................................ [ 80%]
+    ........................................................................ [ 92%]
+    ..................................................                       [100%]
+    626 passed in 15.01s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli spend
-    Meta API spend (ledger: data/ledger.jsonl)
-      calls: 0  errors: 0
-      actual: $0.0000  (estimated before calls: $0.0000)
-      global cap: $120.00  remaining: $120.0000
-      per-skill cap: $10.00
-      by model:
-        (no calls yet)
-      by skill:
-        (no calls yet)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -86,6 +76,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
+- `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
+  recipe with the run's paths, W&B names and gradient accumulation for one H100.
+- `backend/training/prepare.py`: bundles taught skills into one training set for Modal
+  (real, synthetic or mixed, with a validation split and volume paths).
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -95,14 +89,22 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
 - `backend/dataengine/labels.py`: Muse Spark labels for every image, the filter that
   keeps generated images only when Spark agrees, and agreement stats.
 - `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
+- `backend/watch/trigger.py`: when a skill fires: 3 of the last 4 frames over the
+  threshold, then the cooldown; the threshold calibration on labelled clips.
+- `backend/inference/student.py`: scores a frame with the trained model on an
+  OpenAI-compatible endpoint, read at its yes or no answer token.
+- `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
+  alert, alert messages and the frame log.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -115,12 +117,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 404 tests, all offline; none calls a paid API.
+- `tests/`: 626 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v40 adds the policy and compiler fixes from that review: two-name arrivals,
-titles, the glasses' light, and fewer false refusals.
+Stage v40 adds the Modal training app: Meta's QLoRA recipe on one H100 with the
+recipe's pins, the two-step smoke, detached runs and the processor preflight on a CPU.
 
 ## Privacy and policy
 

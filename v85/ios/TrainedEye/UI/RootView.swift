@@ -3,6 +3,8 @@
 //
 // The five tabs, and the camera-on indicator above every one of them: while any camera is
 // on, a bar says so and which camera it is, so watch mode is always visible in the app.
+// While the glasses are folded or out of reach, the bar says so, and that watching goes on
+// when they are back.
 //
 
 import SwiftUI
@@ -63,7 +65,7 @@ private struct CameraOnBar: View {
   var body: some View {
     Button(action: open) {
       HStack(spacing: 8) {
-        StatusDot(on: true)
+        StatusDot(on: !app.isGlassesInterrupted)
         Text(text).font(Theme.label)
         Spacer()
         if app.isWatching {
@@ -82,6 +84,11 @@ private struct CameraOnBar: View {
   }
 
   private var text: String {
+    if app.isGlassesInterrupted {
+      return app.isWatching
+        ? "Glasses folded or out of reach: watching goes on when they are back"
+        : "Glasses folded or out of reach: the camera comes back with them"
+    }
     let camera = app.source?.label ?? "camera"
     return app.isWatching ? "Watching with the \(camera)" : "Camera on: the \(camera)"
   }

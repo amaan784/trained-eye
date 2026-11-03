@@ -17,15 +17,27 @@ end, under "TODOs and unverified points".
 - **Teach**: a skill name, hold to talk (or type) the request, a 10 second capture after a
   3 second countdown, then the Mac's cost estimate to agree to, the read-back to confirm or
   correct, and the run's progress.
-- **Skills**: the taught skills from `GET /skills`, an on/off switch for each, and their status.
+- **Skills**: the taught skills from `GET /skills`, an on/off switch for each, and their
+  status: Training (a `te train` run is going on Modal), Trained (a run finished), Ready (the
+  model `te serve-student` deployed knows it and `te calibrate` set its threshold), else how
+  far the teach flow got.
 - **Watch**: start and stop watching, the camera-on state, the frame the backend sees, the
   last alert (and whether it was spoken), each skill's score, the connection and the battery.
+  It says when the glasses are folded or out of reach, and after a stay in the background
+  (the screen locked) it shows what the camera gave and the socket sent and got acked meanwhile.
 - **Clips**: the clips you saved with "Save the last 10 seconds", and nothing else.
 
 While any camera is on, a bar above every screen says so. The glasses stream HEVC (`hvc1`)
-at low resolution (360x640) and 7 fps, which DAT keeps going in the background; one frame
-a second goes to the backend as JPEG over the WebSocket (three a second during a teach
-capture). Without the glasses, the iPhone's back camera does the same, with the app open.
+at low resolution (360x640) and 7 fps while watching, which DAT keeps going in the
+background, and at medium resolution (504x896) during a teach capture; one frame a second
+goes to the backend as JPEG over the WebSocket (three a second during a teach capture), and
+a keepalive ping goes every 20 seconds. Without the glasses, the iPhone's back camera does
+the same at its own 640x480, with the app open.
+
+While watching, the glasses' camera comes back by itself: after a fold or a link drop a new
+session starts once they are available again (never while a session is paused), and a
+stream that stops on its own is added again, a few times. A teach session still running on
+the Mac when the app was closed is picked up again at the next launch.
 
 ## What you need
 
@@ -105,6 +117,10 @@ keeps its own) holds:
 - `NSAppTransportSecurity` `NSAllowsLocalNetworking`, for plain `http` and `ws` to the Mac.
 - `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace`, so saved clips show in
   the Files app.
+- `UIAppFonts`: Inter 4.1's four static faces in `TrainedEye/Fonts/` (SIL Open Font
+  License, `Fonts/LICENSE.txt`). The folder is added with the rest of `TrainedEye/`; check
+  that the four `.ttf` files show under the target's Copy Bundle Resources. Without them
+  the app falls back to the system font.
 
 `TrainedEye.entitlements` has the keychain group both samples declare. CameraAccess also
 has Hotspot Configuration and Access Wi-Fi Information; BirdSpotter streams without them,
@@ -134,8 +150,9 @@ Connect the iPhone, pick it as the run destination and press Run. On the first l
    `docs/glasses-check.md`), and the app never touches it.
 
 A single tap on the glasses' touchpad pauses the stream; tap again to resume. Folding the
-glasses ends the session. Only one DAT app can use the glasses at a time, so quit
-CameraAccess or BirdSpotter first.
+glasses ends the session; while watching, a new one starts once they are unfolded and
+worn again. Only one DAT app can use the glasses at a time, so quit CameraAccess or
+BirdSpotter first.
 
 ## 7. Point the app at `te serve`
 
@@ -162,9 +179,14 @@ The app uses `GET /health`, `GET /skills`, the WebSocket at `/ws` (protocol 1, w
 In Debug builds, the Connect screen has "Use mock glasses". It pairs DAT's mock "Meta
 Glasses", powers it on, unfolds and dons it, and sets its camera feed, which the mock needs
 before any stream: an HEVC video named `mock_feed.mp4` if the target has one, else the
-iPhone's back camera. The simulator has no camera, so add a `mock_feed.mp4` there, for
-example a clip you recorded, converted with
-`ffmpeg -i clip.mov -c:v libx265 -tag:v hvc1 mock_feed.mp4`. Do not commit it.
+iPhone's back camera. `Resources/mock_feed.mp4` is a 16 second synthetic clip of a washer
+display counting down to "End" (HEVC, made by `python ios/make_mock_feed.py`), so the
+simulator, which has no camera, has a feed. While the mock is on, Fold, Unfold and "Tap the
+touchpad" run MockDeviceKit's `fold()`, `unfold()` and touchpad tap, to check that watching
+comes back after a fold and is left alone while paused. To watch for something else,
+replace the clip with one of your own, converted with `ffmpeg -i clip.mov -c:v libx265
+-tag:v hvc1 mock_feed.mp4`, and do not commit that one: real footage can show people and
+rooms.
 
 ## Privacy and policy in the app
 
@@ -185,12 +207,12 @@ example a clip you recorded, converted with
 | 2. Backend and WebSocket clients | `Network/BackendClient.swift`, `Network/WatchSocket.swift` |
 | 3. Meta's HEVC decoder (copied) | `Meta/VideoFrameDecoder.swift`, `Meta/HEVCKeyframe.swift`, `Meta/LICENSE` |
 | 4. Glasses connection and mock | `Glasses/GlassesConnection.swift`, `Glasses/MockGlasses.swift` |
-| 5. Glasses camera | `Glasses/GlassesCamera.swift` |
+| 5. Glasses camera | `Glasses/GlassesCamera.swift`, `Glasses/GlassesCamera+Stream.swift` |
 | 6. iPhone camera, throttle, speech | `Camera/FrameThrottle.swift`, `Camera/PhoneCamera.swift`, `Audio/Speaker.swift` |
 | 7. Teach client and recorder | `Models/TeachModels.swift`, `Network/TeachClient.swift`, `Audio/RequestRecorder.swift` |
 | 8. Teach flow | `Teach/TeachFlow.swift` |
 | 9. App model | `App/AppModel.swift` |
-| 10. Theme and components | `UI/Theme.swift`, `UI/Components.swift` |
+| 10. Theme and components | `UI/Theme.swift`, `UI/Components.swift`, `Fonts/` (Inter) |
 | 11. App entry and project files | `App/TrainedEyeApp.swift`, `../TrainedEye-Info.plist`, `../TrainedEye.entitlements` |
 | 12. Tabs and Connect screen | `UI/RootView.swift`, `UI/ConnectView.swift` |
 | 13. Teach screen | `UI/TeachView.swift` |
@@ -216,21 +238,51 @@ samples' calls and structure (named in each file's header) but was written for t
 
 ## TODOs and unverified points
 
-TODOs in the code:
+No TODO is left in the code, but these behaviours were written without a compiler or the
+glasses, and each needs one check on the glasses (and in the simulator where it says so):
 
-- `Glasses/GlassesCamera.swift`: check on the glasses that the stream, and the app with its
-  WebSocket, keep running with the screen locked.
-- `App/AppModel.swift`: no automatic new session after the glasses fold or the link drops
-  mid-watch; the user stops and starts watching.
-- `Network/WatchSocket.swift`: no keepalive ping; a tunnel may close a socket left idle
-  while the stream is paused.
-- `Audio/RequestRecorder.swift`: check that AVAudioRecorder records from the glasses' HFP
-  microphone (CameraAccess uses AVAudioEngine for it).
-- `UI/Theme.swift`: Inter is not bundled (downloading it needs the author's yes); once it
-  is, check its PostScript names.
-- `Glasses/MockGlasses.swift`: add an HEVC `mock_feed.mp4` for the simulator.
-- `Teach/TeachFlow.swift`: the teach capture uses the low resolution (360x640); medium may
-  teach better. A running teach session is not picked up again after a relaunch.
+- **A fold mid-watch** (`Glasses/GlassesCamera.swift`, `Glasses/GlassesCamera+Stream.swift`,
+  `App/AppModel.swift`): fold the
+  glasses while watching. The bar and the Watch screen should say they are folded or out of
+  reach, and no frames go out while the socket stays connected. Unfold them and put them on:
+  a new session should start by itself, frames come back, and the Glasses card's "Came back
+  by itself" counts one. Then tap the touchpad: nothing may restart while the stream is
+  paused. Walk out of Bluetooth range and back too. In the simulator, do the same with the
+  mock glasses' Fold, Unfold and "Tap the touchpad" buttons.
+- **The screen locked** (`App/AppModel.swift`, `Glasses/GlassesCamera+Stream.swift`): watch with the
+  glasses, lock the phone for two minutes, unlock it. The Watch screen's "Last time in the
+  background" card should show about one frame a second from the camera, sent and acked.
+  If frames came from the camera but none went out, the socket stopped in the background; if
+  many repeated frames were skipped, the decoder failed there (then render on the CPU,
+  `VTCreateCGImageFromCVPixelBuffer` or a software `CIContext`, in a wrapper around
+  `Meta/VideoFrameDecoder.swift`, which is Meta's copied file); if nothing came from the
+  camera, the DAT stream stopped. Check that an alert is spoken with the phone locked; if
+  not, give `Audio/Speaker.swift` a `.playback`, `.spokenAudio` session with `.duckOthers`.
+  Record the numbers in PROGRESS.md.
+- **The request microphone** (`Audio/RequestRecorder.swift`): hold to talk with the glasses
+  on. The Teach screen should say "glasses mic", and the request should be the wearer's
+  voice, not silence. Fold the glasses part way through a request: it should go on with the
+  iPhone's microphone and say "glasses, then iPhone mic". Without the glasses it says
+  "iPhone mic". The session mixes with other audio, as CameraAccess's does, so also check a
+  request made while music plays on the glasses.
+- **The keepalive** (`Network/WatchSocket.swift`): watch through an HTTPS tunnel, pause the
+  stream with a tap and wait two minutes: the Connection card should stay Connected. Then
+  stop `te serve` with the socket open, or turn the Mac's Wi-Fi off: within about 30 seconds
+  the card should say no pong came and try again.
+- **A teach session after a relaunch** (`Teach/TeachFlow.swift`, `Network/TeachClient.swift`):
+  send a capture and, while the Mac asks "Spend it?", close the app from the app switcher
+  and open it again. The Teach screen should show the same question (the server token must
+  be set), and answering it should carry on. After a fresh `te serve` it starts empty.
+- **Medium resolution for the teach capture** (`Glasses/GlassesCamera+Stream.swift`,
+  `App/AppModel.swift`): during a capture with the glasses, the Teach screen's frame size
+  should read 504x896 (less if the SDK lowers it for bandwidth), and the Watch screen's
+  360x640 when watching again afterwards. Compare a skill taught at medium with one at low
+  before keeping medium: AGENTS.md says lower settings give better quality per frame over
+  Bluetooth.
+- **Skills status** (`Models/Protocol.swift`, `UI/SkillsView.swift`): while `te train` runs,
+  the Skills screen should say "Training on Modal" with the run's name; after it, "Trained";
+  after `te serve-student` and `te calibrate`, "Ready, threshold" and the number. A backend
+  without the `training` and `served` fields shows the earlier lines.
 
 Unverified, because nothing was compiled or run:
 
@@ -240,7 +292,10 @@ Unverified, because nothing was compiled or run:
 - `NSAllowsLocalNetworking` letting plain `http` and `ws` reach the Mac's IP address. If it
   does not, a Debug-only ATS exception for that address is the fallback.
 - That `URLSessionWebSocketTask` and the spoken alerts keep working in the background while
-  the glasses stream.
+  the glasses stream (the screen-locked check above).
+- The two calls no sample makes: the `AVAudioEngineConfigurationChange` observer in
+  `Audio/RequestRecorder.swift` and `URLSessionWebSocketTask.sendPing` in
+  `Network/WatchSocket.swift`.
 - How the capture LED behaves (step 7 of `docs/glasses-check.md` records it).
 - That Meta Adventurer works as DAT's "Meta Glasses" model; the mock pairs `.metaGlasses`.
 - That Info.plist merging (the file plus Xcode's generated keys) gives no duplicate keys.

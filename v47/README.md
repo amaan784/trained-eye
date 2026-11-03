@@ -11,24 +11,29 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v47 (M2): te train, te watch, te calibrate
+## Build stage v47 (M2): Merging and checking the adapter
 
-te train bundles the named skills and runs the two-step smoke on Modal (--smoke), then
-saves its timing; a real run is priced from that timing at the H100 price in the
-settings (not checked yet) and asks first, always when it is over $15. te watch
-replays a video or frame folder through watch mode at one frame a second and prints
-the alerts. te calibrate takes frame logs from te watch and the time ranges where the
-condition is true, and saves the skill's threshold, which watch mode then uses.
-CLAUDE.md lists the three commands.
+backend/training/export.py merges a run's QLoRA adapter into the bf16 base on Modal,
+on one H100: the base at the pinned revision, the adapter from runs/<run>/out on the
+volume, merged with peft's merge_and_unload() and saved as safetensors with the
+processor in runs/<run>/merged, the folder the serving app will serve. It then reloads
+that folder and compares its yes or no answers with base plus adapter's on up to 50
+examples of the run's bundle, the validation split if there is one. By default the
+reference is the bf16 base with the adapter; --reference nf4 compares with the NF4
+base that training saw. Loading and prompting copy the cookbook's evaluator, the
+base's small files the save did not write, such as chat_template.jinja, are copied
+over, and tensor names are compared with the base's. backend/training/export_check.py
+is the plain Python part, run on the Mac: the examples in the evaluator's fixed order,
+the answer read after "to=user", and the agreement, where an unreadable answer never
+agrees. The result records the remote call's seconds for the Modal ledger, also when
+it fails.
 
 Files added or changed in this stage:
 
-- `CLAUDE.md` (changed): short setup, commands and conventions
-- `backend/cli.py` (changed): the te command line
-- `backend/config.py` (changed): settings: model IDs for every job, prices, spend caps
-  and data paths; secrets come from the environment or a local .env file and are never
-  printed
-- `tests/test_cli.py` (changed): tests
+- `backend/training/export.py` (new): the Modal app that merges a trained adapter and
+  checks the merged model's answers
+- `backend/training/export_check.py` (new):
+- `tests/test_export.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -41,36 +46,25 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 14%]
+    ........................................................................ [  9%]
+    ........................................................................ [ 19%]
     ........................................................................ [ 29%]
-    ........................................................................ [ 43%]
+    ........................................................................ [ 38%]
+    ........................................................................ [ 48%]
     ........................................................................ [ 58%]
-    ........................................................................ [ 72%]
+    ........................................................................ [ 67%]
+    ........................................................................ [ 77%]
     ........................................................................ [ 87%]
-    ................................................................         [100%]
-    496 passed in 12.86s
+    ........................................................................ [ 96%]
+    .......................                                                  [100%]
+    743 passed in 40.27s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli train --help
-    usage: te train [-h] --skills SKILLS --run RUN
-                    [--variant {mixed,real,synthetic}] [--limit LIMIT] [--smoke]
-                    [--estimate-only] [--yes]
-
-    options:
-      -h, --help            show this help message and exit
-      --skills SKILLS       comma-separated, e.g. washer_done
-      --run RUN             run name, e.g. exp1-mixed
-      --variant {mixed,real,synthetic}
-      --limit LIMIT         at most this many examples per skill
-      --smoke               the recipe's two-step check
-      --estimate-only       bundle and price only
-      --yes                 no question (not over $15)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -84,11 +78,20 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/meta/ledger.py`: spend ledger: estimated cost checked against the per-skill
   ($10) and global ($120) caps before each call, actual cost recorded after.
 - `backend/cli.py`: the te command line.
+- `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
+  preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
 - `backend/server.py`: the backend the iPhone app talks to: JPEG frames arrive over a
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
+- `backend/teach_session.py`: a phone teach session: the spend question before any
+  paid call, the read-back, progress lines and timeouts.
+- `backend/teach_upload.py`: the phone's teach upload: a multipart parser, the input
+  checks, the saved capture and the estimate.
+- `backend/teach_api.py`: the teach routes for the phone: /teach/start, /teach/status
+  and /teach/answer, behind SERVER_TOKEN.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
 - `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
@@ -97,6 +100,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   (real, synthetic or mixed, with a validation split and volume paths).
 - `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
   recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
+- `backend/training/export.py`: the Modal app that merges a trained adapter and checks
+  the merged model's answers.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -106,8 +111,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -132,12 +139,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 496 tests, all offline; none calls a paid API.
+- `tests/`: 743 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v48 adds the notes for these stages: the review round, what M2 has so far, and
-the steps that need the Mac or Modal.
+Stage v48 adds te export and te serve-student: the merge run from the Mac, and the
+trained model, the base or the base with adapters served by vLLM on Modal.
 
 ## Privacy and policy
 

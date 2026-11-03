@@ -123,7 +123,19 @@ private struct MockCard: View {
   var body: some View {
     Card(title: "Mock glasses (Debug)") {
       if mock.isActive {
-        Notice(text: "Mock Meta Glasses paired, on, unfolded and worn.")
+        Notice(
+          text: mock.isFolded
+            ? "Mock Meta Glasses paired and on, folded."
+            : "Mock Meta Glasses paired, on, unfolded and worn.")
+        HStack {
+          Button(mock.isFolded ? "Unfold" : "Fold") {
+            if mock.isFolded { mock.unfold() } else { mock.fold() }
+          }
+          .buttonStyle(SecondaryButtonStyle())
+          Button("Tap the touchpad") { mock.tapTouchpad() }
+            .buttonStyle(SecondaryButtonStyle())
+            .disabled(mock.isFolded)
+        }
         Button("Remove the mock glasses") { mock.stop() }
           .buttonStyle(SecondaryButtonStyle())
       } else {

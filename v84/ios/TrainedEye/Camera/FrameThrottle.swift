@@ -45,12 +45,14 @@ final class FrameThrottle: @unchecked Sendable {
     }
   }
 
-  /// Encodes a due frame as JPEG and hands it to the sink.
+  /// Encodes a due frame as JPEG and hands it to the sink, with its size in pixels.
   func deliver(_ image: UIImage) {
     let time = ProcessInfo.processInfo.systemUptime
     guard let sink = lock.withLock({ self.sink }),
       let jpeg = image.jpegData(compressionQuality: Self.jpegQuality)
     else { return }
-    sink(CapturedFrame(jpeg: jpeg, time: time))
+    let width = Int(image.size.width * image.scale)
+    let height = Int(image.size.height * image.scale)
+    sink(CapturedFrame(jpeg: jpeg, time: time, width: width, height: height))
   }
 }

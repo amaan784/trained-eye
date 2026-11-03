@@ -6,8 +6,7 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
 
 ## Setup (MacBook)
 
-    brew install python@3.12 ffmpeg  # python3 may be Apple's 3.9; ffmpeg reads video clips
-    python3.12 -m venv .venv && source .venv/bin/activate
+    python3 -m venv .venv && source .venv/bin/activate
     pip install -e ".[dev]"          # add ,train for Modal and W&B
     cp .env.example .env             # then fill in the keys
 
@@ -16,7 +15,7 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
     pytest                           # tests; never call paid APIs
     ruff check .
     te spend                         # Meta API spend from data/ledger.jsonl
-    te serve                         # backend; prints the ws:// address for the phone
+    te serve                         # backend, WebSocket at ws://<mac>:8765/ws
     te ws-selftest                   # synthetic frames through the WebSocket, in process
     te api-smoke                     # one tiny paid Muse Spark call (needs MODEL_API_KEY)
     te policy "<request>"            # local policy check, free

@@ -11,24 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v38 (M1 review): Fix: docs and notes, second round
+## Build stage v38 (M2): Training bundle and the recipe's config
 
-HANDOVER.md and PROGRESS.md give the estimator's figures for a real 10 s clip, with
-the worst case, record this round of fixes and the questions it leaves for the author
-and the organizers, and add notes for M2 (dataset paths on the Modal volume) and M4
-(shipping what regenerates the generated images). The recording protocol asks for
-movement during the teaching look and, with training on model outputs off, for a look
-in which the condition becomes true.
+backend/training/prepare.py bundles taught skills into one training set for Modal: one
+adapter learns every skill, since the condition is in the prompt. The bundle holds
+train.jsonl, val.jsonl, the images and a manifest, with image paths where the folder
+will be on the Modal volume. The real, synthetic and mixed variants are Experiment 1's
+arms; the validation split is a fixed 10% once there are enough examples, a limit
+keeps a fixed subset per skill, and the same inputs always give the same bundle.
+Skills written with a different TE_SYSTEM_IN_USER are not mixed.
+backend/training/axolotl.py writes the run's Axolotl config from Meta's QLoRA recipe
+for Muse Glimmer (meta-oss-cookbook b30ca2c): every training value is the recipe's
+own, and only the paths, the W&B names and the gradient accumulation for one H100
+change. The tests for real session clips come with the clips stage.
 
 Files added or changed in this stage:
 
-- `HANDOVER.md` (changed): how to pick the project up in a new session: state, the
-  author's rules, open items with exact commands, and the plan for M2 to M5 with the
-  facts from the docs
-- `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
-  open issues and spend
-- `docs/recording-protocol.md` (changed): what real clips to record for the three
-  skills, and how to keep training and test sessions apart
+- `backend/training/axolotl.py` (new): the Axolotl config for a training run: Meta's
+  QLoRA recipe with the run's paths, W&B names and gradient accumulation for one H100
+- `backend/training/prepare.py` (new): bundles taught skills into one training set for
+  Modal (real, synthetic or mixed, with a validation split and volume paths)
+- `tests/test_training_prep.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -41,31 +44,23 @@ Run everything from inside this folder.
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 18%]
-    ........................................................................ [ 36%]
-    ........................................................................ [ 54%]
-    ........................................................................ [ 72%]
-    ........................................................................ [ 90%]
-    ........................................                                 [100%]
-    400 passed in 7.09s
+    ........................................................................ [ 11%]
+    ........................................................................ [ 23%]
+    ........................................................................ [ 34%]
+    ........................................................................ [ 46%]
+    ........................................................................ [ 58%]
+    ........................................................................ [ 69%]
+    ........................................................................ [ 81%]
+    ........................................................................ [ 93%]
+    ...........................................                              [100%]
+    619 passed in 12.72s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli spend
-    Meta API spend (ledger: data/ledger.jsonl)
-      calls: 0  errors: 0
-      actual: $0.0000  (estimated before calls: $0.0000)
-      global cap: $120.00  remaining: $120.0000
-      per-skill cap: $10.00
-      by model:
-        (no calls yet)
-      by skill:
-        (no calls yet)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -86,6 +81,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
+- `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
+  recipe with the run's paths, W&B names and gradient accumulation for one H100.
+- `backend/training/prepare.py`: bundles taught skills into one training set for Modal
+  (real, synthetic or mixed, with a validation split and volume paths).
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -95,14 +94,22 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/sam_text.py`: our reader of SAM 3.1's output text, written from
+  the grammar in Meta's SAM 3 protocol: object ids, boxes and confidences.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
 - `backend/dataengine/labels.py`: Muse Spark labels for every image, the filter that
   keeps generated images only when Spark agrees, and agreement stats.
 - `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
+- `backend/watch/trigger.py`: when a skill fires: 3 of the last 4 frames over the
+  threshold, then the cooldown; the threshold calibration on labelled clips.
+- `backend/inference/student.py`: scores a frame with the trained model on an
+  OpenAI-compatible endpoint, read at its yes or no answer token.
+- `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
+  alert, alert messages and the frame log.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -115,12 +122,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 400 tests, all offline; none calls a paid API.
+- `tests/`: 619 tests, all offline; none calls a paid API.
 
 ## Next
 
-Milestone M2: Modal QLoRA training on the washer skill, export and serving, and the
-watch loop with smoothing, the Spark confirmation and spoken alerts on the glasses.
+Stage v39 adds the processor preflight: bundle examples rendered with the pinned
+Glimmer processor before the paid smoke.
 
 ## Privacy and policy
 

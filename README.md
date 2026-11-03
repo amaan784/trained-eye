@@ -11,27 +11,22 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v38 (M2): Training bundle and the recipe's config
+## Build stage v39 (M2): The processor preflight
 
-backend/training/prepare.py bundles taught skills into one training set for Modal: one
-adapter learns every skill, since the condition is in the prompt. The bundle holds
-train.jsonl, val.jsonl, the images and a manifest, with image paths where the folder
-will be on the Modal volume. The real, synthetic and mixed variants are Experiment 1's
-arms; the validation split is a fixed 10% once there are enough examples, a limit
-keeps a fixed subset per skill, and the same inputs always give the same bundle.
-Skills written with a different TE_SYSTEM_IN_USER are not mixed.
-backend/training/axolotl.py writes the run's Axolotl config from Meta's QLoRA recipe
-for Muse Glimmer (meta-oss-cookbook b30ca2c): every training value is the recipe's
-own, and only the paths, the W&B names and the gradient accumulation for one H100
-change. The tests for real session clips come with the clips stage.
+backend/training/preflight.py checks, before the paid smoke, how training will see a
+few bundle examples. On Modal (a CPU job, no weights) the pinned Muse Glimmer
+processor renders each example in both layouts, with the system prompt as its own turn
+and folded into the user text, counting tokens the way the cookbook does. On this Mac
+summarize() judges the result: every example within the recipe's sequence length, the
+system prompt rendered once, the yes and no token IDs, the stop tokens, and which
+TE_SYSTEM_IN_USER to use. The file imports nothing from backend, so the training app
+can copy it into the container; the test of that Modal call comes with the training
+app.
 
 Files added or changed in this stage:
 
-- `backend/training/axolotl.py` (new): the Axolotl config for a training run: Meta's
-  QLoRA recipe with the run's paths, W&B names and gradient accumulation for one H100
-- `backend/training/prepare.py` (new): bundles taught skills into one training set for
-  Modal (real, synthetic or mixed, with a validation split and volume paths)
-- `tests/test_training_prep.py` (new): tests
+- `backend/training/preflight.py` (new):
+- `tests/test_training_preflight.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -52,12 +47,12 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 23%]
     ........................................................................ [ 34%]
     ........................................................................ [ 46%]
-    ........................................................................ [ 58%]
+    ........................................................................ [ 57%]
     ........................................................................ [ 69%]
-    ........................................................................ [ 81%]
-    ........................................................................ [ 93%]
-    ...........................................                              [100%]
-    619 passed in 12.72s
+    ........................................................................ [ 80%]
+    ........................................................................ [ 92%]
+    ..................................................                       [100%]
+    626 passed in 15.01s
 
     $ ruff check .
     All checks passed!
@@ -122,12 +117,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 619 tests, all offline; none calls a paid API.
+- `tests/`: 626 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v39 adds the processor preflight: bundle examples rendered with the pinned
-Glimmer processor before the paid smoke.
+Stage v40 adds the Modal training app: Meta's QLoRA recipe on one H100 with the
+recipe's pins, the two-step smoke, detached runs and the processor preflight on a CPU.
 
 ## Privacy and policy
 

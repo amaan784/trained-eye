@@ -11,30 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v64 (M3): Hand labels for generated images
+## Build stage v65 (M3): Hand labels for recorded clips
 
-backend/labeltool/images.py is the first of two local labelling tools, for Experiment
-2's question of how often Muse Spark is wrong. sample_images() picks generated images
-at random from a skill's labels.jsonl, the same ones in the same order for the same
-seed, and never a real keyframe. The page shows one image at a time with the question
-Spark was asked, taken from the skill's spec.json, but never Spark's answer or the
-file name, since generated files are named for the answer they were made to show. The
-keys y, n and u answer yes, no or unsure, and Backspace goes back. Each answer is
-saved at once to a JSON file written in one step, the page resumes at the first image
-without an answer, and labels in the file for other images are kept. The page is
-static/images.html; static/style.css is the look both labelling tools share, with
-Inter bundled in static/fonts/ under the SIL Open Font License. te label, which starts
-the page, comes with te eval.
+backend/labeltool/clips.py is the second labelling tool: it marks where a skill's
+condition is true in a recorded clip. Its page, static/clips.html, plays the clip with
+a bar under it: [ marks where the condition becomes true and ] where it stops, Space
+plays or pauses, the arrow keys step 1 s (0.1 s with Shift), and Ctrl or Cmd with S
+saves. The ranges can be fixed in a list before saving. clean_ranges() sorts them,
+merges the ones that overlap or touch, and refuses any range that is not inside the
+clip's length. The file is one line, {"clip", "duration_s", "true"}, the format te
+calibrate --labels reads; an existing file is loaded to resume, and one that holds
+labels for a different clip is refused. The video is served with Range requests
+answered as 206, which Safari needs. Test labels come from a person only.
 
 Files added or changed in this stage:
 
-- `backend/labeltool/images.py` (new): the labelling tool for generated images, for
-  Experiment 2
-- `backend/labeltool/static/fonts/InterVariable.woff2` (new):
-- `backend/labeltool/static/fonts/LICENSE.txt` (new):
-- `backend/labeltool/static/images.html` (new):
-- `backend/labeltool/static/style.css` (new):
-- `tests/test_labeltool_images.py` (new): tests
+- `backend/labeltool/clips.py` (new): the labelling tool for clips: where the
+  condition is true, saved as time ranges
+- `backend/labeltool/static/clips.html` (new):
+- `tests/test_labeltool_clips.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -53,16 +48,16 @@ set and no network to Meta); the output under each is what they printed.
     $ python -m pytest
     ........................................................................ [  9%]
     ........................................................................ [ 18%]
-    ........................................................................ [ 28%]
+    ........................................................................ [ 27%]
     ........................................................................ [ 37%]
-    ........................................................................ [ 47%]
-    ........................................................................ [ 56%]
-    ........................................................................ [ 66%]
-    ........................................................................ [ 75%]
-    ........................................................................ [ 85%]
-    ........................................................................ [ 94%]
-    .......................................                                  [100%]
-    759 passed in 35.44s
+    ........................................................................ [ 46%]
+    ........................................................................ [ 55%]
+    ........................................................................ [ 64%]
+    ........................................................................ [ 74%]
+    ........................................................................ [ 83%]
+    ........................................................................ [ 92%]
+    .........................................................                [100%]
+    777 passed in 41.73s
 
     $ ruff check .
     All checks passed!
@@ -131,6 +126,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   OpenAI-compatible endpoint, read at its yes or no answer token.
 - `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
   alert, alert messages and the frame log.
+- `backend/labeltool/clips.py`: the labelling tool for clips: where the condition is
+  true, saved as time ranges.
 - `backend/labeltool/images.py`: the labelling tool for generated images, for
   Experiment 2.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
@@ -146,12 +143,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 759 tests, all offline; none calls a paid API.
+- `tests/`: 777 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v65 adds the clip labelling page: marking where a skill's condition is true in a
-recorded clip, saved as the time ranges te calibrate reads.
+Stage v66 adds the evaluation metrics from te watch frame logs and human labels (frame
+and event scores, false alarms per hour, latency, dollars per hour) and the shared SVG
+chart style.
 
 ## Privacy and policy
 

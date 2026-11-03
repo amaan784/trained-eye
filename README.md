@@ -11,25 +11,26 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v61 (M2): iOS: Connect and Teach screens
+## Build stage v62 (M2): iOS: Skills and Watch screens
 
-ios/TrainedEye/UI/ConnectView.swift is where the app finds the Mac and the glasses.
-The backend card takes the address te serve prints and the server token, says what
-kind of address it is, and checks the connection with GET /health, then fetches the
-skills. The glasses card shows the Meta AI registration, the paired glasses, their
-battery and the camera's state, with buttons to connect or disconnect and to update
-the glasses or the app on them when needed. A segmented picker chooses the camera, and
-Debug builds add a card for the mock glasses with fold, unfold and a touchpad tap.
-ios/TrainedEye/UI/TeachView.swift is the Teach screen: the name, hold to talk (at most
-30 seconds) or type the request, with a note that skills never cover a person, then
-the 10 second capture with its preview, frame size and countdown, and Send to the Mac.
-During the run on the Mac it shows the estimate to agree to, the read-back to confirm
-or correct, the last 8 progress lines, and the result and spend.
+ios/TrainedEye/UI/SkillsView.swift lists the taught skills from GET /skills, fetched
+when the screen opens, on a pull or with Refresh. Each has a switch for watch mode,
+its alert text, its status (training on Modal, trained, ready with its threshold, else
+how far the teach flow got), the newest run's time and its quiet time after an alert
+in minutes. Changing a switch while watching says hello again.
+ios/TrainedEye/UI/WatchView.swift starts and stops watching and shows which camera is
+on and the newest frame; the last alert, with its probability, whether Muse Spark
+agreed and whether it was spoken on the glasses; each watched skill's latest score
+next to its threshold; the connection with frames sent and acked; the last stay in the
+background with what the camera gave, what went out and what came back acked; and the
+glasses' camera state, frame size, recoveries and battery. The Save the last 10
+seconds button is on only while watching, and the screen says frames are stored only
+that way.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/UI/ConnectView.swift` (new):
-- `ios/TrainedEye/UI/TeachView.swift` (new):
+- `ios/TrainedEye/UI/SkillsView.swift` (new):
+- `ios/TrainedEye/UI/WatchView.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -57,7 +58,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 35.24s
+    755 passed in 36.80s
 
     $ ruff check .
     All checks passed!
@@ -142,9 +143,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v62 adds the Skills screen (each taught skill with its watch switch and status)
-and the Watch screen (alerts, scores, the connection, the glasses and the background
-counts).
+Stage v63 adds the clips the user saves, as frame folders te watch can replay, and
+ios/README.md: how to build the app in Xcode and what to check on the glasses.
 
 ## Privacy and policy
 

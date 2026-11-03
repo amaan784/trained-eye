@@ -11,50 +11,80 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v30 (M1 review): Fix: docs and notes
+## Build stage v31 (M2): Settings and the spend ledger
 
-The glasses check now tests that the phone reaches the Mac while CameraAccess is
-streaming (ping from the Mac during a one-minute preview); before, it switched to
-Safari, which ends the stream, so it could not tell. HANDOVER.md gains the build
-spec's visual design rules (dark and minimal, one accent colour, Inter, no gradients,
-the four signature visuals) for the iOS app and the playground, and the notes record
-the review and these fixes.
+The settings every later stage reads arrive here. STUDENT_API_KEY (the trained model's
+endpoint) and SERVER_TOKEN (teaching from the phone) are secrets like the other keys:
+read from .env, never printed. The student endpoint is set with TE_STUDENT_URL,
+TE_STUDENT_MODEL and TE_STUDENT_MAX_TOKENS, TE_SYSTEM_IN_USER folds the system prompt
+into new datasets, and TE_DATA_DIR may start with ~. The Modal GPU price, the $15 rule
+and the $150 Modal credit live in config.py too. The spend ledger now reserves each
+call's estimate until the call is recorded, under a lock and an flock beside the
+ledger, so calls in flight in any thread or process count against the caps together; a
+reservation left by a thread or process that ended is dropped. Entries record the
+images and text tokens of token-priced calls, so image_tokens() can tell what an image
+costs from the ledger's own usage. CI installs ffmpeg for the video tests.
 
 Files added or changed in this stage:
 
-- `CLAUDE.md` (changed): short setup, commands and conventions
-- `HANDOVER.md` (changed): how to pick the project up in a new session: state, the
-  author's rules, open items with exact commands, and the plan for M2 to M5 with the
-  facts from the docs
-- `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
-  open issues and spend
-- `docs/glasses-check.md` (changed): how to check, with Meta's own sample app, that
-  the glasses stream camera frames, deliver the mic and play audio
+- `.env.example` (changed): template for the keys (copy to .env)
+- `.github/workflows/ci.yml` (changed): CI: ruff and pytest on every push
+- `backend/config.py` (changed): settings: model IDs for every job, prices, spend caps
+  and data paths; secrets come from the environment or a local .env file and are never
+  printed
+- `backend/meta/ledger.py` (changed): spend ledger: estimated cost checked against the
+  per-skill ($10) and global ($120) caps before each call, actual cost recorded after
+- `tests/test_config.py` (changed): tests
+- `tests/test_ledger.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
 
 Run everything from inside this folder.
 
-    python3 -m venv .venv && source .venv/bin/activate
+    python3.12 -m venv .venv && source .venv/bin/activate   # Mac: brew install python@3.12
     pip install -e ".[dev,train]"
     cp .env.example .env    # then fill in the keys
 
 ## Try it
 
-These commands were run inside this folder on 2026-10-31 (Python 3.13, Linux, no keys
+These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no keys
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 24%]
-    ........................................................................ [ 48%]
-    ........................................................................ [ 72%]
-    ........................................................................ [ 96%]
-    .........                                                                [100%]
-    297 passed in 5.11s
+    ........................................................................ [ 22%]
+    ........................................................................ [ 45%]
+    ........................................................................ [ 67%]
+    ........................................................................ [ 90%]
+    ..............................                                           [100%]
+    318 passed in 6.70s
 
     $ ruff check .
     All checks passed!
+
+    $ python -m backend.config
+    Trained Eye settings
+      base_url: https://api.meta.ai/v1
+      data_dir: data
+      spend caps: $10.00 per skill, $120.00 global
+      train on model outputs: yes
+      student: not set (TE_STUDENT_URL) (trained-eye), at most 512 tokens a reply
+      system prompt in new datasets: its own turn
+      models:
+        transcribe    muse-voice-transcribe-1.0
+        compiler      muse-wonder-1.0
+        sam           sam-3.1
+        image         muse-image-1.0
+        labeler       muse-spark-1.3
+        confirm       muse-spark-1.3
+        student_base  meta-models/Muse-Glimmer-30B
+                      (student_base revision a4e59da52a7b)
+      secrets:
+        MODEL_API_KEY    missing
+        HF_TOKEN         missing
+        WANDB_API_KEY    missing
+        STUDENT_API_KEY  missing
+        SERVER_TOKEN     missing
 
     $ python -m backend.cli spend
     Meta API spend (ledger: data/ledger.jsonl)
@@ -95,8 +125,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   frames from the 10 second teaching clip.
 - `backend/dataengine/dataset.py`: the Axolotl dataset writer, in Meta's recipe format
   (image path part, then text; 512x512 padded PNGs).
-- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe; the
-  raw output is kept and parsing is still to come.
+- `backend/dataengine/roi.py`: the region of interest: SAM 3.1 on each keyframe, its
+  boxes scaled to the keyframe, and a crop around each box for the dataset.
 - `backend/dataengine/synth.py`: the synthetic set: a deterministic plan of Muse Image
   edits of the keyframes (positives, hard negatives, nuisance variation), saved
   untouched with a manifest.
@@ -115,13 +145,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 297 tests, all offline; none calls a paid API.
+- `tests/`: 318 tests, all offline; none calls a paid API.
 
 ## Next
 
-The confirmed findings from the second half of the review (F30 to F62), then milestone
-M2: Modal QLoRA training on the washer skill, export and serving, and the watch loop
-with smoothing, the Spark confirmation and spoken alerts on the glasses.
+Stage v32 adds the policy check's new rules (hiding the glasses' capture light,
+politics and war) and checks on the compiled skill's own wording.
 
 ## Privacy and policy
 

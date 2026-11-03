@@ -150,6 +150,8 @@ def test_paths_follow_the_project_not_the_current_folder(tmp_path, monkeypatch):
         assert s.has_secret("MODEL_API_KEY") and s.skill_cap_usd == 3
     assert load_settings(env={"TE_DATA_DIR": "alt"}).data_dir == project / "alt"
     assert load_settings(env={"TE_DATA_DIR": "/abs/te"}).data_dir == Path("/abs/te")
+    home = load_settings(env={"TE_DATA_DIR": "~/te-data"}).data_dir
+    assert home == Path("~/te-data").expanduser() and "~" not in str(home)
     assert config._ROOT == ROOT and (ROOT / "pyproject.toml").is_file()
 
 
@@ -161,7 +163,8 @@ def test_secrets_never_shown():
     assert FAKE_KEY not in repr(s)
     text = describe(s)
     assert FAKE_KEY not in text
-    assert "MODEL_API_KEY  set" in text and "WANDB_API_KEY  missing" in text
+    assert "MODEL_API_KEY    set" in text and "WANDB_API_KEY    missing" in text
+    assert "STUDENT_API_KEY  missing" in text
 
 
 def test_empty_values_mean_unset():
@@ -185,3 +188,31 @@ def test_module_entry_point(tmp_path):
     ).stdout
     assert out.startswith("Trained Eye settings")
     assert FAKE_KEY not in out
+
+
+def test_student_endpoint_settings():
+    s = load_settings(env={}, env_file=None)
+    assert s.student_url is None and s.student_model == "trained-eye"
+    assert "student: not set (TE_STUDENT_URL)" in describe(s)
+    s = load_settings(env={"TE_STUDENT_URL": " http://192.168.1.23:8080/v1/ ",
+                           "TE_STUDENT_MODEL": "washer-v1"}, env_file=None)
+    assert (s.student_url, s.student_model) == ("http://192.168.1.23:8080/v1", "washer-v1")
+
+
+def test_an_unknown_home_folder_is_a_config_error():
+    with pytest.raises(ConfigError, match="TE_DATA_DIR"):
+        load_settings(env={"TE_DATA_DIR": "~no_such_user_te_8f3/x"}, env_file=None)
+
+
+@pytest.mark.parametrize("raw, expected", [("", False), ("0", False), ("1", True), ("on", True)])
+def test_the_system_in_user_switch(raw, expected):
+    s = load_settings(env={"TE_SYSTEM_IN_USER": raw}, env_file=None)
+    assert s.system_in_user is expected
+    shown = "folded into the user text" if expected else "its own turn"
+    assert f"system prompt in new datasets: {shown}" in describe(s)
+
+
+@pytest.mark.parametrize("raw", ["2", "folded", "“1”"])
+def test_unknown_system_in_user_values_are_config_errors(raw):
+    with pytest.raises(ConfigError, match="TE_SYSTEM_IN_USER must be 1 or 0"):
+        load_settings(env={"TE_SYSTEM_IN_USER": raw}, env_file=None)

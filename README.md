@@ -11,29 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v42 (M2): te train on Modal
+## Build stage v43 (M2): Teach sessions from the phone
 
-backend/cli_train.py adds te train, which bundles taught skills and trains the student
-with the Modal training app. --smoke runs the recipe's two-step check on one H100 and
-saves its timing. A real run is priced from that timing, the smoke's setup time plus
-the examples at its measured samples per second at config.py's H100 price, and asks
-past $15 even with --yes, but that path reads backend/eval/plan.py, so it works from
-v74, where its tests come. A job that would pass the Modal credit asks even with
---yes, and so does --wandb-artifacts, after saying what becomes visible on W&B. Each
-run is tagged with its experiment, skills, mix, data hash and commit, its status file
-in data/train says running and then done or failed, and its GPU time goes into the
-Modal ledger, also when it fails or is interrupted. --detach leaves the run going in
-Modal and --collect fetches its result from the volume later; --preflight runs the
-processor check on a CPU. The training app's test now checks the volume name te train
-uses.
+backend/teach_session.py runs one teach started from the phone:
+backend.teach.run_teach in a background thread, with its questions answered later over
+HTTP. The spend question comes first, here, because run_teach's first paid step, the
+transcription, comes before its only question, the read-back. A no to the read-back
+that carries a correction, at most 300 characters, compiles the spec again with it
+from the cached transcript, and each correction replaces the one before, as with te
+teach --correct. A question nobody answers within 600 seconds counts as no. status()
+gives the state (waiting for the spend, running, waiting for the read-back, then done,
+stopped or failed), the open question, the progress lines, what was spent and, at the
+end, a summary of the dataset and the labels. stop(), for when the server shuts down,
+refuses the next paid call, cuts a retry's wait short, answers an open question no and
+waits for the call in flight, so the ledger records it. Failed calls and spend caps
+end the run with what to do next. Its HTTP routes come in v44.
 
 Files added or changed in this stage:
 
-- `backend/cli.py` (changed): the te command line
-- `backend/cli_train.py` (new): te train: the smoke, the priced run, detach and
-  collect, the preflight
-- `tests/test_cli_train.py` (new): tests
-- `tests/test_modal_train.py` (changed): tests
+- `backend/teach_session.py` (new): a phone teach session: the spend question before
+  any paid call, the read-back, progress lines and timeouts
+- `tests/test_teach_session.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -51,56 +49,19 @@ set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
     ........................................................................ [ 10%]
-    ........................................................................ [ 21%]
+    ........................................................................ [ 20%]
     ........................................................................ [ 31%]
-    ........................................................................ [ 42%]
-    ........................................................................ [ 53%]
-    ........................................................................ [ 63%]
-    ........................................................................ [ 74%]
-    ........................................................................ [ 84%]
-    ........................................................................ [ 95%]
-    ...............................                                          [100%]
-    679 passed in 31.54s
+    ........................................................................ [ 41%]
+    ........................................................................ [ 52%]
+    ........................................................................ [ 62%]
+    ........................................................................ [ 73%]
+    ........................................................................ [ 83%]
+    ........................................................................ [ 94%]
+    .........................................                                [100%]
+    689 passed in 27.06s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli train --help
-    usage: te train [-h] [--skills SKILLS] [--run RUN]
-                    [--variant {mixed,real,synthetic}] [--limit LIMIT]
-                    [--max-steps MAX_STEPS]
-                    [--dataset {dataset,dataset-unfiltered}] [--smoke]
-                    [--preflight] [--detach] [--collect RUN]
-                    [--wandb-entity WANDB_ENTITY] [--wandb-artifacts]
-                    [--estimate-only] [--yes]
-
-    options:
-      -h, --help            show this help message and exit
-      --skills SKILLS       comma-separated, e.g. washer_done (needed but with
-                            --collect)
-      --run RUN             run name, e.g. exp1-mixed (needed but with --collect)
-      --variant {mixed,real,synthetic}
-      --limit LIMIT         at most this many examples per skill
-      --max-steps MAX_STEPS
-                            fixed optimizer steps for Experiments 1 to 3
-                            (backend/eval/plan.py)
-      --dataset {dataset,dataset-unfiltered}
-                            the skill's dataset folder (Experiment 2: dataset-
-                            unfiltered)
-      --smoke               the recipe's two-step check
-      --preflight           instead of training: render a few examples with the
-                            pinned processor on Modal (CPU): lengths, the system
-                            turn, the yes/no target
-      --detach              modal run --detach: the run goes on if this Mac sleeps
-                            or disconnects (then te train --collect)
-      --collect RUN         fetch a detached run's result from the Modal volume
-                            and print it as te train does
-      --wandb-entity WANDB_ENTITY
-                            the W&B team for the run (default: your own account)
-      --wandb-artifacts     also upload the bundle and the adapter as W&B
-                            Artifacts (asks first, even with --yes)
-      --estimate-only       bundle and price only
-      --yes                 no question (not over $15)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -121,6 +82,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   recorded from the reported usage.
 - `backend/server.py`: the backend the iPhone app talks to: JPEG frames arrive over a
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
+- `backend/teach_session.py`: a phone teach session: the spend question before any
+  paid call, the read-back, progress lines and timeouts.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
 - `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
@@ -166,13 +129,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 679 tests, all offline; none calls a paid API.
+- `tests/`: 689 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v43 adds the teach session behind teaching from the phone: run_teach in a
-background thread, the spend question first, read-back corrections, timeouts and a
-clean stop.
+Stage v44 adds the phone's teach API: the capture uploaded, checked and priced, then
+the spend and read-back questions answered over HTTP, each request with the server
+token.
 
 ## Privacy and policy
 

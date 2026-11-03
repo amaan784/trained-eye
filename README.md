@@ -11,27 +11,26 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v77 (M3): te replay: filling the plan's logs
+## Build stage v78 (M4): Face blurring
 
-backend/cli_replay.py adds te replay, registered by backend/cli.py. te replay --run
-<run> reads eval/plan.json, refuses a run the plan does not name (or one that reads
-another run's replays, naming that run), and replays only the clips whose logs do not
-exist yet. With the student it needs TE_STUDENT_URL, warns when te serve-student last
-deployed another run, and waits for the endpoint to warm up. The validation clips are
-replayed first and the run's threshold is calibrated on them as te calibrate --run
-does, and again when their labels change later; a skill whose calibration fails or is
-missing keeps its test clips pending unless --threshold is given, so no test log is
-scored at the 0.5 default. With the spark scorer the frames are priced and te replay
-asks before sending any, even with --yes when the price is over $15, and every
-threshold is 1.0, so only a yes counts. At the end it says how many clips are ready
-for make eval and why the rest are still pending. tests/test_replay.py also covers
-replay.py from v76.
+backend/release/faces.py blurs faces in anything published. blur_boxes blurs given
+boxes with Pillow alone, first shrinking each box to 8 pixels across its shorter side,
+so the detail is gone and not only softened. detect_faces uses the Haar cascades
+OpenCV ships (frontal, and profile facing either way) and imports OpenCV only when
+called, naming opencv-python-headless in its error. The cascades miss small, dark,
+tilted or covered faces, so manual boxes, per image file or per stretch of a video,
+are added to the detector's, and a box that misses the picture or falls on no frame is
+refused before anything is written. Every output is rebuilt from the pixels alone:
+EXIF, XMP and ICC are left out and an EXIF rotation is applied first. It is for real
+footage only, as Muse Image outputs keep their provenance. blur_folder writes
+sources.json (each original's SHA-256 to its blurred file), and blur_video runs
+ffmpeg, drops the audio and the container metadata, and writes a blur record with the
+hashes of the source and the output.
 
 Files added or changed in this stage:
 
-- `backend/cli.py` (changed): the te command line
-- `backend/cli_replay.py` (new): te replay: the recorded test clips through watch mode
-- `tests/test_replay.py` (new): tests
+- `backend/release/faces.py` (new):
+- `tests/test_faces.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -52,49 +51,19 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 15%]
     ........................................................................ [ 23%]
     ........................................................................ [ 31%]
-    ........................................................................ [ 39%]
-    ........................................................................ [ 47%]
-    ........................................................................ [ 55%]
-    ........................................................................ [ 63%]
-    ........................................................................ [ 71%]
-    ........................................................................ [ 79%]
-    ........................................................................ [ 87%]
-    ........................................................................ [ 95%]
-    .....................................                                    [100%]
-    901 passed in 61.92s (0:01:01)
+    ....................................s................................... [ 38%]
+    ........................................................................ [ 46%]
+    ........................................................................ [ 54%]
+    ........................................................................ [ 62%]
+    ........................................................................ [ 70%]
+    ........................................................................ [ 77%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 93%]
+    ............................................................             [100%]
+    923 passed, 1 skipped in 69.67s (0:01:09)
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli replay --help
-    usage: te replay [-h] [--plan PLAN] --run RUN [--scorer {student,spark}]
-                     [--model MODEL] [--fps FPS] [--threshold THRESHOLD]
-                     [--max-tokens MAX_TOKENS] [--no-cloud]
-                     [--warm-up-s WARM_UP_S] [--yes]
-
-    options:
-      -h, --help            show this help message and exit
-      --plan PLAN           the evaluation plan
-      --run RUN             whose clips: a run of the plan, e.g. exp1-mixed (the
-                            model TE_STUDENT_URL serves), exp4-base or exp4-spark
-      --scorer {student,spark}
-                            who scores the frames (default: what the plan says for
-                            the run; spark is paid and asks)
-      --model MODEL         the served model name (default TE_STUDENT_MODEL), e.g.
-                            muse-glimmer for exp4-base, or the run's name with te
-                            serve-student --runs
-      --fps FPS             frames scored per second (default 1, as te watch)
-      --threshold THRESHOLD
-                            one threshold for every skill, instead of the run's
-                            calibrated one
-      --max-tokens MAX_TOKENS
-                            the student's reply budget (default
-                            TE_STUDENT_MAX_TOKENS)
-      --no-cloud            skip the Muse Spark check on test clip alerts
-      --warm-up-s WARM_UP_S
-                            how long to wait for a cold endpoint to answer
-                            (default 900; 0 skips the warm-up)
-      --yes                 with the spark scorer: no question (not over $15)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -188,13 +157,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 901 tests, all offline; none calls a paid API.
+- `tests/`: 923 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v78 adds face blurring for anything published: OpenCV's Haar cascades plus
-manual boxes, every output rebuilt without its metadata, and a blur record for each
-video.
+Stage v79 adds the Hugging Face model card, written only from the recipe, the bundle
+manifest and the eval results, under the base model's apache-2.0 license.
 
 ## Privacy and policy
 

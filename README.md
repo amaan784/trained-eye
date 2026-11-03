@@ -11,32 +11,31 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v73 (M3): Session clips and Spark's error rate
+## Build stage v74 (M3): The experiment plan and its price
 
-backend/dataengine/realclips.py turns the labelled session clips of the recording
-protocol into real examples for Experiment 1: session 1 clips train, session 2 clips
-only validate, and session 3 test clips are never read. Frames are sampled at 1 fps; a
-frame inside a labelled range answers yes and one outside no, and frames within 1.5 s
-of a change are left out, as the moment of change is unclear. The examples go to
-dataset-clips/ with the teach dataset's prompt layout, and clips without usable labels
-are listed as skipped. backend/eval/spark_errors.py compares Muse Spark's labels with
-the hand labels from the labelling page: Spark's error rate with a 95% Wilson
-interval, a confusion table, and the error rates of the generated-for labels and of
-the ones the filter keeps. write_unfiltered_dataset() writes dataset-unfiltered/,
-every generated image with the label it was made for. docs/recording-protocol.md gains
-notes on recording the teach look. The bundle tests for session clips and the keyframe
-crop test come back here; the te clips test arrives in v75 with that command.
+backend/eval/plan.py lists every te train run of Experiments 1 to 3 with its
+arguments: exp1-real, exp1-synthetic and exp1-mixed, exp2-filtered and
+exp2-unfiltered, and exp3-25 to exp3-300 for 25, 50, 100, 200 and 300 generated images
+per skill. Every run trains the same fixed optimizer steps, one epoch over 300 images
+per skill, so Experiment 3's curve measures images rather than steps. Runs that would
+train the same bundle are marked as repeats of the first, which the printed plan says
+can be skipped. plan_cost() prices the runs from the smoke's timing as te train does,
+adds the final run, an export per model that needs one, a guessed number of serving
+hours per evaluated model and the Modal spend so far, and compares the total with the
+$150 credit; runs already finished on this Mac count in the spend instead.
+spark_usd_per_check() gives a Spark check's price, measured or estimated. The
+held-back tests of te train's pricing and fixed steps, te watch --scorer spark, the
+credit check before te train and te export, and the plan's Spark price come back here.
 
 Files added or changed in this stage:
 
-- `backend/dataengine/realclips.py` (new):
-- `backend/eval/spark_errors.py` (new):
-- `docs/recording-protocol.md` (changed): what real clips to record for the three
-  skills, and how to keep training and test sessions apart
-- `tests/test_realclips.py` (new): tests
-- `tests/test_spark_errors.py` (new): tests
-- `tests/test_teach.py` (changed): tests
-- `tests/test_training_prep.py` (changed): tests
+- `backend/eval/plan.py` (new): the experiment plan: every training run with fixed
+  steps and its price
+- `tests/test_cli_serving.py` (changed): tests
+- `tests/test_cli_train.py` (changed): tests
+- `tests/test_cli_watch.py` (changed): tests
+- `tests/test_ledger.py` (changed): tests
+- `tests/test_plan.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -55,17 +54,18 @@ set and no network to Meta); the output under each is what they printed.
     $ python -m pytest
     ........................................................................ [  8%]
     ........................................................................ [ 16%]
-    ........................................................................ [ 25%]
-    ........................................................................ [ 33%]
+    ........................................................................ [ 24%]
+    ........................................................................ [ 32%]
     ........................................................................ [ 41%]
-    ........................................................................ [ 50%]
-    ........................................................................ [ 58%]
-    ........................................................................ [ 66%]
-    ........................................................................ [ 75%]
-    ........................................................................ [ 83%]
-    ........................................................................ [ 91%]
-    .......................................................................  [100%]
-    863 passed in 48.69s
+    ........................................................................ [ 49%]
+    ........................................................................ [ 57%]
+    ........................................................................ [ 65%]
+    ........................................................................ [ 73%]
+    ........................................................................ [ 82%]
+    ........................................................................ [ 90%]
+    ........................................................................ [ 98%]
+    .............                                                            [100%]
+    877 passed in 57.50s
 
     $ ruff check .
     All checks passed!
@@ -142,6 +142,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
 - `backend/eval/report.py`: the evaluation runner: the plan, results.json, results.md
   and the SVG charts.
+- `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
+  its price.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -155,12 +157,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 863 tests, all offline; none calls a paid API.
+- `tests/`: 877 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v74 adds the experiment plan: every training run of Experiments 1 to 3 at the
-same fixed steps, priced from the smoke with exports, serving and the Modal credit.
+Stage v75 adds te experiments, te unfiltered, te clips, te spark-errors and te
+regress, and eval/plan.json written from the experiment plan with its test and
+validation clips.
 
 ## Privacy and policy
 

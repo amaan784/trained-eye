@@ -295,3 +295,15 @@ def test_image_tokens_read_what_the_client_records(tmp_path):
                         usage={"prompt_tokens": 1450, "completion_tokens": 9},
                         input_images=1, input_text_tokens=250))
     assert image_tokens(SETTINGS, ledger) == ImageTokens(1200, 1)
+
+
+def test_the_plans_spark_price_uses_the_measured_image_tokens(tmp_path):
+    from backend.eval.plan import spark_usd_per_check
+
+    settings = load_settings(env={"TE_DATA_DIR": str(tmp_path)}, env_file=None)
+    price = settings.price(SPARK_MODEL)
+    assert spark_usd_per_check(settings) == round(token_cost(price, 1500 + 250, 1024), 6)
+    Ledger(settings.ledger_path, 10.0, 120.0).record(Entry(
+        SPARK_MODEL, "/chat/completions", 0.01, 0.002, input_images=1, input_text_tokens=250,
+        usage={"prompt_tokens": 1050, "completion_tokens": 9}))
+    assert spark_usd_per_check(settings) == round(token_cost(price, 800 + 250, 1024), 6)

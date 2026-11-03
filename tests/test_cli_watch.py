@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from backend import cli
-from tests.test_cli import taught, write_clip
+from tests.test_cli import answer, taught, use_transport, write_clip
+from tests.test_teach import FakeMeta
 
 
 @pytest.fixture
@@ -68,6 +69,41 @@ def test_calibrate_writes_the_threshold_watch_mode_then_uses(env, capsys):
     assert cli.main(["calibrate", "--skill", "washer_done", "--log", str(log), "--log", str(log),
                      "--labels", str(labels)]) == 2
     assert "one --labels file for each --log" in capsys.readouterr().err
+
+
+def test_watch_with_spark_asks_first_and_only_a_yes_fires(env, monkeypatch, capsys):
+    from backend.eval import spark_scorer
+    from backend.inference import student
+
+    taught(env)
+    replies = []
+
+    class Fake:
+        def __init__(self, client, latency_log=None):
+            pass
+
+        def score(self, image, spec):
+            return student.Score(replies.pop(0), "yes", 0.1)
+
+        def summary(self):
+            return {"frames": 5}
+
+    monkeypatch.setattr(spark_scorer, "SparkScorer", Fake)
+    clip = str(write_clip(env / "clip", n=5))
+    args = ["watch", "--skills", "washer_done", "--clip", clip, "--scorer", "spark"]
+    prompts = answer(monkeypatch, "n")
+    assert cli.main(args) == 1 and len(prompts) == 1
+    assert "Muse Spark on 5 frames x 1 skills" in capsys.readouterr().out
+    log = env / "eval/frames.jsonl"
+    log.parent.mkdir()
+    log.write_text("a line from an earlier run\n")
+    replies[:] = [0.5] * 5  # unsure is not a yes
+    assert cli.main([*args, "--yes", "--log", str(log)]) == 0
+    assert "washer_done:" not in capsys.readouterr().out
+    assert "earlier run" not in log.read_text() and len(log.read_text().splitlines()) == 5
+    replies[:] = [1.0] * 5
+    assert cli.main([*args, "--yes", "--log", str(log)]) == 0
+    assert 'washer_done: "Laundry\'s done."' in capsys.readouterr().out
 
 
 def scoring(monkeypatch, p=0.9):
@@ -193,3 +229,21 @@ def test_a_skill_wide_calibrate_says_when_te_serve_uses_the_served_run_s(env, ca
     assert "run exp1-mixed's own threshold" in capsys.readouterr().out
     assert cli.main([*calibrate, "--run", "exp1-mixed"]) == 0
     assert "te serve scores" not in capsys.readouterr().out
+
+
+def test_watch_with_spark_as_the_scorer_prices_and_asks_first(env, monkeypatch, capsys):
+    taught(env)
+    fake = FakeMeta(answer=lambda label, real: "yes")
+    use_transport(monkeypatch, fake)
+    clip = write_clip(env / "clip", n=4)
+    prompts = answer(monkeypatch, "n")
+    assert cli.main(["watch", "--skills", "washer_done", "--clip", str(clip),
+                     "--scorer", "spark"]) == 1
+    assert prompts and fake.calls == {}  # nothing paid before the yes
+    log = env / "replay.jsonl"
+    assert cli.main(["watch", "--skills", "washer_done", "--clip", str(clip), "--scorer",
+                     "spark", "--yes", "--no-cloud", "--log", str(log)]) == 0
+    out = capsys.readouterr().out
+    assert "Muse Spark on 4 frames x 1 skills" in out and '"frames": 4' in out
+    rows = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [r["p"] for r in rows] == [1.0] * 4

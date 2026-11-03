@@ -10,6 +10,7 @@ import pytest
 
 from backend import cli, cli_serving
 from tests.test_cli import TRAIN, answer, fake_modal, taught
+from tests.test_cli_train import SMOKE_RESULT
 
 
 @pytest.fixture
@@ -86,6 +87,23 @@ def test_serve_student_records_the_served_run_and_stop_clears_it(env, monkeypatc
     from backend.training import runs
 
     assert runs.serving(env / "data") is None and runs.serving_known(env / "data")  # stopped
+
+
+def test_train_and_export_ask_when_the_modal_credit_would_run_out(env, monkeypatch, capsys):
+    from backend.training import gpu_ledger
+
+    taught(env)
+    (env / "data/train").mkdir(parents=True)
+    (env / "data/train/smoke-timing.json").write_text(json.dumps(SMOKE_RESULT))
+    gpu_ledger.record(env / "data", "train", "earlier", 149.5 / 3.95 * 3600)
+    runs = fake_modal(monkeypatch, {"seconds": 990.0, "ok": True})
+    prompts = answer(monkeypatch, "n")
+    assert cli.main([*TRAIN, "--yes"]) == 1 and runs == [] and len(prompts) == 1
+    assert "plus this $1.01 would pass the $150 of Modal credit" in capsys.readouterr().out
+    prompts = answer(monkeypatch, "n")
+    (env / "data/train/exp1-mixed/manifest.json").write_text("{}")
+    assert cli.main(["export", "--run", "exp1-mixed", "--yes"]) == 1 and runs == []
+    assert "plus this $11.85 would pass" in capsys.readouterr().out and len(prompts) == 1
 
 
 def test_export_records_the_timed_remote_call_also_when_it_fails(env, monkeypatch, capsys):

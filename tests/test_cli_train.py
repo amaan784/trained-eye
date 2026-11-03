@@ -20,6 +20,13 @@ def env(tmp_path, monkeypatch):
     return tmp_path
 
 
+def test_train_needs_a_smoke_timing_before_a_real_run(env, monkeypatch, capsys):
+    taught(env)
+    runs = fake_modal(monkeypatch)
+    assert cli.main(TRAIN) == 2
+    assert "run the same command with --smoke first" in capsys.readouterr().err and runs == []
+
+
 def test_train_smoke_asks_runs_modal_and_saves_the_timing(env, monkeypatch, capsys):
     taught(env)
     runs = fake_modal(monkeypatch, {"seconds": 900.0, "train_runtime": 60.0,
@@ -41,6 +48,32 @@ def test_train_smoke_asks_runs_modal_and_saves_the_timing(env, monkeypatch, caps
     assert "bundle exp1-mixed:" in out and "smoke timing saved" in out
 
 
+def test_train_prices_the_real_run_from_the_smoke_and_asks(env, monkeypatch, capsys):
+    taught(env)
+    (env / "data/train").mkdir(parents=True)
+    (env / "data/train/smoke-timing.json").write_text(json.dumps(
+        {"seconds": 900.0, "train_runtime": 60.0, "train_samples_per_second": 0.5}))
+    runs = fake_modal(monkeypatch, {"seconds": 990.0, "ok": True})
+    assert cli.main([*TRAIN, "--estimate-only"]) == 0
+    out = capsys.readouterr().out
+    # setup 840 s + 40 examples / 0.5 per s = 920 s, about 15 min
+    assert "about 15 min of H100, about $1.01" in out and runs == []
+    prompts = answer(monkeypatch, "n")
+    assert cli.main(TRAIN) == 1 and runs == [] and "about $1.01" in prompts[0]
+    assert cli.main([*TRAIN, "--yes"]) == 0 and len(runs) == 1
+
+
+def test_train_over_fifteen_dollars_asks_even_with_yes(env, monkeypatch, capsys):
+    taught(env)
+    (env / "data/train").mkdir(parents=True)
+    (env / "data/train/smoke-timing.json").write_text(json.dumps(
+        {"seconds": 60.0, "train_runtime": 0.0, "train_samples_per_second": 0.001}))
+    runs = fake_modal(monkeypatch, {"seconds": 1.0, "ok": True})
+    prompts = answer(monkeypatch, "n")
+    assert cli.main([*TRAIN, "--yes"]) == 1 and runs == [] and len(prompts) == 1
+    assert "over $15" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("args, message", [
     (["--skills", "washer_done", "--run", "Exp 1"], "run name"),
     (["--skills", "nope", "--run", "exp1"], "no dataset yet"),
@@ -57,6 +90,25 @@ def test_a_failed_training_run_says_where_the_log_is(env, monkeypatch, capsys):
     fake_modal(monkeypatch, None, code=1)
     assert cli.main([*TRAIN, "--smoke", "--yes"]) == 1
     assert "runs/exp1-mixed/train.log" in capsys.readouterr().err
+
+
+def test_train_with_fixed_steps_prices_them_and_passes_them_on(env, monkeypatch, capsys):
+    from backend.eval.plan import steps_samples
+
+    taught(env)
+    (env / "data/train").mkdir(parents=True)
+    (env / "data/train/smoke-timing.json").write_text(json.dumps(
+        {"seconds": 900.0, "train_runtime": 60.0, "train_samples_per_second": 0.5}))
+    runs = fake_modal(monkeypatch, {"seconds": 990.0, "ok": True})
+    assert cli.main([*TRAIN, "--max-steps", "10", "--yes"]) == 0
+    out = capsys.readouterr().out
+    manifest = json.loads((env / "data/train/exp1-mixed/manifest.json").read_text())
+    samples = steps_samples(10, manifest["train_examples"], manifest.get("val_examples", 0))
+    minutes = round((840 + samples / 0.5) / 60)  # the smoke's setup, then samples at 0.5/s
+    assert f"10 optimizer steps; estimate: about {minutes} min of H100" in out
+    [command] = runs
+    assert command[-2:] == ["--max-steps", "10"]
+    assert "steps:10" in command[command.index("--tags") + 1].split(",")
 
 
 def status_of(env, run="exp1-mixed"):

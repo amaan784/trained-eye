@@ -10,7 +10,10 @@ The spec module defines
            ("text", stage, final_text, before_text): until `stage`, final_text (which must
            occur exactly once in the final file) reads as before_text; or
            ("test", stage, name): until `stage`, the top-level test function `name`
-           (with its decorators) is left out.
+           (with its decorators) is left out; or
+           ("rev", stage, git_rev): until `stage`, the whole file reads as it was at that
+           git revision (for a file such as a note that changes after its first stage).
+           List a rev piece first: the earlier pieces then apply to the old file.
 A file with pieces is written from its first stage with every piece of a later stage
 undone, so each stage holds the file as it was then. The last stage must equal the root
 (apart from README.md, which render_readmes.py writes, and the local-only tools).
@@ -21,6 +24,7 @@ from __future__ import annotations
 import importlib.util
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -70,6 +74,9 @@ def content_at(path: str, k: int, final: str, pieces: list) -> str:
             text = text.replace(now, before)
         elif kind == "test":
             text = drop_test(text, piece[2])
+        elif kind == "rev":
+            text = subprocess.run(["git", "show", f"{piece[2]}:{path}"], cwd=ROOT, check=True,
+                                  capture_output=True).stdout.decode("utf-8")
         else:
             raise SystemExit(f"{path}: unknown piece {kind}")
     return text

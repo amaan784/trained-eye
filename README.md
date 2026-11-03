@@ -11,27 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v35 (M2): Watch trigger and the student scorer
+## Build stage v36 (M2): Training run records and the Modal spend ledger
 
-The first two parts of watch mode. backend/watch/trigger.py decides when a skill
-fires: at least 3 of its last 4 frames at or over the threshold, frames more than 10
-seconds apart not counted together, then the skill's cooldown; calibrate() picks the
-lowest threshold that gives at most one false alarm an hour on labelled validation
-clips. backend/inference/student.py scores a frame with the trained model on an
-OpenAI-compatible endpoint (vLLM on Modal or llama-server on the Mac), sent exactly as
-the training examples were built. The probability is read at the answer token, the
-last yes or no, from its top logprobs; a reply without one, or one cut off at the
-reply budget, is an error, never a guess. Sampling follows Meta's serving notes.
+Two record keepers that the training and serving commands use later; neither calls
+Modal. backend/training/runs.py keeps a status file per training run in data/train
+(running, done or failed, its skills, start and finish). A run whose te train process
+has gone from this Mac reads as failed, unless it was launched detached, and
+serving.json says which run the student endpoint serves. GET /skills reads these for
+the app's Skills screen. backend/training/gpu_ledger.py keeps Modal GPU time in
+data/modal_ledger.jsonl, one line per training, export or serving job, priced at
+config.MODAL_GPU_USD_PER_HOUR, so te spend can print the Modal total and te train and
+te export can ask before the runs pass the $150 Modal credit. Serving time is an upper
+bound, and a row with a key is written only once.
 
 Files added or changed in this stage:
 
-- `backend/inference/student.py` (new): scores a frame with the trained model on an
-  OpenAI-compatible endpoint, read at its yes or no answer token
-- `backend/watch/trigger.py` (new): when a skill fires: 3 of the last 4 frames over
-  the threshold, then the cooldown; the threshold calibration on labelled clips
-- `tests/test_config.py` (changed): tests
-- `tests/test_student.py` (new): tests
-- `tests/test_trigger.py` (new): tests
+- `backend/training/gpu_ledger.py` (new):
+- `backend/training/runs.py` (new):
+- `tests/test_gpu_ledger.py` (new): tests
+- `tests/test_training_runs.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -52,12 +50,12 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 24%]
     ........................................................................ [ 36%]
     ........................................................................ [ 48%]
-    ........................................................................ [ 61%]
-    ........................................................................ [ 73%]
-    ........................................................................ [ 85%]
-    ........................................................................ [ 97%]
-    ............                                                             [100%]
-    588 passed in 8.57s
+    ........................................................................ [ 60%]
+    ........................................................................ [ 72%]
+    ........................................................................ [ 84%]
+    ........................................................................ [ 96%]
+    ...................                                                      [100%]
+    595 passed in 8.92s
 
     $ ruff check .
     All checks passed!
@@ -116,12 +114,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 588 tests, all offline; none calls a paid API.
+- `tests/`: 595 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v36 adds the training run records (running, done or failed, and which run is
-served) and the Modal spend ledger with its check against the $150 credit.
+Stage v37 adds watch mode itself: the student's scores, the trigger, the Muse Spark
+check before an alert, cooldowns kept across sessions and the frame log.
 
 ## Privacy and policy
 

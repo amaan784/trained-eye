@@ -11,24 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v53 (M2): iOS: the glasses camera
+## Build stage v54 (M2): iOS: the glasses stream and frame throttle
 
-ios/TrainedEye/Glasses/GlassesCamera.swift runs the glasses' camera through Meta's DAT
-SDK, with the lifecycle of the CameraAccess sample: a session from the auto device
-selector, the camera permission, then the camera and its stream. Meta AI is opened for
-the camera permission only after the user confirms, and after a refusal no stream
-starts. Unlike CameraAccess, the session is not ended when the app goes to the
-background. While the camera is wanted it comes back by itself: after a fold or a link
-drop, a new session starts when the device selector reports the glasses again, never
-while a session is paused, and at most 3 times without a frame in between. A change of
-stream size stops the camera and adds it again at the new size once its stream has
-stopped, keeping the session. The class also holds the status and interruption lines
-that the Connect and Watch screens show. Nothing here touches the capture LED. The
-stream half, which this file needs, comes in the next stage.
+ios/TrainedEye/Glasses/GlassesCamera+Stream.swift is the stream half of the glasses
+camera. Once the session has started and the camera permission is granted, it adds a
+camera streaming HEVC (hvc1) at 7 fps, at low resolution (360x640) or medium
+(504x896), and decodes every frame on the SDK's thread with Meta's decoder. An image
+the decoder hands back unchanged went out already, so it is skipped and counted rather
+than sent as a new frame. A stream that stops on its own while the session is up is
+added again, up to 3 times 750 ms apart, as BirdSpotter's bringCameraBack does; frames
+flowing again reset the counts. ios/TrainedEye/Camera/FrameThrottle.swift turns frames
+into JPEGs (quality 0.7) at the pace it is set to, one a second unless told otherwise;
+the app model of v58 sets three a second for a teach capture. Only due frames are
+encoded, and the schedule moves on one interval at a time, so a 7 fps stream thinned
+to three a second gives three a second.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Glasses/GlassesCamera.swift` (new):
+- `ios/TrainedEye/Camera/FrameThrottle.swift` (new):
+- `ios/TrainedEye/Glasses/GlassesCamera+Stream.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -56,7 +57,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 35.24s
+    755 passed in 36.95s
 
     $ ruff check .
     All checks passed!
@@ -141,8 +142,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v54 adds the glasses stream (HEVC at 7 fps, a stopped stream added again,
-repeated images skipped) and the throttle that turns frames into one JPEG a second.
+Stage v55 adds the iPhone camera for when the glasses are not there, and spoken alerts
+that play only over Bluetooth, never from the phone's speaker.
 
 ## Privacy and policy
 

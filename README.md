@@ -11,25 +11,26 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v84 (M4): Playground: clips, results and media
+## Build stage v85 (M4): Playground: how each skill was built
 
-The web playground starts with backend/playground/data.py, which reads local results
-when a page asks and never calls Meta or writes a file. A clip is a folder
-data/playground/clips/<name>/ with the frame log te watch writes, the video and
-optional labels; clip_timeline turns it into each skill's threshold, [t, p] points and
-alerts, each alert with the spoken text from the log or else from the skill's spec.
-results() lists the evaluation's SVG charts and results.md. media_path is the only way
-to a file: clip videos, keyframes, generated variations, the provided keyframes and
-the charts, each a plain name inside its folder. The public copy serves no generated
-image and no original keyframe, keyframes only from a te blur folder's sources.json,
-and a video only when its blur record matches it. .gitignore now leaves out
-eval/clips/ and eval/galleries/, as both hold real footage.
+backend/playground/skills.py reads each taught skill from data/skills/<skill>/ as the
+teach flow left it, skipping refused skills, and links images where they are without
+copying them. skill_detail gives the read-back, the keyframes with Spark's and the
+human labels, SAM's box on the first teaching frame that has one (read again from
+SAM's stored text, at no cost, for a skill taught before the parser existed), and the
+training wall: up to 48 generated variations spread over all of them, each with what
+it was made to show and what Spark said. examples() picks, per skill, the first 6
+positives and 6 near-misses Spark labelled, for teach it yourself, and
+provided_keyframes offers the keyframes a visitor may pick: a curated set in
+data/playground/keyframes/, else 3 of each skill's own. The public copy shows no
+generated image (an empty wall with a note, and no examples) and only face-blurred
+keyframes, whose sources.json gives each one its original's SHA-256, so SAM's box is
+still found.
 
 Files added or changed in this stage:
 
-- `.gitignore` (changed): keeps secrets, local data and outputs out of git
-- `backend/playground/data.py` (new):
-- `tests/test_playground_data.py` (new): tests
+- `backend/playground/skills.py` (new):
+- `tests/test_playground_skills.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -47,20 +48,20 @@ set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
     ........................................................................ [  7%]
-    ........................................................................ [ 15%]
+    ........................................................................ [ 14%]
     ........................................................................ [ 22%]
-    ........................................................................ [ 30%]
+    ........................................................................ [ 29%]
     ............................................s........................... [ 37%]
-    ........................................................................ [ 45%]
+    ........................................................................ [ 44%]
     ........................................................................ [ 52%]
-    ........................................................................ [ 60%]
-    ........................................................................ [ 67%]
-    ........................................................................ [ 75%]
-    ........................................................................ [ 82%]
-    ........................................................................ [ 90%]
-    ........................................................................ [ 97%]
-    ......................                                                   [100%]
-    957 passed, 1 skipped in 66.84s (0:01:06)
+    ........................................................................ [ 59%]
+    ........................................................................ [ 66%]
+    ........................................................................ [ 74%]
+    ........................................................................ [ 81%]
+    ........................................................................ [ 89%]
+    ........................................................................ [ 96%]
+    ................................                                         [100%]
+    967 passed, 1 skipped in 72.61s (0:01:12)
 
     $ ruff check .
     All checks passed!
@@ -162,13 +163,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 957 tests, all offline; none calls a paid API.
+- `tests/`: 967 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v85 adds how each taught skill was built, for the playground: the read-back, the
-keyframes, SAM's box on a teaching frame, the labelled training wall and the keyframes
-a visitor may pick.
+Stage v86 adds the playground's spend caps per visitor and per day, and the metered
+ledger that holds each live call to its run's reservation.
 
 ## Privacy and policy
 

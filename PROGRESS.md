@@ -1,14 +1,18 @@
 # Progress
 
 The source of truth between sessions. Updated at the end of every milestone.
-Last update: 2026-10-31, fixes from the review after M1 (stages v23 to v30).
+Last update: 2026-11-02, the code for M2 to M4 (v50 to v105), tested offline only.
 
 ## Status
 
-M0 and M1 code are done and tested offline (297 tests, none calls a paid API). A full
-review after M1 (bugs, version compatibility, functionality against SPEC.md, the UI)
-found 27 confirmed problems in F1 to F29; their fixes are stages v23 to v30 (see "Review
-after M1" below). Findings F30 to F62 were still being verified when this was written.
+M0 and M1 code are done and tested offline. M2 to M4 are written and tested offline too
+(stages v50 to v105; 707 tests in all, none calls a paid API, one skips without OpenCV);
+none of it has run against Meta, Modal or a phone yet, and the iOS app has never been
+compiled. A full review after M1 (bugs, version compatibility, functionality against
+SPEC.md, the UI) found 27 confirmed problems in F1 to F29, fixed in stages v23 to v30. The
+rest, F30 to F62, and a second check of those fixes are fixed in stages v31 to v38, and a
+review of those in v39, v40 and v49 (see "Review after M1" below). The parts of M2 that
+need neither the Mac nor Modal are stages v41 to v48.
 HANDOVER.md explains how to pick the project up; SETUP.md covers setup. What is still
 open needs the Mac, the keys, the glasses or new footage:
 
@@ -16,10 +20,11 @@ open needs the Mac, the keys, the glasses or new footage:
 2. the first live Meta calls: `te models` (free), then `te api-smoke` (under $0.01)
 3. the W&B smoke run from Modal: `modal run backend/training/wandb_smoke.py`
 4. the first real washer teach run: `te teach --skill washer_done --clip <10 s clip>
-   --audio <request>`. Its own estimate for the default 150 positives and 150 negatives is
-   $5.26 at most (labels are priced at their full token budget), under the $10 skill cap.
-   Run a small batch first (`--positives 6 --negatives 6`) and check the SAM output and
-   the images by eye.
+   --audio <request>`. For a 10 s clip (20 to 24 keyframes) and the default 150 positives
+   and 150 negatives the estimator prints about $5.25 to $5.28, and at most $11.52 to
+   $11.63 if every label has to be asked again with the larger budget (over the $10 skill
+   cap, which would then stop the run partway). Run a small batch first
+   (`--positives 6 --negatives 6`) and check the SAM output and the images by eye.
 5. real clips for all three skills (`docs/recording-protocol.md`)
 
 ## Milestones
@@ -68,22 +73,150 @@ open needs the Mac, the keys, the glasses or new footage:
   exclusive; `te api-smoke` never caches a failed check
 - [x] Docs: the glasses check tests reachability while streaming; HANDOVER has SPEC.md's
   visual design rules
-- [ ] F30 to F62: verdicts pending
+- [x] Client (v31): Ctrl+C during a call is charged; an empty transcript is billed, not
+  cached; a cached reply that today's checks reject is fetched again; a failed image
+  download is a skippable output error; every failed call carries its charge; a label cut
+  off mid-answer is asked again; a cache-only lookup
+- [x] Settings and spend report (v32): `~` in `TE_DATA_DIR`; long skill names line up
+- [x] Policy and compiler (v33): plurals and more relatives; hiding the capture light,
+  covert, nutrition and more sports phrasings; named people with "gets ready" or a
+  possessive refused again (a v25 regression); corrections that rule something out
+  ("not the bathroom light") are allowed, and a refused one says so; requests over 500
+  characters stop before the call; read-back wording; duplicate near-misses; the topic
+  rules over all of the model's wording
+- [x] Keyframes and images (v34): macOS `._` files skipped, WebP read, clear errors for
+  HEIC and unreadable frames, EXIF turns without rewriting EXIF; the image manifest is
+  written even when generation stops
+- [x] Labels and SAM (v35): a label that needed the larger budget is free on a rerun; SAM
+  skips a rejected frame like the other steps; progress counts failed attempts' cost
+- [x] Teach and CLI (v36): the estimate gives a worst case; a one-answer dataset stops
+  the run; fallback labels need both answers; a new spec removes the old dataset; the
+  clip folder is never the output folder; contradicting labels; labels saved when a run
+  stops; inputs and the key checked before the spend question; the failures hint; closed
+  stdin; `te serve` prints the phone address and keeps the server's log lines
+- [x] CI and setup (v37): CI installs ffmpeg, so the video tests run there; Mac setup
+  with python3.12 and ffmpeg; the `.env.example` W&B note
+- [x] Docs (v38): estimator figures for a real clip, the recording protocol (both states
+  in the teaching clip), M2 and M4 notes, open questions
+- [x] A review of v31 to v38 (v39 and v40): a reported cost of NaN or below zero is
+  charged at the estimate instead (it would have switched the caps off); an unknown
+  `~user` in `TE_DATA_DIR` is a settings error; the policy check refuses two names ("Sam
+  and Jake arrive"), titles with brand names, "Sam's at the door" and more ways to hide
+  the glasses' light, and no longer refuses brand readings, "my lift", "discreet" alerts,
+  object counts or other devices' recording lights; a correction's "not" covers at most
+  five words; the model's trigger is checked with its "when"
+- [x] The same review's small `te teach` fixes (v49): a blank `--request` and negative
+  counts are refused before the estimate, the failure reason prints before the hint, and
+  a repeated label with a bad value gets the right message
 
 ### M2, Fri to Sat: training and watching
 
-- [ ] Modal QLoRA training on the washer skill, export, serving (Mac or Modal)
-- [ ] Watch loop: smoothing, Spark confirmation, spoken alerts on the glasses
+- [x] Watch trigger: 3 of the last 4 frames over the threshold, then the cooldown; a
+  stream pause starts the window again; `calibrate()` picks the lowest threshold with at
+  most one false alarm per hour of labelled footage
+- [x] Student scorer for an OpenAI-compatible endpoint, sending each frame as the
+  training examples were built and reading the answer token's logprobs
+- [x] Watcher: Muse Spark checks an alert first (a no snoozes the skill for a minute, a
+  failed check alerts unconfirmed); every scored frame goes to a JSON-lines log
+- [x] Watch mode on the WebSocket: `"watch"` in the hello, scores in each ack, alerts
+- [x] Training bundle (skills combined, real, synthetic or mixed, a validation split,
+  image paths on the Modal volume) and the Axolotl config, which is Meta's QLoRA recipe
+  with this run's paths, W&B names and gradient accumulation 32 on one H100
+- [x] Modal training app with the recipe's pins; `te train` (smoke first, then a run
+  priced from the smoke, asking always over $15) and `te watch` (replay a clip)
+- [ ] The two-step smoke and the first real run on Modal (asks first)
+- [x] Export code: `te export` merges on Modal and compares 50 answers (not run yet)
+- [x] Serving code: `te serve-student` deploys vLLM on Modal behind STUDENT_API_KEY (not run
+  yet; the cookbook has no Mac path for a fine-tuned Glimmer)
+- [x] Teaching from the phone: `/teach/start`, `/teach/status`, `/teach/answer` (they need
+  `SERVER_TOKEN`), and `GET /skills` for the app
+- [x] The iOS app's code in `ios/` (never compiled: needs Xcode on the Mac)
+- [ ] The first real export and endpoint, then `TE_STUDENT_URL`; the first Xcode build
+- [x] `te calibrate`: a skill's threshold from replayed validation clips and their true
+  time ranges
+- [ ] Thresholds from real labelled validation footage (needs footage and M3's labels)
 
 ### M3, Sat to Sun: all skills and experiments
 
-- [ ] Other two skills, labeling tool, eval harness
-- [ ] Experiments 1 to 4, charts, `eval/results.md`
+- [x] Labelling tool: `te label --clip` (true time ranges) and `te label --skill` (200
+  generated images for Experiment 2)
+- [x] Evaluation harness: `te eval` and `make eval` (frame and event metrics, false alarms
+  per hour, time to alert, latency, cost per hour, `eval/results.md`, SVG charts)
+- [x] Experiment code: the plan with fixed steps and prices (`te experiments`), the
+  unfiltered arm (`te unfiltered`), Spark's error rate (`te spark-errors`), Spark as the
+  per-frame scorer (`te watch --scorer spark`), the regression check (`te regress`)
+- [ ] Other two skills (needs footage), the experiment runs, real `eval/results.md`
 
 ### M4, Mon Nov 2: release
 
+- [x] Playground code: clips with the live timeline, how each skill was built, teach it
+  yourself with per-visitor and per-day caps, results (`te playground`; not deployed)
+- [x] Release code: `te manifests`, `te regenerate`, `te blur`, `te release` (upload asks)
+- [x] `CONTRIBUTIONS.md`
 - [ ] Playground deployed; Hugging Face release (after asking); public W&B report
-- [ ] README with results, `CONTRIBUTIONS.md`
+- [ ] README with results (needs the experiment runs)
+
+### Review of M2 to M4, Mon Nov 2
+
+Three reviews (the teach API, the iOS code, the playground) reproduced each defect with
+fakes, and a second round with a skeptic per finding checked those fixes and the stage
+cut; the fixes are in the stages that add that code (v50 to v105).
+
+- [x] Teach API: the routes need `SERVER_TOKEN`; a frame longer than 4:1 is refused (it
+  would take gigabytes once scaled); answers have a 64 KB limit; odd `step` and endless
+  `audio_s` values are a 400, and so are counts over 100000; a token with spaces or smart
+  quotes is a 503 that says so; a run that fails early closes its question; on shutdown
+  the next paid call is refused, a rate-limit backoff ends at once, the one in flight is
+  recorded, and the Meta client checks the caps before every retry
+- [x] iOS: the mock picks its feed before it is worn; one watch frame in flight at a
+  time, and a backend that stops answering frames gets a fresh connection; a refused
+  glasses start is not reported as watching; three teach frames a second on an even
+  schedule; the permission step does not count against the first-frame wait, and a
+  refused permission ends it; the LED and concurrency notes say only what was checked
+- [x] Playground: never trust every proxy (`--forwarded-allow-ips "*"` is refused); an
+  IPv6 visitor counts by their /64; the body size is checked as it streams; runs share
+  one in-flight total for the ledger's caps; live runs take JSON from the page itself
+  only, and the page cannot be framed; deeply nested JSON is a 400 on Python 3.11 too;
+  a budget file that cannot be saved no longer blocks the visitor; odd `since` values
+  read as 0; the wall clears between runs, counts unsure apart, and alert labels do not
+  collide
+
+### Code completion, Mon Nov 2 to Tue Nov 3
+
+An audit compared HANDOVER, PROGRESS and the docs with the code and listed what was
+missing; everything that can be written and tested here is built (offline, with fakes).
+Three reviews then reproduced 12 defects in it, all fixed: playground redeploys left
+removed files public, blur records counted boxes off the picture, te replay kept stale
+or failed calibrations, an interrupted te train lost its GPU time, galleries outside
+eval/ were not gitignored, the politics rule refused glue guns and ad campaigns but let
+pistols through, GET /skills hid Ready before any deploy was recorded, Experiment 2's
+arms could mix prompt layouts, and a skill-wide calibrate did not say te serve uses the
+served run's threshold.
+
+- [x] SAM 3.1 boxes read with our own reader of Meta's SAM 3 text format (masks are not
+  decoded); boxes drive the outline and crops of the teaching keyframes
+- [x] Inter 4.1 bundled; the model card takes the base model's license (apache-2.0) and
+  ships its text
+- [x] Policy: a politics and war rule; compiled cooldowns clamped to 60 to 3600 s
+- [x] Spend: the ledger reserves each estimate (thread and file lock) so concurrent te
+  processes cannot pass a cap; image token estimates come from past calls
+- [x] Watch: cooldowns kept across reconnects; `TE_SYSTEM_IN_USER`, `TE_STUDENT_MAX_TOKENS`;
+  thresholds per training run; GET /skills reports training and served
+- [x] Training: `--preflight`, `--detach`/`--collect`, W&B hashes, entity and opt-in
+  artifacts, base and multi-adapter serving, the Modal spend ledger and the $150 check
+- [x] Data: `te clips` (session 1 trains, session 2 validates, session 3 is never used)
+- [x] Evaluation: `te replay`, plan costs with exports and serving, per-run calibration,
+  the pooled Experiment 4 chart, Experiment 1 failure galleries, Spark's error rate and
+  the regression check in results.md, `te eval --readme`
+- [x] iOS: a new session after a fold, keepalive pings, recording through an engine tap,
+  medium resolution for the teach capture, teach resume, the training status
+- [x] Playground: a public mode, the Modal app and `te playground --deploy`,
+  `te playground-clip`; clips moved to `data/playground/clips/` (gitignored)
+- [x] Release: blur records and manual boxes, blurred keyframes in the release, the test
+  set as a dataset, a collection, `te fetch-weights`, `te wandb-report`
+- [ ] Not built, for the author: decoding SAM masks (needs Meta's `meta-sam-parser`,
+  under the SAM License), a GGUF release for the Mac (needs llama.cpp's converter),
+  scoring at the answer token by prefill (needs the real model's tokenizer)
 
 ### M5, Tue Nov 3: demo
 
@@ -136,7 +269,17 @@ open needs the Mac, the keys, the glasses or new footage:
   switch to fold it into the user text if the processor preflight shows a problem.
 - **Fallback switch:** `TE_TRAIN_ON_MODEL_OUTPUTS=0` keeps generating and labelling (for
   evaluation) but trains only on real frames with the user's own labels. Without those
-  labels it stops after writing the keyframes, before any paid call.
+  labels, or with labels that are all one answer, it stops after writing the keyframes,
+  before any paid call.
+- **A dataset needs both answers.** If the examples would all be yes or all be no (for
+  example when Spark rejects every positive edit), teach stops instead of writing a
+  dataset that cannot train a yes/no check, and warns when one answer is under 10 percent.
+- **Failed calls carry their charge** (`MetaAPIError.cost_usd`), so progress lines count
+  them; after a stop for too many failures, the hint says a rerun pays for them again.
+- **The model's wording is checked in two parts.** The target and the trigger get the
+  request's full local check; everything else it wrote (description, near-misses, alert)
+  gets the covert, health and sports rules, and the description also the person and
+  sensitive-place rules except rooms at home.
 - **Project folder:** `.env`, `data/` (ledger, cache, skills) and a relative `TE_DATA_DIR`
   are taken inside the checkout `backend/` is imported from, so `te` sees the same spend
   and caps from any folder. Tests point this at a temporary folder (tests/conftest.py).
@@ -146,6 +289,36 @@ open needs the Mac, the keys, the glasses or new footage:
   Auth, rate-limit, server and budget errors always stop it.
 - **Keyframe names** are `kf_<position>_<first 8 hex of the SHA-256>.<ext>`, so a labels
   file made for another take of the clip cannot label the wrong frames.
+- **The student is scored at its answer token.** The scorer asks the endpoint for
+  logprobs and reads the last generated yes or no, renormalised over the two; a reply
+  without one is an error, never a guess. It needs no chat template, so it works the same
+  on vLLM and on llama-server.
+- **Alerts:** a skill fires on 3 of its last 4 frames at or over its threshold, then waits
+  for its cooldown. If Muse Spark says no, the skill waits a minute instead; if the check
+  fails, the alert goes out marked unconfirmed (missing the washer is worse than one
+  unchecked alert). Frames are never written; the log holds times, scores and decisions.
+- **Student sampling follows Meta's serving notes:** no temperature in the request (the
+  cookbook advises against greedy decoding for Glimmer) and reasoning_strength low; the
+  answer token's logprobs are read either way.
+- **Experiments keep the steps fixed:** every run of Experiments 1 to 3 trains the same
+  number of optimizer steps (enough for 300 images per skill at the recipe's batch of
+  32), so the image-count curve measures data, not steps (backend/eval/plan.py).
+- **Charts are SVG**, written by hand (matplotlib could not be installed), with the light
+  and dark styles inside each file.
+- **Phone teach captures are kept** under `data/teach/` (gitignored) so a run can be
+  repeated from the Mac; watch frames are still never stored.
+- **The teach routes need a token** (`SERVER_TOKEN` in `.env`, typed once into the app):
+  `te serve` listens on the whole network, and without it anyone there could agree to a
+  phone run's spend. `/ws` and `/skills` stay open, as in M1.
+- **Session clips:** session 1 is training data, session 2 validation (never trained on;
+  every run calibrates its threshold on it, so the arms stay comparable), session 3 the
+  test set only. Experiment 1's real arm is the keyframes, their SAM crops and session 1.
+- **SAM 3 text format, our own reader:** Meta's protocol spec (meta-models/meta-sam,
+  SAM License) was read and implemented; no code or test data is copied from it.
+- **Cooldowns are per skill, not per session:** te serve keeps them across reconnects,
+  skill toggles and restarts, so one condition is announced once per cooldown.
+- **Training config as JSON:** the Axolotl config is Meta's recipe written as JSON (YAML
+  reads it), with only the paths, the W&B names and gradient accumulation changed.
 - **Provenance:** generated images are stored exactly as returned; the padded dataset PNGs
   are derived copies, and the dataset manifest maps every example back to its source and
   the SHA-256 of the original image. Only real, approved footage is ever published.
@@ -162,7 +335,7 @@ sources disagree with SPEC.md, the sources win.
 |---|---|---|---|
 | 1 | Base URL `https://api.meta.ai/v1`, model IDs, prices, SAM output format, image and audio endpoints | None of it is in the cookbook or the DAT repo (they cover only open-weight models) | Kept from SPEC.md, marked unverified; `te models` checks the IDs on the first live call |
 | 2 | `structured(model, input, schema)`, request shape not given | Cookbook recipes use Chat Completions with `response_format` json_schema | Implemented that way |
-| 3 | Score frames by the probability that the first token is yes or no | Glimmer and Spark always reason first (`to=self` channel), so the first token is not the answer; the recipe's targets are an explanation followed by the answer, not a bare yes or no | M2: prefill up to the answer channel and read the yes/no logits there; check how a bare yes/no target renders before training |
+| 3 | Score frames by the probability that the first token is yes or no | Glimmer and Spark always reason first (`to=self` channel), so the first token is not the answer; the recipe's targets are an explanation followed by the answer, not a bare yes or no | M2: the scorer generates with logprobs and reads the answer token (the last yes or no), renormalised over the two; prefilling up to the answer channel is a later speed-up; check how a bare yes/no target renders before training |
 | 4 | Base model pinned "to the revision the guide uses" | Cookbook pins `a4e59da52a7bc87ae7251dd5545c0dd437c44b68` | Pinned in `backend/config.py` |
 | 5 | Dataset: images inline, system prompt in every example | Recipe uses image parts with an absolute local PNG `path`; its examples have no system turn; images padded to 512x512 | M1 follows the recipe; system turn kept but can be folded into the user text |
 | 6 | QLoRA verified on one H100; L40S or A100 if needed | Meta verified quality on 8x H100; 1x H100 only as a 2-step smoke (peak about 27 GB, on a 96 GB H100); L40S and A100 untested; no merge step in the cookbook | M2: own 2-step smoke on Modal first; merge is our own step |
@@ -189,18 +362,29 @@ sources disagree with SPEC.md, the sources win.
   and the Modal run happen on the Mac. The network policy can be widened in the cloud
   environment settings if needed.
 - Mac memory unknown (`sysctl hw.memsize`); it decides local vs Modal serving.
-- The spend cap is not safe across concurrent processes (the check and the record are not
-  atomic). Fine while calls run one at a time; fix before parallel labeling.
-- `meta-sam-parser` (SAM output parsing) could not be installed or read; M1 stores SAM's
-  raw output and parses it once a real cached response shows the format.
+- SAM masks are not decoded: our reader takes boxes only. Outlines are boxes until the
+  author approves Meta's `meta-sam-parser` (SAM License).
 - SPEC.md is not in the repository, so a fresh session needs it uploaded again.
-- Review findings F30 to F62 (client, CLI, policy wording, dataset paths, dependency
-  bounds, tests, docs) were not verified yet when stages v23 to v30 were cut; the
-  confirmed ones become the next stages, before M2.
-- SAM output parsing: the first live run stores SAM's raw text (cached); write the parser
-  against it, then the boxes feed crops and the outline visual.
-- Image token counts are unknown, so estimates assume 1,500 tokens per image; the real
-  per-image cost comes from the first run's usage.
+- From the review, for the author: whether to add `httpx2` (Starlette 1.2 and later warn
+  without it in `TestClient`) or cap `starlette<1.2`, and whether the project's own
+  dependencies count as approved downloads (HANDOVER.md, "Not done yet", item 9).
+- In fallback mode the condition text in every example is still Muse Wonder's (ask the
+  organizers with the training question).
+- The dataset JSONL holds absolute image paths (the recipe's format); M2 writes it again
+  under the Modal volume mount.
+- The public playground turns the walls off and serves only blurred keyframes and clips,
+  from Modal with a private Volume (`te playground --deploy`); check per-visitor budgets
+  from two networks after the first deploy. Uploading to Hugging Face needs
+  `huggingface_hub` and the W&B report `wandb-workspaces` (neither approved yet); face
+  blurring needs `opencv-python-headless` (approved). Inter 4.1 is bundled.
+- SAM output parsing follows Meta's SAM 3 protocol (meta-models/meta-sam, our own reader in
+  `backend/dataengine/sam_text.py`); the first live run should confirm it reads SAM 3.1's
+  real output (the raw text is stored with every frame, so it can be read again for free).
+- Image token counts are unknown until the first calls: estimates assume 1,500 tokens per
+  image, then use the mean measured from the ledger's compile and label calls.
+- Unverified until run for real: everything on Modal (preflight, detached runs, base and
+  multi-adapter serving), the W&B report's API calls, and every iOS change (not compiled;
+  `ios/README.md` lists the checks on the glasses).
 - The teach flow takes keyframes from a video file or a folder of frames; the iOS Teach
   screen (M2) will send the 10 s capture as frames.
 

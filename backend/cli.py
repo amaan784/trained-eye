@@ -28,6 +28,8 @@ named below.
   te manifests, te regenerate, te blur, te release, te fetch-weights, te release-test-set,
   te release-collection, te wandb-report: M4
                     (backend/cli_release.py)
+  te playground, te playground-clip: M4's web playground
+                    (backend/cli_playground.py)
 """
 
 from __future__ import annotations
@@ -478,6 +480,10 @@ def build_parser() -> argparse.ArgumentParser:
     from backend.cli_release import add_parsers as release_parsers
 
     release_parsers(sub)
+
+    from backend.cli_playground import add_parsers as playground_parsers
+
+    playground_parsers(sub)
     return parser
 
 

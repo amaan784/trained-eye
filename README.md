@@ -11,30 +11,29 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v59 (M2): iOS: theme, components and the Inter fonts
+## Build stage v60 (M2): iOS: app entry, tabs and project files
 
-ios/TrainedEye/UI/Theme.swift sets the app's look in one place: a near-black ground,
-one raised surface, two greys for text and one accent colour for live states, the main
-action and the camera-on indicator, with flat shapes and no gradients. Text is set in
-Inter 4.1, whose four static faces (Regular, Medium, SemiBold and Bold) come in
-ios/TrainedEye/Fonts/ with their SIL Open Font License as LICENSE.txt; when a face is
-missing from the target, the system font in the same text style and weight is used.
-ThemeModifier applies the tokens once at the root, in a dark colour scheme, as in
-Meta's BirdSpotter sample; the app entry of v60 puts it there.
-ios/TrainedEye/UI/Components.swift has the building blocks every screen uses: a
-scrolling screen with its title, a flat card with an optional heading, a filled and an
-outlined button style, a status dot, a label and value row, a notice line for help or
-errors, and the preview of the newest frame.
+ios/TrainedEye/App/TrainedEyeApp.swift is the app entry: it configures Meta's DAT SDK
+once at launch, before the app model reads it, applies the theme at the root, and
+hands the Meta AI app's callbacks (registration and permission) to the SDK, as the
+CameraAccess sample does. ios/TrainedEye/UI/RootView.swift lays out the five tabs,
+Connect, Teach, Skills, Watch and Clips, with a bar above every one while any camera
+is on: it says which camera, or that the glasses are folded or out of reach, and opens
+the Watch screen when tapped. It also asks before the Meta AI app opens for the camera
+permission. ios/TrainedEye-Info.plist has the trainedeye:// callback scheme, the SDK's
+settings with its analytics and crash reporting turned off, the background modes
+(processing, Bluetooth, audio and the external accessory link), the Inter fonts, the
+camera, microphone, Bluetooth and local network usage strings, plain HTTP on the local
+network, and file sharing for saved clips. ios/TrainedEye.entitlements has the
+keychain group both of Meta's samples declare. The screens come in the next three
+stages.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Fonts/Inter-Bold.ttf` (new):
-- `ios/TrainedEye/Fonts/Inter-Medium.ttf` (new):
-- `ios/TrainedEye/Fonts/Inter-Regular.ttf` (new):
-- `ios/TrainedEye/Fonts/Inter-SemiBold.ttf` (new):
-- `ios/TrainedEye/Fonts/LICENSE.txt` (new):
-- `ios/TrainedEye/UI/Components.swift` (new):
-- `ios/TrainedEye/UI/Theme.swift` (new):
+- `ios/TrainedEye-Info.plist` (new):
+- `ios/TrainedEye.entitlements` (new):
+- `ios/TrainedEye/App/TrainedEyeApp.swift` (new):
+- `ios/TrainedEye/UI/RootView.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -62,7 +61,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 31.22s
+    755 passed in 34.67s
 
     $ ruff check .
     All checks passed!
@@ -147,9 +146,9 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v60 adds the app entry that configures the DAT SDK, the five tabs under a
-camera-on bar, and the Info.plist and entitlements, with the SDK's analytics and crash
-reporting off.
+Stage v61 adds the Connect screen (the backend address and token, the glasses, the
+camera choice, the Debug mock) and the Teach screen with its capture and the Mac's
+questions.
 
 ## Privacy and policy
 

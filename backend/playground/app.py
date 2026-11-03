@@ -14,8 +14,15 @@
   GET  /api/results          the evaluation's SVG charts and results.md
   GET  /media/...            the files those answers link to, and nothing else
 
+The public copy, create_app(public=True) (`te playground --public`, and the Modal app in
+modal_app.py), serves only what may be published: no generated image (media/skills/*/
+synthetic is a 404, the training wall and the examples come back empty with a note),
+keyframes only from te blur folders (skills.py) and clip videos only with a matching
+blur record (data.py). /api/status says "public", and the page hides the walls.
+
 Run one worker (the budget file belongs to one process). Behind a proxy, let uvicorn
-read the forwarded address (--proxy-headers), or every visitor shares the proxy's.
+read the forwarded address (--proxy-headers), or every visitor shares the proxy's; under
+a host that runs the app itself (Modal), wrap it in behind_proxy().
 """
 
 from __future__ import annotations
@@ -71,10 +78,25 @@ def parse_since(raw: str) -> int:
         return 0
 
 
+def behind_proxy(app):
+    """ASGI middleware for a host whose proxy adds the visitor's address to
+    X-Forwarded-For: the last entry becomes request.client (a visitor can write entries
+    before it, never after). Without the header the address is left as it is."""
+    async def wrapped(scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            raw = b",".join(v for k, v in scope.get("headers", []) if k == b"x-forwarded-for")
+            last = raw.decode("latin-1").split(",")[-1].strip() if raw else ""
+            if last:
+                scope = {**scope, "client": (last, 0)}
+        await app(scope, receive, send)
+    return wrapped
+
+
 def create_app(data_dir: Path, eval_dir: Path, client_factory: Callable[[], MetaClient], *,
                visitor_cap_usd: float = 0.50, daily_cap_usd: float = 10.0,
-               workers: int = WORKERS) -> Starlette:
-    """`client_factory()` gives a new MetaClient for each live run (and for /api/status)."""
+               workers: int = WORKERS, public: bool = False) -> Starlette:
+    """`client_factory()` gives a new MetaClient for each live run (and for /api/status).
+    public=True: the copy for the open web (see the module docstring)."""
     data_dir, eval_dir = Path(data_dir), Path(eval_dir)
     budget = Budget(data_dir / "playground" / "budget.json", visitor_cap_usd, daily_cap_usd)
     teacher = Teacher(data_dir, client_factory, budget, workers=workers)
@@ -101,8 +123,9 @@ def create_app(data_dir: Path, eval_dir: Path, client_factory: Callable[[], Meta
             live, estimate = settings.has_secret("MODEL_API_KEY"), round(estimate_usd(settings), 4)
         except Exception:  # noqa: BLE001 - unreadable settings: not live
             live, estimate = False, None
-        out = {"live": live, "estimate_usd": estimate, "visitor_cap_usd": visitor_cap_usd,
-               "daily_cap_usd": daily_cap_usd, **budget.left(keys)}
+        out = {"live": live, "public": public, "estimate_usd": estimate,
+               "visitor_cap_usd": visitor_cap_usd, "daily_cap_usd": daily_cap_usd,
+               **budget.left(keys)}
         return out if live else {**out, "message": NO_KEY}
 
     async def page(request):
@@ -133,8 +156,13 @@ def create_app(data_dir: Path, eval_dir: Path, client_factory: Callable[[], Meta
         if not isinstance(payload, dict):
             return JSONResponse({"error": 'Send JSON: {"condition": "...", "keyframe": "..."}'},
                                 400)
+        if public and payload.get("keyframe") not in [  # a list: the id may be unhashable
+                k["id"] for k in skills.provided_keyframes(data_dir, public=True)]:
+            payload = {**payload, "keyframe": None}  # not on offer here: refused as unknown
         code, out = await run_in_threadpool(teacher.start, payload.get("condition"),
                                             payload.get("keyframe"), keys)
+        if public and "examples" in out:  # generated images: not in the public copy
+            out = {**out, "examples": [], "examples_note": skills.EXAMPLES_NOTE}
         return remember(JSONResponse(out, code), request, vid, new)
 
     async def job(request):
@@ -142,31 +170,39 @@ def create_app(data_dir: Path, eval_dir: Path, client_factory: Callable[[], Meta
         return found(teacher.poll(request.path_params["job"], since))
 
     async def clips(request):
-        return JSONResponse({"clips": await run_in_threadpool(data.list_clips, eval_dir)})
+        listed = await run_in_threadpool(lambda: data.list_clips(data_dir, public=public))
+        return JSONResponse({"clips": listed})
 
     async def clip(request):
-        return found(await run_in_threadpool(data.clip_timeline, eval_dir, data_dir,
-                                             request.path_params["name"]))
+        name = request.path_params["name"]
+        return found(await run_in_threadpool(
+            lambda: data.clip_timeline(data_dir, name, public=public)))
 
     async def skill_list(request):
-        return JSONResponse({"skills": await run_in_threadpool(skills.list_skills, data_dir)})
+        listed = await run_in_threadpool(lambda: skills.list_skills(data_dir, public=public))
+        return JSONResponse({"skills": listed})
 
     async def skill(request):
-        return found(await run_in_threadpool(skills.skill_detail, data_dir,
-                                             request.path_params["name"]))
+        name = request.path_params["name"]
+        return found(await run_in_threadpool(
+            lambda: skills.skill_detail(data_dir, name, public=public)))
 
     async def examples(request):
-        return JSONResponse({"examples": await run_in_threadpool(skills.examples, data_dir)})
+        shown = await run_in_threadpool(lambda: skills.examples(data_dir, public=public))
+        return JSONResponse({"examples": shown,
+                             "note": skills.EXAMPLES_NOTE if public else None})
 
     async def keyframes(request):
-        offered = await run_in_threadpool(skills.provided_keyframes, data_dir)
+        offered = await run_in_threadpool(
+            lambda: skills.provided_keyframes(data_dir, public=public))
         return JSONResponse({"keyframes": offered})
 
     async def results(request):
         return JSONResponse(await run_in_threadpool(data.results, eval_dir))
 
     async def media(request):
-        hit = data.media_path(data_dir, eval_dir, request.path_params["path"])
+        hit = await run_in_threadpool(data.media_path, data_dir, eval_dir,
+                                      request.path_params["path"], public=public)
         if hit is None:
             return found(None)
         path, kind = hit

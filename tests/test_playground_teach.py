@@ -77,7 +77,8 @@ def test_live_run_gives_12_labelled_variations_and_writes_no_images(tmp_path):
     new = {p for p in tmp_path.rglob("*") if p.is_file()} - before
     cache = tmp_path / "live" / "cache"
     outside = {p.relative_to(tmp_path).as_posix() for p in new if cache not in p.parents}
-    assert outside == {"live/ledger.jsonl", "taught/data/playground/budget.json"}
+    assert outside == {"live/ledger.jsonl", "live/ledger.jsonl.lock",  # calls in flight
+                       "taught/data/playground/budget.json"}
     assert sum(1 for p in new if p.suffix == ".png") == 12  # one per variation, cached
 
 

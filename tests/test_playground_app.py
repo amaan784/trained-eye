@@ -9,17 +9,19 @@ from starlette.testclient import TestClient
 
 from backend.config import load_settings
 from backend.meta.client import MetaClient
-from backend.playground.app import COOKIE, STATIC, create_app
+from backend.playground import skills
+from backend.playground.app import COOKIE, STATIC, behind_proxy, create_app
 from tests.test_playground_data import make_clip
-from tests.test_playground_skills import make_skill
-from tests.test_teach import FakeMeta
+from tests.test_playground_skills import blur, make_skill
+from tests.test_teach import FakeMeta, png
 
 CONDITION = {"condition": "the washer display shows End"}
 
 
-def make_app(tmp_path, key=True, **caps):
+def make_app(tmp_path, key=True, public=False, **caps):
     data_dir, eval_dir = make_skill(tmp_path / "taught"), tmp_path / "eval"
-    make_clip(eval_dir, labels={"true": [[2.5, 4.0]]})
+    make_clip(data_dir, labels={"true": [[2.5, 4.0]]}, blurred=True)
+    eval_dir.mkdir()
     (eval_dir / "cost_vs_accuracy.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
     (eval_dir / "results.md").write_text("# Results\n")
     fake = FakeMeta()
@@ -29,7 +31,7 @@ def make_app(tmp_path, key=True, **caps):
         return MetaClient(load_settings(env=env, env_file=None),
                           transport=httpx.MockTransport(fake), sleep=lambda s: None)
 
-    app = create_app(data_dir, eval_dir, factory, workers=2, **caps)
+    app = create_app(data_dir, eval_dir, factory, workers=2, public=public, **caps)
     return TestClient(app), fake
 
 
@@ -160,3 +162,76 @@ def test_odd_since_values_read_as_zero(tmp_path):
     for since in ("abc", "\u00b2", "-3", ""):
         again = client.get(f"/api/teach/{view['job']}", params={"since": since})
         assert again.status_code == 200 and again.json()["count"] == len(again.json()["variations"])
+
+
+def test_public_copy_serves_no_generated_image_and_no_original_keyframe(tmp_path):
+    local, _ = make_app(tmp_path / "local")
+    detail = local.get("/api/skills/washer_done").json()
+    generated, original = detail["wall"][0]["url"], detail["keyframes"][0]["url"]
+    assert local.get("/" + generated).status_code == local.get("/" + original).status_code == 200
+    client, fake = make_app(tmp_path / "public", public=True)
+    status = client.get("/api/status").json()
+    assert status["public"] is True and local.get("/api/status").json()["public"] is False
+    for url in (generated, original):  # the same files exist in this copy's data too
+        assert (tmp_path / "public/taught/data" / url.removeprefix("media/")).is_file()
+        assert client.get("/" + url).status_code == 404
+    detail = client.get("/api/skills/washer_done").json()
+    assert detail["wall"] == [] and detail["wall_note"] == skills.WALL_NOTE
+    assert detail["keyframes"] == []  # nothing blurred with te blur yet
+    shown = client.get("/api/examples").json()
+    assert shown == {"examples": [], "note": skills.EXAMPLES_NOTE}
+    assert client.get("/api/teach/keyframes").json()["keyframes"] == []
+    taken = local.get("/api/teach/keyframes").json()["keyframes"][0]["id"]
+    r = client.post("/api/teach", json={**CONDITION, "keyframe": taken})
+    assert r.status_code == 400 and "Pick one" in r.json()["error"]
+    for odd in (["a"], {"x": 1}):
+        assert client.post("/api/teach", json={**CONDITION, "keyframe": odd}).status_code == 400
+    timeline = client.get("/api/clips/washer_1").json()  # blurred: its video is served
+    assert client.get("/" + timeline["video"]).status_code == 200
+    assert fake.calls == {}
+
+
+def test_public_copy_teaches_from_blurred_keyframes(tmp_path):
+    client, fake = make_app(tmp_path, public=True)
+    data_dir = tmp_path / "taught" / "data"
+    folder = data_dir / "skills" / "washer_done"
+    blur(folder / "keyframes", folder / "keyframes_blurred")
+    picked = tmp_path / "picked"
+    picked.mkdir()
+    (picked / "kettle.png").write_bytes(png((40, 50, 60)))
+    blur(picked, data_dir / "playground" / "keyframes")
+    detail = client.get("/api/skills/washer_done").json()
+    assert detail["keyframes"] and all(client.get("/" + k["url"]).status_code == 200
+                                       for k in detail["keyframes"])
+    (offered,) = client.get("/api/teach/keyframes").json()["keyframes"]
+    assert offered["id"] == "playground/kettle.png"
+    assert client.get("/" + offered["url"]).status_code == 200
+    code, view = run(client)
+    assert code == 202 and view["count"] == 12 and fake.edits == 12
+
+
+def test_public_copy_without_a_key_shows_no_examples(tmp_path):
+    client, fake = make_app(tmp_path, key=False, public=True)
+    picked = tmp_path / "picked"
+    picked.mkdir()
+    (picked / "kettle.png").write_bytes(png((40, 50, 60)))
+    blur(picked, tmp_path / "taught" / "data" / "playground" / "keyframes")
+    code, body = run(client)
+    assert code == 503 and body["unavailable"] == "no_key"
+    assert body["examples"] == [] and body["examples_note"] == skills.EXAMPLES_NOTE
+    assert fake.calls == {}
+
+
+def test_behind_proxy_takes_the_address_the_proxy_added():
+    from starlette.applications import Starlette
+    from starlette.responses import PlainTextResponse
+    from starlette.routing import Route
+
+    async def who(request):
+        return PlainTextResponse(request.client.host)
+
+    client = TestClient(behind_proxy(Starlette(routes=[Route("/", who)])))
+    assert client.get("/").text == "testclient"  # no header: left as it is
+    spoofed = {"X-Forwarded-For": "6.6.6.6, 203.0.113.9"}  # the visitor wrote the first
+    assert client.get("/", headers=spoofed).text == "203.0.113.9"
+    assert client.get("/", headers={"X-Forwarded-For": " 198.51.100.4 "}).text == "198.51.100.4"

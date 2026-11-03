@@ -7,6 +7,10 @@ Each call runs the same steps:
   4. send, retrying 429, 5xx and timeouts with backoff (a 4xx is never retried)
   5. record the actual cost from the reported usage, check the output, cache it
 
+The check in step 3 reserves the estimate in the ledger until step 5 records the call (or
+the call fails before it), so calls running at the same time in other threads or
+processes count against the caps together.
+
 Spend is counted conservatively: a retried attempt that may have reached the server
 (a read timeout, a 500/502/504) is charged at the estimate, and so is a reply that
 cannot be priced or a call stopped with Ctrl+C. The caps are checked again before each
@@ -42,14 +46,22 @@ import httpx
 
 from backend.config import SECRET_NAMES, Settings, check_model_allowed
 from backend.meta.cache import Cache, cache_key
-from backend.meta.ledger import NO_SKILL, BudgetExceeded, Entry, Ledger, token_cost, unit_cost
+from backend.meta.ledger import (
+    IMAGE_TOKENS,
+    NO_SKILL,
+    BudgetExceeded,
+    Entry,
+    Ledger,
+    token_cost,
+    unit_cost,
+)
 
 RETRY_STATUSES = frozenset({408, 429})
 # Statuses after which the server may already have done (and billed) the work.
 MAYBE_PROCESSED_STATUSES = frozenset({500, 502, 504})
 TRANSIENT_ERRORS = (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)
 NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout)
-IMAGE_TOKENS_GUESS = 1500  # per image, for estimates only; actual cost uses reported usage
+IMAGE_TOKENS_GUESS = IMAGE_TOKENS  # per image, for the cap check; cost uses reported usage
 
 
 class MetaAPIError(RuntimeError):
@@ -136,7 +148,8 @@ def _messages(input: Any, system: str | None) -> list[dict]:
     return messages
 
 
-def _estimate_input_tokens(messages: list[dict]) -> int:
+def _input_counts(messages: list[dict]) -> tuple[int, int]:
+    """(estimated text tokens, images) of a request's messages."""
     images = 0
     chars = 0
     for m in messages:
@@ -147,7 +160,7 @@ def _estimate_input_tokens(messages: list[dict]) -> int:
                 images += 1
             else:
                 chars += len(str(p.get("text", "")))
-    return chars // 3 + 50 + images * IMAGE_TOKENS_GUESS
+    return chars // 3 + 50, images
 
 
 def token_counts(usage: dict) -> tuple[int, int]:
@@ -385,12 +398,13 @@ class MetaClient:
         cost: Callable[[dict], float],
         check: Callable[[dict], Any],
         cache_only: bool = False,
+        inputs: tuple[int, int] = (0, 0),
     ) -> tuple[dict, dict[str, bytes], CallInfo, Any]:
         """Shared cache / ledger / send logic.
 
         `check(response)` returns the parsed output or raises OutputError. Returns
         (response, blobs, info, parsed). With `cache_only`, a miss raises CacheMiss
-        instead of sending.
+        instead of sending. `inputs` (estimated text tokens, images) goes in the entry.
         """
         check_model_allowed(model)
         key = cache_key(model, endpoint, key_request)
@@ -406,8 +420,18 @@ class MetaClient:
             raise CacheMiss(key)
 
         self.settings.secret("MODEL_API_KEY")  # fail before touching the ledger
-        self.ledger.check(estimate_usd, skill)
-        entry = Entry(model, endpoint, estimate_usd, 0.0, skill=skill or NO_SKILL, cache_key=key)
+        entry = Entry(model, endpoint, estimate_usd, 0.0, skill=skill or NO_SKILL, cache_key=key,
+                      input_text_tokens=inputs[0], input_images=inputs[1])
+        self.ledger.check(estimate_usd, skill)  # reserves the estimate until record()
+        try:
+            return self._paid(entry, key, endpoint, model, skill, estimate_usd, send, cost,
+                              check)
+        finally:
+            self.ledger.release()  # a call that failed before record(); free after it
+
+    def _paid(self, entry: Entry, key: str, endpoint: str, model: str, skill: str | None,
+              estimate_usd: float, send, cost, check) -> tuple[dict, dict, CallInfo, Any]:
+        """Send a call that passed the caps, record what it cost, check and cache it."""
         tally = _Tally()
         tally.guard = lambda: self.ledger.check(estimate_usd * (1 + tally.maybe_billed), skill)
         try:
@@ -440,7 +464,7 @@ class MetaClient:
             entry.actual_usd = cost(response) if usage else estimate_usd
             if not math.isfinite(entry.actual_usd) or entry.actual_usd < 0:
                 raise ValueError("not a cost")  # nan or a negative would switch the caps off
-        except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
+        except Exception:  # noqa: BLE001 - any unpriceable reply is charged the estimate
             entry.actual_usd = estimate_usd
             usage = {**usage, "unpriced": True}
         if not usage:
@@ -500,7 +524,8 @@ class MetaClient:
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         price = self.settings.price(model)
-        estimate = token_cost(price, _estimate_input_tokens(messages), max_tokens)
+        inputs = _input_counts(messages)
+        estimate = token_cost(price, inputs[0] + inputs[1] * IMAGE_TOKENS_GUESS, max_tokens)
 
         def send(tally):
             return self._json(self._send("POST", endpoint, tally, json=payload)), {}
@@ -535,7 +560,7 @@ class MetaClient:
 
         _, _, info, data = self._call(endpoint=endpoint, model=model, key_request=payload,
                                       skill=skill, estimate_usd=estimate, send=send, cost=cost,
-                                      check=check, cache_only=cache_only)
+                                      check=check, cache_only=cache_only, inputs=inputs)
         details = info.usage.get("completion_tokens_details")
         reasoning = details.get("reasoning_tokens") if isinstance(details, dict) else None
         return StructuredResult(data, info, reasoning)

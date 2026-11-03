@@ -94,3 +94,42 @@ def test_watch_with_spark_as_the_scorer_prices_and_asks_first(env, monkeypatch, 
     assert "Muse Spark on 4 frames x 1 skills" in out and '"frames": 4' in out
     rows = [json.loads(line) for line in log.read_text().splitlines()]
     assert [r["p"] for r in rows] == [1.0] * 4
+
+
+def test_unfiltered_passes_te_system_in_user_on(env, monkeypatch, capsys):
+    from backend.eval import spark_errors
+
+    seen = []
+    monkeypatch.setattr(spark_errors, "write_unfiltered_dataset",
+                        lambda skill_dir, **kw: seen.append(kw) or {"examples": 1, "counts": {}})
+    monkeypatch.setenv("TE_SYSTEM_IN_USER", "1")
+    assert cli.main(["unfiltered", "--skill", "washer_done"]) == 0
+    assert seen == [{"train_on_model_outputs": True, "system_in_user": True}]
+
+
+def test_experiments_prices_the_credit_with_the_ledger_final_run_exports_and_serving(
+        env, capsys):
+    from backend.training import gpu_ledger
+
+    taught(env)
+    data = env / "data"
+    (data / "train").mkdir(parents=True)
+    (data / "train/smoke-timing.json").write_text(json.dumps(
+        {"seconds": 400.0, "train_runtime": 100.0, "train_samples_per_second": 0.5}))
+    gpu_ledger.record(data, "export", "exp1-real", 1800.0)  # half an hour: $1.98
+    gpu_ledger.record(data, "train", "exp1-real", 3600.0)  # $3.95
+    (data / "train/exp1-real.result.json").write_text(json.dumps({"ok": True}))
+    (data / "train/exp1-real.export.json").write_text(json.dumps({"merged_dir": "/vol/m"}))
+    assert cli.main(["experiments", "--skills", "washer_done", "--endpoint-hours", "2"]) == 0
+    out = capsys.readouterr().out
+    assert "Modal spend so far: $5.93 (te spend)" in out
+    assert "exp1-real           done" in out and "final" in out
+    assert "at 0.5 h (the longest export timed so far)" in out
+    assert "7 models at 2 h each" in out  # 5 bundles, the final run and the base endpoint
+    assert "trained already, in the spend: exp1-real" in out
+    with pytest.raises(SystemExit):
+        cli.main(["experiments", "--skills", "washer_done", "--endpoint-hours", "0"])
+    assert cli.main(["experiments", "--skills", "washer_done", "--write-plan"]) == 0
+    assert ("te replay --plan eval/plan.json --run <run> fills its logs, for runs exp1-real, "
+            "exp1-synthetic, exp1-mixed, exp2-unfiltered, exp3-25, exp4-base, exp4-spark") \
+        in capsys.readouterr().out

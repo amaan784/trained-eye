@@ -6,6 +6,12 @@ then: `pip install opencv-python-headless` (on the approved list). Haar cascades
 small, dark, tilted or covered faces, so look at every published image as well: this is
 a first pass, not a guarantee.
 
+Faces the detector misses are blurred through manual boxes (`te blur --boxes`): per image
+file a list of boxes, or for a video a list of {"start_s", "end_s", "box"}, all added to
+the detector's. A video's blur record, <output>.blur.json, holds the SHA-256 of the source
+and of the output, the fps, the faces found per frame and the manual boxes used, so a
+later step (the playground, the test set) can check that a video is this blurred output.
+
 Output is rebuilt from the pixels alone: EXIF (GPS, camera, time), XMP, ICC and text
 chunks are left out, and an EXIF rotation is applied to the pixels first. Use it on real
 footage only: Muse Image outputs are never published, and their provenance metadata must
@@ -14,12 +20,14 @@ never be stripped.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
+import math
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 
 import numpy as np
@@ -30,12 +38,61 @@ from backend.meta.cache import sha256_hex
 Box = tuple[int, int, int, int]  # left, top, right, bottom in pixels (right, bottom excluded)
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
 SOURCES_FILE = "sources.json"  # from blur_folder: SHA-256 of each original -> blurred file
+BLUR_RECORD = ".blur.json"  # blur_video writes <output>.blur.json, the video's blur record
 STRENGTH = 0.25  # Gaussian radius as a share of the box's shorter side
 BLOCK_PX = 8  # a box is first reduced to this many pixels across its shorter side
 MARGIN = 0.2  # a detected face box grows by this share on every side (hair, ears, chin)
 CASCADES = ("haarcascade_frontalface_default.xml", "haarcascade_profileface.xml")
 INSTALL = "pip install opencv-python-headless"
 Detector = Callable[[bytes], list[Box]]
+SPAN_KEYS = ("start_s", "end_s", "box")  # one manual box over a stretch of a video
+
+
+def _number(value) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def check_box(box) -> Box:
+    """A manual box: [left, top, right, bottom] in pixels, right above left and bottom
+    below top. Parts outside the image are clipped when it is blurred."""
+    if not (isinstance(box, list | tuple) and len(box) == 4 and all(map(_number, box))):
+        raise ValueError(f"a box is [left, top, right, bottom] in pixels, not {box!r}")
+    left, top, right, bottom = (round(float(v)) for v in box)
+    if right <= left or bottom <= top:
+        raise ValueError(f"box {list(box)}: right must be above left and bottom below top")
+    return left, top, right, bottom
+
+
+def image_boxes(raw) -> dict[str, list[Box]]:
+    """--boxes for an image folder: {"<file name>": [[left, top, right, bottom], ...]}
+    (TypeError for another shape, ValueError for a bad box)."""
+    if not isinstance(raw, dict):
+        raise TypeError('boxes for a folder are {"<file name>": [[left, top, right, '
+                        'bottom], ...]}')
+    out = {}
+    for name, boxes in raw.items():
+        if not isinstance(boxes, list):
+            raise TypeError(f"{name}: give a list of boxes")
+        out[name] = [check_box(b) for b in boxes]
+    return out
+
+
+def video_boxes(raw) -> list[dict]:
+    """--boxes for a video: [{"start_s": 1.5, "end_s": 4.0, "box": [l, t, r, b]}, ...]; the
+    box is blurred on every frame from start_s to end_s, both included."""
+    if not isinstance(raw, list):
+        raise TypeError('boxes for a video are [{"start_s": .., "end_s": .., "box": '
+                        '[left, top, right, bottom]}, ...]')
+    out = []
+    for span in raw:
+        if not isinstance(span, dict) or sorted(span) != sorted(SPAN_KEYS):
+            raise ValueError(f"each video box has exactly {', '.join(SPAN_KEYS)}: {span!r}")
+        start, end = span["start_s"], span["end_s"]
+        if not (_number(start) and _number(end) and 0 <= start <= end):
+            raise ValueError(f"start_s and end_s are seconds, 0 <= start_s <= end_s: {span!r}")
+        out.append({"start_s": float(start), "end_s": float(end),
+                    "box": list(check_box(span["box"]))})
+    return out
 
 
 def _open(data: bytes) -> tuple[Image.Image, str]:
@@ -122,33 +179,49 @@ def detect_faces(image_bytes: bytes, min_size: int = 20, margin: float = MARGIN)
 
 
 def blur_image(image_bytes: bytes, strength: float = STRENGTH,
-               detector: Detector = detect_faces) -> tuple[bytes, int]:
-    """(the image with every detected face blurred, faces found). Always re-encoded, so
-    the metadata is left out even when no face is found."""
+               detector: Detector = detect_faces, extra: Iterable[Box] = ()) -> tuple[bytes, int]:
+    """(the image with every detected face and every `extra` box blurred, faces detected).
+    Always re-encoded, so the metadata is left out even when no face is found."""
     boxes = detector(image_bytes)
-    return blur_boxes(image_bytes, boxes, strength), len(boxes)
+    return blur_boxes(image_bytes, [*boxes, *extra], strength), len(boxes)
+
+
+def _images(src: Path) -> list[Path]:
+    return [p for p in sorted(Path(src).iterdir()) if p.is_file() and not p.name.startswith(".")
+            and p.suffix.lower() in IMAGE_SUFFIXES]
 
 
 def blur_folder(src: Path, dst: Path, strength: float = STRENGTH,
-                detector: Detector = detect_faces) -> dict:
+                detector: Detector = detect_faces,
+                extra: Mapping[str, Iterable[Box]] | None = None) -> dict:
     """Blur every image in `src` into `dst` under the same names and write dst/sources.json,
     {SHA-256 of each original: its blurred file}, which lets `regenerate` use blurred
-    keyframes. Returns the faces found per file."""
+    keyframes. `extra` ({file name: boxes}, see image_boxes) adds manual boxes to the
+    detector's; a name that is not an image in `src` is refused, so a typo cannot leave a
+    face unblurred. Returns the faces found per file and the manual boxes used."""
     src, dst = Path(src), Path(dst)
     if dst.resolve() == src.resolve():
         raise ValueError("the destination must be another folder: the originals are kept")
+    images, extra = _images(src), dict(extra or {})
+    if unknown := sorted(set(extra) - {p.name for p in images}):
+        raise ValueError(f"the boxes name files that are not images in {src}: "
+                         f"{', '.join(unknown[:5])}")
     dst.mkdir(parents=True, exist_ok=True)
-    faces, sources = {}, {}
-    for path in sorted(src.iterdir()):
-        if (not path.is_file() or path.name.startswith(".")
-                or path.suffix.lower() not in IMAGE_SUFFIXES):
-            continue
-        data = path.read_bytes()
-        out, faces[path.name] = blur_image(data, strength, detector)
+    faces, sources, manual = {}, {}, 0
+    for path in images:
+        data, boxes = path.read_bytes(), list(extra.get(path.name, ()))
+        out, faces[path.name] = blur_image(data, strength, detector, boxes)
         (dst / path.name).write_bytes(out)
         sources[sha256_hex(data)] = path.name
+        manual += len(boxes)
     (dst / SOURCES_FILE).write_text(json.dumps(sources, indent=1, sort_keys=True) + "\n")
-    return {"images": len(faces), "faces": sum(faces.values()), "per_file": faces}
+    return {"images": len(faces), "faces": sum(faces.values()), "per_file": faces,
+            "manual_boxes": manual}
+
+
+def file_sha256(path: Path) -> str:
+    with Path(path).open("rb") as fh:
+        return hashlib.file_digest(fh, "sha256").hexdigest()
 
 
 def _ffmpeg(*args: str) -> None:
@@ -157,23 +230,47 @@ def _ffmpeg(*args: str) -> None:
 
 
 def blur_video(src: Path, dst: Path, strength: float = STRENGTH, fps: float = 30.0,
-               detector: Detector = detect_faces) -> dict:
+               detector: Detector = detect_faces, extra: Iterable[dict] | None = None) -> dict:
     """Blur faces in a video frame by frame: ffmpeg decodes it at `fps`, each frame is
     blurred, ffmpeg encodes H.264. The container's metadata (location included) and the
-    audio are left out: voices can identify people too, so add sound back after a listen."""
+    audio are left out: voices can identify people too, so add sound back after a listen.
+
+    `extra` (see video_boxes) adds manual boxes over stretches of time; frame i is at
+    i / fps seconds. A box that falls on no frame is refused before anything is written.
+    Writes the blur record <dst>.blur.json and returns it."""
     if shutil.which("ffmpeg") is None:
         raise RuntimeError("ffmpeg is needed for video (brew install ffmpeg)")
-    if Path(dst).resolve() == Path(src).resolve():
+    src, dst = Path(src), Path(dst)
+    if dst.resolve() == src.resolve():
         raise ValueError("the destination must be another file: the original is kept")
-    Path(dst).parent.mkdir(parents=True, exist_ok=True)
+    spans = video_boxes(list(extra or []))
+    record_path = Path(f"{dst}{BLUR_RECORD}")
     with tempfile.TemporaryDirectory() as tmp:
         _ffmpeg("-i", str(src), "-vf", f"fps={fps}", str(Path(tmp) / "f%06d.png"))
-        frames, faces, with_faces = sorted(Path(tmp).glob("f*.png")), 0, 0
-        for path in frames:
-            out, found = blur_image(path.read_bytes(), strength, detector)
+        frames = sorted(Path(tmp).glob("f*.png"))
+        per_frame = [[n for n, s in enumerate(spans) if s["start_s"] <= i / fps <= s["end_s"]]
+                     for i in range(len(frames))]
+        used = {n for frame in per_frame for n in frame}
+        if unused := [s for n, s in enumerate(spans) if n not in used]:
+            raise ValueError(f"{len(unused)} manual boxes fall on no frame (the first from "
+                             f"{unused[0]['start_s']:g} s to {unused[0]['end_s']:g} s; the "
+                             f"video has {len(frames)} frames at {fps:g} fps): nothing written")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        record_path.unlink(missing_ok=True)  # an older record never vouches for this output
+        found = []
+        for path, spans_here in zip(frames, per_frame, strict=True):
+            boxes = [spans[n]["box"] for n in spans_here]
+            out, n = blur_image(path.read_bytes(), strength, detector, boxes)
             path.write_bytes(out)
-            faces, with_faces = faces + found, with_faces + bool(found)
+            found.append(n)
         _ffmpeg("-framerate", str(fps), "-i", str(Path(tmp) / "f%06d.png"), "-vf",
                 "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-c:v", "libx264", "-pix_fmt", "yuv420p",
                 "-crf", "18", "-an", "-map_metadata", "-1", str(dst))
-    return {"frames": len(frames), "faces": faces, "frames_with_faces": with_faces}
+    record = {"source": src.name, "source_sha256": file_sha256(src), "output": dst.name,
+              "output_sha256": file_sha256(dst), "fps": fps, "strength": strength,
+              "frames": len(frames), "faces": sum(found),
+              "frames_with_faces": sum(map(bool, found)), "faces_per_frame": found,
+              "manual_boxes": spans, "frames_with_manual_boxes": sum(map(bool, per_frame)),
+              "audio": "removed", "metadata": "removed"}
+    record_path.write_text(json.dumps(record, indent=1) + "\n")
+    return record

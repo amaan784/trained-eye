@@ -76,13 +76,33 @@ def test_every_runs_calls_in_flight_count_against_the_ledger(tmp_path):
     budget = Budget(tmp_path / "budget.json", 1.0, 100.0)
     first = MeteredLedger(ledger, budget, budget.reserve(("visitor:a",), 0.0))
     second = MeteredLedger(ledger, budget, budget.reserve(("visitor:b",), 0.0))
-    first.check(0.01, "playground")  # sent, not recorded yet
+    checked, finish = threading.Event(), threading.Event()
+
+    def worker():  # the first run's call, in its own thread: sent, not recorded yet
+        first.check(0.01, "playground")
+        checked.set()
+        finish.wait(5)
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    checked.wait(5)
     with pytest.raises(BudgetExceeded) as err:  # 0.01 in flight + 0.01 > the skill cap
         second.check(0.01, "playground")
     assert not isinstance(err.value, CapReached)  # the ledger's cap, not the playground's
     first.close()  # the first run ended without recording (its call failed)
+    assert ledger.in_flight_usd() == 0.0
     second.check(0.01, "playground")
     second.close()
+    finish.set()
+    thread.join()
+
+
+def test_a_call_that_fails_before_the_ledger_records_it_is_released(tmp_path):
+    _, meter, _ = metered(tmp_path, 1.0)
+    meter.check(0.01, "playground")
+    assert meter.inner.in_flight_usd("playground") == pytest.approx(0.01)
+    meter.release()
+    assert meter.inner.in_flight_usd() == 0.0 and meter._inflight == {}
 
 
 def test_job_view():
@@ -91,3 +111,15 @@ def test_job_view():
     assert view["count"] == 5 and view["variations"] == [{"id": 3}, {"id": 4}]
     assert view["planned"] == 12 and view["estimate_usd"] == 0.29 and not view["done"]
     assert job.view(since=-2)["variations"] == job.variations
+
+
+def test_estimate_prices_images_at_the_tokens_measured_in_the_ledger(tmp_path):
+    settings = load_settings(env={"TE_DATA_DIR": str(tmp_path)}, env_file=None)
+    ledger = Ledger(settings.ledger_path, 10.0, 120.0)
+    ledger.record(Entry("muse-wonder-1.0", "/chat/completions", 0.1, 0.01, input_images=1,
+                        input_text_tokens=900,
+                        usage={"prompt_tokens": 1700, "completion_tokens": 500}))
+    compile_ = (1700 * 4.00 + 4096 * 20.00) / 1e6  # 800 per image, measured
+    label = (1050 * 1.25 + 1024 * 4.25) / 1e6
+    assert estimate_usd(settings, ledger=ledger) == pytest.approx(compile_ + 12 * (0.01 + label))
+    assert estimate_usd(settings) == estimate_usd(settings, ledger=ledger)  # the same file

@@ -9,37 +9,31 @@ from dataclasses import dataclass, field
 
 from backend.config import Settings
 from backend.dataengine import labels
-from backend.meta.ledger import Entry, Ledger, token_cost, unit_cost
+from backend.meta.ledger import Entry, Ledger, image_tokens, token_cost, unit_cost
 from backend.playground.budget import Budget, Reservation
-from backend.teach import IMAGE_TOKENS
 
 SKILL = "playground"  # the ledger's skill name for every playground call
 POSITIVES = NEGATIVES = 6
-LEDGER_LOCK = threading.Lock()  # one ledger file, many threads
-# (run, thread) -> the estimate of a call sent but not recorded yet, for every run in this
-# process, so concurrent runs cannot each pass the ledger's caps alone. Under LEDGER_LOCK.
-_IN_FLIGHT: dict[tuple[int, int], float] = {}
 
 
-def in_flight_usd(but: tuple[int, int] | None = None) -> float:
-    """What the playground's calls in flight may cost, all runs (hold LEDGER_LOCK)."""
-    return sum(usd for key, usd in _IN_FLIGHT.items() if key != but)
-
-
-def estimate_usd(settings: Settings, count: int = POSITIVES + NEGATIVES) -> float:
+def estimate_usd(settings: Settings, count: int = POSITIVES + NEGATIVES, *,
+                 ledger=None) -> float:
     """A run before cache hits, every call at its full token budget (as teach.estimate):
-    one compile with one keyframe, `count` image edits and `count` labels."""
+    one compile with one keyframe, `count` image edits and `count` labels. Images are
+    priced at the ledger's measured tokens per image (ledger.image_tokens)."""
     price, model = settings.price, settings.model
-    label = token_cost(price(model("labeler")), IMAGE_TOKENS + 250, labels.MAX_TOKENS[0])
-    return (token_cost(price(model("compiler")), IMAGE_TOKENS + 900, 4096)
+    per_image = image_tokens(settings, ledger).per_image
+    label = token_cost(price(model("labeler")), per_image + 250, labels.MAX_TOKENS[0])
+    return (token_cost(price(model("compiler")), per_image + 900, 4096)
             + unit_cost(price(model("image")), images=count) + count * label)
 
 
 class MeteredLedger:
     """One run's view of the client's ledger: a call must fit in the run's reservation
-    (with the run's other calls in flight) and pass the ledger's own caps (with every
-    run's calls in flight); what the ledger records is added up for the run. close()
-    when the run ends, for calls that failed before the ledger recorded them."""
+    (with the run's other calls in flight) and pass the ledger's own caps, which count
+    every call in flight (of every run, thread and process: the ledger reserves each
+    call's estimate until it is recorded). What the ledger records is added up for the
+    run. close() when the run ends, for calls that failed before the ledger recorded them."""
 
     def __init__(self, inner: Ledger, budget: Budget, reservation: Reservation):
         self.inner, self.budget, self.reservation = inner, budget, reservation
@@ -55,24 +49,27 @@ class MeteredLedger:
         with self._lock:
             others = sum(usd for thread, usd in self._inflight.items() if thread != me)
             self.budget.grow(self.reservation, self.spent + others + estimate_usd)
-            with LEDGER_LOCK:
-                self.inner.check(estimate_usd + in_flight_usd(but=(id(self), me)), skill)
-                _IN_FLIGHT[(id(self), me)] = estimate_usd
+            self.inner.check(estimate_usd, skill)
             self._inflight[me] = estimate_usd
 
     def record(self, entry: Entry) -> None:
         me = threading.get_ident()
         with self._lock:
-            with LEDGER_LOCK:
-                self.inner.record(entry)
-                _IN_FLIGHT.pop((id(self), me), None)
+            self.inner.record(entry)
             self.spent += entry.actual_usd
             self._inflight.pop(me, None)
 
+    def release(self, thread: int | None = None) -> None:
+        """A call of this thread (or `thread`) that failed before the ledger recorded it."""
+        thread = threading.get_ident() if thread is None else thread
+        with self._lock:
+            self._inflight.pop(thread, None)
+            self.inner.release(thread)
+
     def close(self) -> None:
-        with self._lock, LEDGER_LOCK:
+        with self._lock:
             for thread in self._inflight:
-                _IN_FLIGHT.pop((id(self), thread), None)
+                self.inner.release(thread)
             self._inflight.clear()
 
 

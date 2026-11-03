@@ -15,7 +15,12 @@ each with the SERVER_TOKEN from .env. On shutdown a teach run stops before its n
 call and the call in flight is recorded.
 
 GET /skills lists the taught skills for the app's Skills screen:
-{"skills": [{"name", "alert", "cooldown_s", "dataset", "calibrated", "threshold"}]}.
+{"skills": [{"name", "alert", "cooldown_s", "dataset", "calibrated", "threshold",
+"training", "served"}]}. "training" is null or {"run", "state": "running" | "done" |
+"failed", "started", "finished"} for the newest te train run whose bundle lists the skill;
+"served" says whether the run te serve-student last deployed lists it
+(backend/training/runs.py). The threshold is the one watch mode uses: the served run's
+(te calibrate --run) if it has one, else the skill's.
 
 Watch mode: a hello with "watch": ["washer_done", ...] scores every frame for those taught
 skills (backend/watch/watcher.py). The welcome then lists them under "watching", each ack
@@ -24,9 +29,11 @@ carries "scores" ({skill: probability, or null if the student failed}), and an a
   server -> phone  text    {"type": "alert", "skill": "washer_done", "text": "...",
                             "t": ..., "p": 0.93, "confirmed": true}
 
-which the phone speaks through the glasses. Frames are only held in memory; nothing is
-written to disk. Only frame metadata (sequence number, size, dimensions) is logged here,
-and the watcher logs only scores and decisions.
+which the phone speaks through the glasses. Every session's watcher shares one cooldown
+book (data/watch/cooldowns.json), so a reconnect, a skills toggle or a second phone does
+not announce a condition again inside its cooldown. Frames are only held in memory; they
+are never written to disk. Only frame metadata (sequence number, size, dimensions) is
+logged here, and the watcher logs only scores and decisions.
 """
 
 from __future__ import annotations
@@ -36,7 +43,6 @@ import io
 import itertools
 import json
 import logging
-import math
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -48,7 +54,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from backend.watch.watcher import alert_message
+from backend.watch.watcher import COOLDOWNS_FILE, CooldownBook, alert_message
 
 PROTOCOL_VERSION = 1
 MAX_FRAME_BYTES = 8 * 1024 * 1024
@@ -86,7 +92,11 @@ async def health(request):
 def taught_skills(data_dir: Path) -> list[dict]:
     """Every taught, not refused skill under data_dir/skills, for the app."""
     from backend.skills.spec import SkillSpec
+    from backend.training import runs
+    from backend.watch.watcher import skill_threshold
 
+    statuses = runs.all_status(data_dir)
+    served = runs.serving(data_dir)
     out = []
     for spec_file in sorted((Path(data_dir) / "skills").glob("*/spec.json")):
         try:
@@ -96,18 +106,16 @@ def taught_skills(data_dir: Path) -> list[dict]:
         if spec.refused:
             continue
         folder = spec_file.parent
-        threshold_file = folder / "threshold.json"
-        threshold = None
-        if threshold_file.is_file():
-            try:
-                threshold = float(json.loads(threshold_file.read_text())["threshold"])
-            except (OSError, ValueError, KeyError, TypeError):
-                threshold = None
-            if threshold is not None and not math.isfinite(threshold):
-                threshold = None  # Infinity or NaN cannot go into JSON
+        try:
+            threshold, source = skill_threshold(folder, run=served and served["run"])
+        except ValueError:  # unreadable, or Infinity or NaN, which cannot go into JSON
+            threshold, source = None, "default"
+        calibrated = source in ("run", "skill")
         out.append({"name": spec.name, "alert": spec.alert, "cooldown_s": spec.cooldown_s,
                     "dataset": (folder / "dataset" / f"{spec.name}-teach.jsonl").is_file(),
-                    "calibrated": threshold is not None, "threshold": threshold})
+                    "calibrated": calibrated, "threshold": threshold if calibrated else None,
+                    "training": runs.skill_training(statuses, spec.name),
+                    "served": served is not None and spec.name in served["skills"]})
     return out
 
 
@@ -117,43 +125,62 @@ def default_data_dir() -> Path:
     return load_settings().data_dir
 
 
-def default_watcher(names: list[str], session: str):
+def default_watcher(names: list[str], session: str, cooldowns: CooldownBook | None = None):
     """A Watcher for the taught skills `names`, from the settings: the student endpoint
-    (TE_STUDENT_URL), Muse Spark for the cloud check, a frame log under data/watch/."""
+    (TE_STUDENT_URL, TE_STUDENT_MAX_TOKENS), Muse Spark for the cloud check, a frame log
+    under data/watch/, and `cooldowns` shared with the other sessions. The run te
+    serve-student deployed gives the thresholds (te calibrate --run) and how the prompt
+    is laid out (its bundle's system_in_user; else the skills' datasets')."""
     from backend.config import load_settings
     from backend.dataengine.labels import label_image
     from backend.inference.student import OpenAIStudent
     from backend.meta.client import MetaClient
     from backend.skills.spec import check_name
-    from backend.watch.watcher import FrameLog, Watcher, load_skill
+    from backend.training import runs
+    from backend.watch.watcher import FrameLog, Watcher, load_skill, system_in_user
 
     settings = load_settings()
     if not settings.student_url:
         raise ValueError("watch mode needs the trained model's endpoint: set TE_STUDENT_URL")
-    skills = []
+    served = runs.serving(settings.data_dir)
+    run = served["run"] if served else None
+    skills, folders = [], []
     for name in names:
         folder = settings.data_dir / "skills" / check_name(name)
         if not (folder / "spec.json").is_file():
             raise ValueError(f"no taught skill named {name!r}")
-        skills.append(load_skill(folder))
+        skills.append(load_skill(folder, run=run))
+        folders.append(folder)
+        if served and name not in served["skills"]:
+            log.warning("%s is not in the served run %s; its scores mean little", name, run)
+    folded = system_in_user(folders, default=settings.system_in_user,
+                            bundle=runs.bundle_manifest(settings.data_dir, run) if run else None)
     client = MetaClient(settings)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     student = OpenAIStudent(settings.student_url, settings.student_model,
-                            api_key=settings.secrets.get("STUDENT_API_KEY"))
+                            api_key=settings.secrets.get("STUDENT_API_KEY"),
+                            max_tokens=settings.student_max_tokens, system_in_user=folded)
     return Watcher(skills, student,
                    confirm=lambda image, spec: label_image(client, spec, image),
-                   log=FrameLog(settings.data_dir / "watch" / f"{stamp}-{session}.jsonl"))
+                   log=FrameLog(settings.data_dir / "watch" / f"{stamp}-{session}.jsonl",
+                                {"run": run} if run else None),
+                   cooldowns=cooldowns)
 
 
-def create_app(watcher_factory: Callable[[list[str], str], object] | None = None, *,
-               data_dir: Callable[[], Path] = default_data_dir,
+def create_app(watcher_factory: Callable[[list[str], str, CooldownBook], object] | None = None,
+               *, data_dir: Callable[[], Path] = default_data_dir,
+               cooldowns: CooldownBook | None = None,
                extra_routes: Sequence = (), on_shutdown: Sequence[Callable[[], None]] = ()
                ) -> Starlette:
-    """`watcher_factory(skill names, session)` builds the Watcher for a session that asks
-    to watch; without one, watch requests get an error and frames are only acked.
-    `data_dir()` gives the folder GET /skills reads; `extra_routes` are mounted as well
-    (the teach API), and each of `on_shutdown` runs, in a thread, when the server stops."""
+    """`watcher_factory(skill names, session, cooldowns)` builds the Watcher for a session
+    that asks to watch; without one, watch requests get an error and frames are only
+    acked. Every session gets the same `cooldowns` (by default a book saved to
+    data_dir()/watch/cooldowns.json). `data_dir()` gives the folder GET /skills reads;
+    `extra_routes` are mounted as well (the teach API), and each of `on_shutdown` runs, in
+    a thread, when the server stops."""
     sessions = itertools.count(1)
+    book = cooldowns if cooldowns is not None else CooldownBook(
+        lambda: Path(data_dir()) / "watch" / COOLDOWNS_FILE)
 
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -196,7 +223,7 @@ def create_app(watcher_factory: Callable[[list[str], str], object] | None = None
                     raise ValueError('"watch" must be a list of skill names')
                 if watcher_factory is None:
                     raise ValueError("watch mode is not set up on this server")
-                watcher = await run_in_threadpool(watcher_factory, wanted, session)
+                watcher = await run_in_threadpool(watcher_factory, wanted, session, book)
             except Exception as err:  # noqa: BLE001 - tell the phone, keep the session
                 await ws.send_json({"type": "error", "error": f"cannot watch: {err}"})
             else:

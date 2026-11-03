@@ -470,7 +470,7 @@ def test_watch_replays_a_clip_through_the_student(env, monkeypatch, capsys):
     seen = []
 
     class Fake:
-        def __init__(self, url, model, api_key=None):
+        def __init__(self, url, model, api_key=None, **options):
             seen.append((url, model, api_key))
 
         def score(self, image, spec):
@@ -649,3 +649,427 @@ def test_train_with_fixed_steps_prices_them_and_passes_them_on(env, monkeypatch,
     [command] = runs
     assert command[-2:] == ["--max-steps", "10"]
     assert "steps:10" in command[command.index("--tags") + 1].split(",")
+
+
+def status_of(env, run="exp1-mixed"):
+    return json.loads((env / f"data/train/{run}.status.json").read_text())
+
+
+def test_train_marks_the_run_running_then_done_or_failed(env, monkeypatch):
+    taught(env)
+    assert cli.main([*TRAIN, "--smoke", "--estimate-only"]) == 0
+    assert not (env / "data/train/exp1-mixed.status.json").exists()  # nothing ran
+    during = []
+    fake_modal(monkeypatch, {"seconds": 900.0, "ok": True})
+    modal = cli.subprocess.run
+
+    def watching(command, **kw):
+        if command[0] == "modal":
+            during.append(status_of(env))
+        return modal(command, **kw)
+
+    monkeypatch.setattr(cli.subprocess, "run", watching)
+    assert cli.main([*TRAIN, "--smoke", "--yes"]) == 0
+    [running] = during
+    assert (running["state"], running["skills"], running["finished"], running["smoke"]) == (
+        "running", ["washer_done"], None, True)
+    done = status_of(env)
+    assert done["state"] == "done" and done["started"] == running["started"]
+    assert done["finished"] >= done["started"]
+
+    fake_modal(monkeypatch, None, code=1)
+    assert cli.main([*TRAIN, "--smoke", "--yes"]) == 1
+    assert status_of(env)["state"] == "failed"
+
+    def interrupted(command, **kw):
+        if command[0] == "modal":
+            raise KeyboardInterrupt
+        return subprocess.CompletedProcess(command, 0, stdout="abc1234\n", stderr="")
+
+    monkeypatch.setattr(cli.subprocess, "run", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        cli.main([*TRAIN, "--smoke", "--yes"])
+    assert status_of(env)["state"] == "failed" and status_of(env)["finished"]
+
+
+def test_serve_student_records_the_served_run_and_stop_clears_it(env, monkeypatch, capsys):
+    from backend.training import runs
+
+    codes = []
+    monkeypatch.setattr(cli.subprocess, "run",
+                        lambda command, **kw: subprocess.CompletedProcess(command, codes.pop(0)))
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
+    runs.write_status(env / "data", "exp1-mixed", "done", ["washer_done"],
+                      started="2026-11-03T10:00:00Z", finished="2026-11-03T11:00:00Z")
+    codes[:] = [1]
+    assert cli.main(["serve-student", "--run", "exp1-mixed", "--yes"]) == 1
+    assert not (env / "data/train/serving.json").exists()  # the deploy failed
+    codes[:] = [0]
+    assert cli.main(["serve-student", "--run", "exp1-mixed", "--yes"]) == 0
+    serving = json.loads((env / "data/train/serving.json").read_text())
+    assert serving["run"] == "exp1-mixed" and serving["skills"] == ["washer_done"]
+    assert serving["deployed"].endswith("Z")
+    assert "run exp1-mixed serves washer_done" in capsys.readouterr().out
+    codes[:] = [1]
+    assert cli.main(["serve-student", "--stop"]) == 1  # not stopped: still served
+    assert (env / "data/train/serving.json").exists()
+    codes[:] = [0]
+    assert cli.main(["serve-student", "--stop"]) == 0
+    assert not (env / "data/train/serving.json").exists()
+
+
+def scoring(monkeypatch, p=0.9):
+    """A fake OpenAIStudent: every frame scores p; returns the options it was built with."""
+    from backend.inference import student
+
+    built = []
+
+    class Fake:
+        def __init__(self, url, model, api_key=None, **options):
+            built.append(options)
+
+        def score(self, image, spec):
+            return student.Score(p, "yes", 0.1)
+
+    monkeypatch.setattr(student, "OpenAIStudent", Fake)
+    return built
+
+
+def replay_rows(log):
+    return [json.loads(x) for x in Path(log).read_text().splitlines()]
+
+
+def test_calibrate_per_run_then_watch_uses_that_run_s_threshold(env, monkeypatch, capsys):
+    root = taught(env)
+    monkeypatch.setenv("TE_STUDENT_URL", "http://127.0.0.1:8080/v1")
+    log, labels = env / "replay.jsonl", env / "labels.json"
+    probs = [0.6 if i % 1800 < 3 else 0.2 for i in range(3600)] + [0.9] * 30
+    log.write_text("".join(json.dumps({"t": float(i), "skill": "washer_done", "p": p,
+                                       "run": "exp1-mixed"}) + "\n"
+                           for i, p in enumerate(probs)))
+    labels.write_text(json.dumps({"true": [[3600, 3630]]}))
+    calibrate = ["calibrate", "--skill", "washer_done", "--log", str(log), "--labels",
+                 str(labels)]
+    assert cli.main([*calibrate, "--run", "exp1-mixed"]) == 0
+    out = capsys.readouterr().out
+    saved_path = env / "data/watch/exp1-mixed/washer_done/threshold.json"
+    saved = json.loads(saved_path.read_text())
+    assert "washer_done for run exp1-mixed: threshold" in out and "saved: data/watch" in out
+    assert saved["run"] == "exp1-mixed" and 0.6 < saved["threshold"] <= 0.9
+    assert not (root / "threshold.json").exists()  # the skill-wide file is left alone
+    assert cli.main([*calibrate, "--run", "exp1-real"]) == 2
+    assert "was replayed for run exp1-mixed, not exp1-real" in capsys.readouterr().err
+    assert cli.main([*calibrate, "--run", "../up"]) == 2
+    assert "run name" in capsys.readouterr().err
+
+    scoring(monkeypatch)
+    clip = str(write_clip(env / "clip", n=4))
+    replay = env / "out.jsonl"
+    watch = ["watch", "--skills", "washer_done", "--clip", clip, "--log", str(replay)]
+    assert cli.main([*watch, "--run", "exp1-mixed"]) == 0
+    assert "no calibrated threshold" not in capsys.readouterr().out
+    assert {(r["run"], r["threshold"], r["threshold_source"]) for r in replay_rows(replay)} == {
+        ("exp1-mixed", saved["threshold"], "run")}
+    assert cli.main([*watch, "--run", "exp1-mixed", "--threshold", "0.3"]) == 0
+    assert {(r["threshold"], r["threshold_source"]) for r in replay_rows(replay)} == {
+        (0.3, "flag")}
+    assert cli.main([*watch, "--run", "exp1-real"]) == 0  # not calibrated for that run
+    assert "no calibrated threshold yet; using 0.5" in capsys.readouterr().out
+    assert {r["threshold_source"] for r in replay_rows(replay)} == {"default"}
+
+    assert cli.main(calibrate) == 0  # no --run: the skill-wide file, with a note
+    assert "te calibrate --run keeps that run's threshold apart" in capsys.readouterr().out
+    assert cli.main([*watch, "--run", "exp1-real"]) == 0
+    assert "no threshold for run exp1-real yet" in capsys.readouterr().out
+    assert {r["threshold_source"] for r in replay_rows(replay)} == {"skill"}
+    with pytest.raises(SystemExit):
+        cli.main([*watch, "--threshold", "1.5"])
+
+
+def test_watch_asks_the_student_as_it_was_trained_with_its_reply_budget(env, monkeypatch,
+                                                                         capsys):
+    root = taught(env)
+    monkeypatch.setenv("TE_STUDENT_URL", "http://127.0.0.1:8080/v1")
+    built = scoring(monkeypatch)
+    watch = ["watch", "--skills", "washer_done", "--clip", str(write_clip(env / "clip", n=3))]
+    assert cli.main(watch) == 0
+    monkeypatch.setenv("TE_STUDENT_MAX_TOKENS", "900")
+    monkeypatch.setenv("TE_SYSTEM_IN_USER", "1")  # for new datasets: this one is not folded
+    assert cli.main(watch) == 0
+    assert cli.main([*watch, "--max-tokens", "2048"]) == 0
+    assert built == [{"max_tokens": 512, "system_in_user": False},
+                     {"max_tokens": 900, "system_in_user": False},
+                     {"max_tokens": 2048, "system_in_user": False}]
+    manifest_path = root / "dataset/washer_done-teach.manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest_path.write_text(json.dumps({**manifest, "system_in_user": True}))
+    built.clear()
+    capsys.readouterr()
+    assert cli.main(watch) == 0
+    assert built == [{"max_tokens": 900, "system_in_user": True}]
+    assert "system prompt in the user text" in capsys.readouterr().out
+    bundle = env / "data/train/exp1-mixed"
+    bundle.mkdir(parents=True)
+    (bundle / "manifest.json").write_text(json.dumps(
+        {"skills": {"washer_done": "x"}, "system_in_user": False}))
+    assert cli.main([*watch, "--run", "exp1-mixed"]) == 0  # what the run trained on wins
+    assert built[-1]["system_in_user"] is False
+    with pytest.raises(SystemExit):
+        cli.main([*watch, "--max-tokens", "0"])
+
+
+# -- te train: W&B tags and team, artifacts, detach and collect, preflight; Modal spend --
+
+SMOKE_RESULT = {"seconds": 900.0, "train_runtime": 60.0, "train_samples_per_second": 0.5,
+                "ok": True}
+
+
+def test_train_tags_the_data_and_base_passes_the_wandb_team_and_records_the_spend(
+        env, monkeypatch):
+    from backend.config import STUDENT_BASE_REVISION
+    from backend.training import gpu_ledger
+    from backend.training.axolotl import data_hash
+
+    taught(env)
+    runs = fake_modal(monkeypatch, SMOKE_RESULT)
+    assert cli.main([*TRAIN, "--smoke", "--yes", "--limit", "20", "--wandb-entity", "team"]) == 0
+    [command] = runs
+    tags = command[command.index("--tags") + 1].split(",")
+    manifest = json.loads((env / "data/train/exp1-mixed/manifest.json").read_text())
+    assert {f"data:{data_hash(manifest)[:12]}", f"base:{STUDENT_BASE_REVISION[:12]}",
+            "dataset:dataset", "images:20"} <= set(tags)
+    assert command[command.index("--wandb-entity") + 1] == "team" and command[-1] == "--smoke"
+    assert not {"--wandb-artifacts", "--detach", "--detached"} & set(command)
+    [row] = gpu_ledger.read(env / "data")
+    assert (row["kind"], row["name"], row["seconds"], row["usd"]) == (
+        "train", "exp1-mixed", 900.0, 0.9875)
+
+
+def test_wandb_artifacts_ask_even_with_yes_and_say_what_becomes_visible(env, monkeypatch,
+                                                                        capsys):
+    from backend.training.axolotl import data_hash
+
+    taught(env)
+    runs = fake_modal(monkeypatch, SMOKE_RESULT)
+    prompts = answer(monkeypatch, "n")
+    assert cli.main([*TRAIN, "--smoke", "--yes", "--wandb-artifacts"]) == 1
+    assert runs == [] and prompts == ["Upload them to W&B? (asked even with --yes) [y/N] "]
+    out, err = capsys.readouterr()
+    manifest = json.loads((env / "data/train/exp1-mixed/manifest.json").read_text())
+    assert f"dataset artifact exp1-mixed-{data_hash(manifest)[:12]} (40 images" in out
+    assert "30 are Muse Image outputs" in out and "Faces in these images are not blurred" in out
+    assert "nothing uploaded or trained" in err
+    prompts = answer(monkeypatch, "y")
+    assert cli.main([*TRAIN, "--smoke", "--yes", "--wandb-artifacts"]) == 0
+    assert len(prompts) == 1  # --yes skipped the cost question, never this one
+    [command] = runs
+    assert "--wandb-artifacts" in command
+    copied = env / "data/train/exp1-mixed/provenance/washer_done-teach.manifest.json"
+    assert json.loads(copied.read_text())["examples_index"]  # the provenance goes along
+
+
+def test_train_detach_outlives_the_client_and_collect_fetches_the_result(env, monkeypatch,
+                                                                       capsys):
+    from backend.training import gpu_ledger
+    from backend.training import runs as run_files
+
+    taught(env)
+    calls = []
+
+    def lost(command, cwd=None, check=False, **kw):
+        if command[0] != "modal":
+            return subprocess.CompletedProcess(command, 0, stdout="abc1234\n", stderr="")
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 1)  # the connection dropped
+
+    monkeypatch.setattr(cli.subprocess, "run", lost)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
+    assert cli.main([*TRAIN, "--smoke", "--yes", "--detach"]) == 1
+    [command] = calls
+    assert command[:4] == ["modal", "run", "--detach", "backend/training/modal_train.py"]
+    assert "--detached" in command
+    status = status_of(env)
+    assert (status["state"], status["detached"], status["pid"]) == ("running", True, None)
+    assert run_files.read_status(env / "data", "exp1-mixed")["state"] == "running"
+    assert "te train --collect exp1-mixed" in capsys.readouterr().err
+
+    remote = {"run": "exp1-mixed", "smoke": True, "started": status["started"],
+              "finished": status["started"], **SMOKE_RESULT}
+    gets = []
+
+    def volume_get(command, cwd=None, check=False, **kw):
+        gets.append(command)
+        Path(command[-1], "result.json").write_text(json.dumps(remote))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(cli.subprocess, "run", volume_get)
+    assert cli.main(["train", "--collect", "exp1-mixed"]) == 0
+    assert gets[0][:5] == ["modal", "volume", "get", "trained-eye", "/runs/exp1-mixed/result.json"]
+    assert json.loads((env / "data/train/exp1-mixed.result.json").read_text()) == remote
+    timing = json.loads((env / "data/train/smoke-timing.json").read_text())
+    assert timing["train_samples_per_second"] == 0.5
+    done = status_of(env)
+    assert (done["state"], done["finished"], done["skills"]) == (
+        "done", remote["finished"], ["washer_done"])
+    out = capsys.readouterr().out
+    assert "collected:" in out and "smoke timing saved" in out and "done: 900 s" in out
+    assert not list((env / "data/train").glob(".collect-*"))
+    assert cli.main(["train", "--collect", "exp1-mixed"]) == 0  # again: counted once
+    assert [r["kind"] for r in gpu_ledger.read(env / "data")] == ["train"]
+
+
+def test_collect_says_when_there_is_no_result_or_only_an_earlier_one(env, monkeypatch, capsys):
+    from backend.training import runs as run_files
+
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(cli.subprocess, "run",
+                        lambda command, **kw: subprocess.CompletedProcess(command, 1))
+    assert cli.main(["train", "--collect", "exp1-mixed"]) == 1
+    assert "no result for exp1-mixed on the Modal volume yet" in capsys.readouterr().err
+    assert cli.main(["train", "--collect", "Bad Run"]) == 2
+    assert cli.main(["train"]) == 2 and "--skills and --run" in capsys.readouterr().err
+    run_files.write_status(env / "data", "exp1-mixed", "running", ["washer_done"],
+                           started="2026-11-03T15:00:00Z", detached=True)
+
+    def stale(command, **kw):
+        Path(command[-1], "result.json").write_text(json.dumps(
+            {"run": "exp1-mixed", "ok": True, "seconds": 5.0, "finished": "2026-11-03T14:00:00Z"}))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(cli.subprocess, "run", stale)
+    assert cli.main(["train", "--collect", "exp1-mixed"]) == 1
+    assert "from an earlier run of exp1-mixed" in capsys.readouterr().err
+    assert not (env / "data/train/exp1-mixed.result.json").exists()
+    assert status_of(env)["state"] == "running"
+
+
+def test_train_preflight_asks_runs_the_cpu_check_and_prints_the_verdict(env, monkeypatch,
+                                                                       capsys):
+    from backend.dataengine.dataset import SYSTEM_PROMPT
+    from backend.training import gpu_ledger, preflight
+
+    taught(env)
+    render = {"answer": "yes", "tokens": 300, "text": f"<|start|>system<|message|>"
+              f"{SYSTEM_PROMPT}<|eot|>...", "target_text": "yes<|eot|>",
+              "target_ids": [5, 200008], "target_tokens": ["yes", "<|eot|>"]}
+    rendered = {"processor": "MuseProcessor", "generation_eos": [200001, 200008],
+                "renders": [{"id": "a", "layout": layout, **render}
+                            for layout in preflight.LAYOUTS],
+                "ids": {"yes": [5], "no": [6], "special": dict(preflight.SPECIAL),
+                        "eos_token_id": 200001}}
+    report = preflight.summarize(rendered, sequence_len=4096, system_prompt=SYSTEM_PROMPT,
+                                 bundle_system_in_user=False)
+    runs = fake_modal(monkeypatch, report)
+    prompts = answer(monkeypatch, "n")
+    assert cli.main([*TRAIN, "--preflight"]) == 1 and runs == [] and len(prompts) == 1
+    assert cli.main([*TRAIN, "--preflight", "--estimate-only"]) == 0 and runs == []
+    answer(monkeypatch, "y")
+    assert cli.main([*TRAIN, "--preflight"]) == 0
+    [command] = runs
+    assert command[:3] == ["modal", "run", "backend/training/modal_train.py"]
+    assert "--preflight" in command and "--smoke" not in command
+    out = capsys.readouterr().out
+    assert "verdict: TE_SYSTEM_IN_USER=0 (the default) works" in out
+    assert "preflight: passed" in out and "exp1-mixed.preflight.json" in out
+    assert not (env / "data/train/exp1-mixed.status.json").exists()  # nothing trained
+    assert gpu_ledger.read(env / "data") == []  # a CPU job: not in the GPU ledger
+
+
+def test_train_and_export_ask_when_the_modal_credit_would_run_out(env, monkeypatch, capsys):
+    from backend.training import gpu_ledger
+
+    taught(env)
+    (env / "data/train").mkdir(parents=True)
+    (env / "data/train/smoke-timing.json").write_text(json.dumps(SMOKE_RESULT))
+    gpu_ledger.record(env / "data", "train", "earlier", 149.5 / 3.95 * 3600)
+    runs = fake_modal(monkeypatch, {"seconds": 990.0, "ok": True})
+    prompts = answer(monkeypatch, "n")
+    assert cli.main([*TRAIN, "--yes"]) == 1 and runs == [] and len(prompts) == 1
+    assert "plus this $1.01 would pass the $150 of Modal credit" in capsys.readouterr().out
+    prompts = answer(monkeypatch, "n")
+    (env / "data/train/exp1-mixed/manifest.json").write_text("{}")
+    assert cli.main(["export", "--run", "exp1-mixed", "--yes"]) == 1 and runs == []
+    assert "plus this $11.85 would pass" in capsys.readouterr().out and len(prompts) == 1
+
+
+def test_export_records_the_timed_remote_call_also_when_it_fails(env, monkeypatch, capsys):
+    from backend.training import gpu_ledger
+
+    (env / "data/train/exp1-mixed").mkdir(parents=True)
+    (env / "data/train/exp1-mixed/manifest.json").write_text("{}")
+    fake_modal(monkeypatch, {"merged_dir": "/vol/runs/exp1-mixed/merged", "examples": 50,
+                             "agreement": 1.0, "all_agree": True, "bin_files": 0,
+                             "tensor_names_match": True, "disagreements": [], "seconds": 1800.0})
+    assert cli.main(["export", "--run", "exp1-mixed", "--yes"]) == 0
+    [row] = gpu_ledger.read(env / "data")
+    assert (row["kind"], row["name"], row["seconds"], row["usd"]) == (
+        "export", "exp1-mixed", 1800.0, 1.975)
+    fake_modal(monkeypatch, {"run": "exp1-mixed", "ok": False, "seconds": 60.0}, code=1)
+    assert cli.main(["export", "--run", "exp1-mixed", "--yes"]) == 1
+    out, err = capsys.readouterr()
+    assert "the last export took 30 min, about $1.98" in out and "the export failed" in err
+    assert [r["seconds"] for r in gpu_ledger.read(env / "data")] == [1800.0, 60.0]
+
+
+def test_spend_prints_the_modal_total(env, capsys):
+    from backend.training import gpu_ledger
+
+    gpu_ledger.record(env / "data", "train", "exp1-mixed", 3600)
+    assert cli.main(["spend"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("Meta API spend")
+    assert ("Modal GPU spend (data/modal_ledger.jsonl, at config prices): $3.95 of $150 credit"
+            in out)
+
+
+def test_serve_student_base_and_adapters_get_their_own_app_and_the_time_is_recorded(
+        env, monkeypatch, capsys):
+    from backend.training import gpu_ledger
+
+    calls = []
+
+    def run(command, cwd=None, check=False, env=None, **kw):
+        calls.append((command, {k: (env or {}).get(k) for k in cli.SERVE_ENVS}))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(cli.subprocess, "run", run)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
+    assert cli.main(["serve-student", "--base", "--yes"]) == 0
+    assert calls[-1] == (["modal", "deploy", "backend/inference/modal_serve.py"],
+                         {"TE_SERVE_RUN": "", "TE_SERVE_BASE": "1", "TE_SERVE_LORAS": ""})
+    out = capsys.readouterr().out
+    assert "deploys trained-eye-base serving the base model meta-models/Muse-Glimmer-30B at " \
+           "revision a4e59da52a7b as muse-glimmer" in out
+    assert "TE_STUDENT_MODEL=muse-glimmer" in out and "--base-model muse-glimmer" in out
+    assert "te serve-student --stop --base stops it now" in out
+    assert not (env / "data/train/serving.json").exists()  # the base serves no taught skill
+    monkeypatch.setenv("TE_SERVE_BASE", "1")  # a stray shell setting never reaches a deploy
+    assert cli.main(["serve-student", "--run", "exp1-mixed", "--yes"]) == 0
+    assert calls[-1][1] == {"TE_SERVE_RUN": "exp1-mixed", "TE_SERVE_BASE": "",
+                            "TE_SERVE_LORAS": ""}
+    (env / "data/train/exp1-mixed.result.json").write_text('{"ok": true, "smoke": false}')
+    assert cli.main(["serve-student", "--runs", "exp1-real,exp1-mixed", "--yes"]) == 0
+    assert calls[-1][1]["TE_SERVE_LORAS"] == "exp1-real,exp1-mixed"
+    out = capsys.readouterr().out
+    assert "LoRA serving is not documented for Muse Glimmer" in out
+    assert "no finished full run of exp1-real" in out and "of exp1-mixed" not in out
+    assert "TE_STUDENT_MODEL=exp1-real with te watch --run exp1-real" in out
+    for bad in (["--runs", "exp1,exp1"], ["--runs", "Bad Run"], ["--runs", ","],
+                ["--run", "exp1-mixed", "--base"]):
+        assert cli.main(["serve-student", *bad, "--yes"]) == 2, bad
+    assert cli.main(["serve-student", "--stop", "--base"]) == 0
+    assert calls[-1][0] == ["modal", "app", "stop", "trained-eye-base"]
+    assert "trained-eye-base was deployed for" in capsys.readouterr().out
+    rows = gpu_ledger.read(env / "data")
+    assert [(r["kind"], r["name"]) for r in rows] == [
+        ("deploy", "trained-eye-base"), ("deploy", "trained-eye-student"),
+        ("deploy", "trained-eye-base"), ("serve", "trained-eye-base")]
+    assert rows[-1]["upper_bound"] and set(gpu_ledger.open_deploys(env / "data")) == {
+        "trained-eye-student"}
+
+
+def test_eval_wandb_entity_needs_wandb(env, capsys):
+    plan = env / "plan.json"
+    plan.write_text('{"evaluations": []}')
+    args = ["eval", "--plan", str(plan), "--out", str(env / "out"), "--wandb-entity", "team"]
+    assert cli.main(args) == 2 and "--wandb-entity needs --wandb" in capsys.readouterr().err

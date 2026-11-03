@@ -6,7 +6,8 @@ before anything is generated or trained.
 
 Skills may cover objects, states, text, displays, signs and vehicles. They may never
 identify or track a specific person, concern people's bodies or health, monitor
-anyone covertly, or coach sports performance. `policy_check` catches the clear cases
+anyone covertly, coach sports performance, or be about politics or war (an anti-project
+of the hackathon). `policy_check` catches the clear cases
 locally (no API call, no cost); the compiler model refuses the rest.
 """
 
@@ -207,6 +208,34 @@ SPORTS_FORM = re.compile(
     rf"|\bcount\s+(?:my\s+|the\s+)?(?:[\w-]+\s+)?(?:{EXERCISES})\b"
     r"|\bcount\s+my\s+(?:[\w-]+\s+)?(?:laps|steps|miles|curls|jumps)\b",
     re.IGNORECASE)
+# Politics and war, a hackathon anti-project. Phrases, so a war film poster, a campaign of
+# laundry loads, election day on a calendar, military time, a glue gun or a Swiss army
+# knife pass; ARMS_LOOKALIKES (toy weapons, a Salvation Army truck) are removed first.
+POLITICS_WORDS = ("politic*", "propaganda", "partisan*", "democrat*", "republican*", "maga",
+                  "ballot", "ballots", "voter*", "vote for", "voting for", "voted for", "protest",
+                  "protests", "protester*", "protestor*", "protesting", "demonstrator*",
+                  "picket line*", "riot police", "riot gear", "the president",
+                  "prime minister", "senator", "senators", "soldier*", "troops", "militia*",
+                  "weapon*", "firearm*", "rifle*", "handgun*", "a gun", "the gun", "gunfire",
+                  "gunshot*", "gunman", "gunmen", "missile*", "rocket launcher*", "grenade*",
+                  "landmine*", "land mine*", "artillery", "ammunition", "a bomb", "the bomb",
+                  "bombing*", "car bomb*", "airstrike*", "air strike*", "air raid*",
+                  "drone strike*", "warplane*", "fighter jet*", "war zone", "warzone",
+                  "war crime*", "at war")
+POLITICS_FORM = re.compile(
+    r"\b(?:campaign|election)\s+(?:\w+\s+)?(?:signs?|posters?|banners?|flyers?|stickers?|"
+    r"buttons?|billboards?|rally|rallies|office)\b"
+    r"|\belection\s+(?:\w+\s+)?(?:ads?|adverts?|results?|coverage)\b"  # a campaign's may sell
+    r"|\b(?:military|army)\s+(?:vehicles?|trucks?|convoys?|tanks?|aircraft|planes?|jets?|"
+    r"helicopters?|drones?|bases?|parades?|police|checkpoints?|uniforms?|personnel|units?|"
+    r"forces?|equipment|activity|movements?|exercises?|operations?|targets?)\b"
+    r"|\bbattle\s+tanks?\b",
+    re.IGNORECASE)
+ARMS_LOOKALIKES = re.compile(
+    r"\b(?:toy|tin|lego|plastic|foam|nerf|water|squirt)\s+(?:soldiers?|tanks?|guns?|pistols?|"
+    r"rifles?|weapons?|missiles?|grenades?|fighter jets?|warplanes?)\b"
+    r"|\bsalvation\s+army\b|\bsoldier\s+(?:fly|flies|ants?|beetles?)\b",
+    re.IGNORECASE)
 # Object names that contain a person word; removed before the word lists are checked.
 # "child lock" stays a phrase only before a word break, so "the child locks the door" counts.
 OBJECT_PHRASES = re.compile(r"\b(?:child[ -]?lock|child[ -]?proof|baby (?:bottle|food|"
@@ -264,6 +293,8 @@ REFUSALS = {
     "sensitive": "I can't watch sensitive places such as clinics, places of worship or "
                  "changing rooms.",
     "sports": "I can't do sports analysis or coaching.",
+    "politics": "I can't do skills about politics or war, such as campaigns, elections, "
+                "protests, soldiers or weapons.",
     "capture_light": "I can't hide or turn off the glasses' capture light: it is on "
                      "whenever the camera is.",
 }
@@ -308,8 +339,8 @@ def policy_check(request: str) -> str | None:
 
 
 def topic_check(text: str) -> str | None:
-    """The covert, health and sports rules alone. They also apply to every word the
-    compiler writes, where people and rooms may come up in passing."""
+    """The covert, health, sports and politics rules alone. They also apply to every word
+    the compiler writes, where people and rooms may come up in passing."""
     text = OBJECT_PHRASES.sub(" ", normalise(text))
     if _has_word(text, COVERT_WORDS) or COVERT_PHRASES.search(text):
         return REFUSALS["covert"]
@@ -317,6 +348,9 @@ def topic_check(text: str) -> str | None:
         return REFUSALS["health"]
     if SPORTS_FORM.search(text) or _has_word(text, SPORTS_WORDS):
         return REFUSALS["sports"]
+    text = ARMS_LOOKALIKES.sub(" ", text)
+    if POLITICS_FORM.search(text) or _has_word(text, POLITICS_WORDS):
+        return REFUSALS["politics"]
     return None
 
 

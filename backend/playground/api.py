@@ -95,8 +95,8 @@ class Teacher:
             if len(running) >= MAX_RUNNING:
                 return 503, {"error": "The playground is busy. Try again in a minute."}
             try:
-                with runs.LEDGER_LOCK:
-                    client.ledger.check(estimate + runs.in_flight_usd(), runs.SKILL)
+                # Only asks (the run's calls reserve their own); counts every call in flight.
+                client.ledger.check(estimate, runs.SKILL, reserve=False)
                 reservation = self.budget.reserve(keys, estimate)
             except CapReached as err:
                 problem = str(err)

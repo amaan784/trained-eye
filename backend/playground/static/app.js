@@ -5,6 +5,8 @@
   const $ = (id) => document.getElementById(id);
   const money = (v) => "$" + Number(v || 0).toFixed(2);
   const NS = "http://www.w3.org/2000/svg";
+  let publicCopy = false; // the public copy shows no generated images (api/status)
+  const shownBelow = () => publicCopy ? "" : " Precomputed examples are shown below.";
 
   async function getJSON(url) {
     const r = await fetch(url, { credentials: "same-origin" });
@@ -100,13 +102,18 @@
     });
     drawOutline(s.roi);
     wallTiles = s.wall;
+    $("wall-note").textContent = s.wall_note || "";
+    $("wall-note").hidden = !s.wall_note;
+    $("wall-block").hidden = !!s.wall_note;
     Wall.render($("wall"), wallTiles);
     const st = s.label_stats;
     let words = st && st.total ? `Spark agreed with what ${st.kept} of the ${st.total} ` +
       `generated images were made to show` +
       (st.agreement != null ? ` (agreement ${st.agreement})` : "") +
       "; only those are used for training. " : "";
-    words += `Showing ${s.wall.length} of ${s.wall_total}. ` + Wall.summary(s.wall);
+    if (!s.wall_note) {
+      words += `Showing ${s.wall.length} of ${s.wall_total}. ` + Wall.summary(s.wall);
+    }
     $("wall-summary").textContent = words;
   }
   function drawOutline(roi) {
@@ -145,6 +152,7 @@
 
   async function loadStatus() {
     const s = await getJSON("api/status");
+    publicCopy = !!s.public;
     $("teach-cost").textContent = s.estimate_usd == null ? "" : `A run costs at most about ` +
       `${money(s.estimate_usd)} before cache hits. Each visitor may spend ` +
       `${money(s.visitor_cap_usd)} a day, and the playground ${money(s.daily_cap_usd)} ` +
@@ -174,11 +182,13 @@
     });
   }
   async function showExamples() {
-    const { examples } = await getJSON("api/examples");
+    const { examples, note } = await getJSON("api/examples");
     const box = $("examples");
     box.textContent = "";
     $("teach-examples").hidden = false;
-    if (!examples.length) box.appendChild(node("p", "empty", "No precomputed examples yet."));
+    if (!examples.length) {
+      box.appendChild(node("p", "empty", note || "No precomputed examples yet."));
+    }
     for (const ex of examples) {
       const wall = node("div", "wall");
       box.append(node("h3", "", `"${ex.request}"`), node("p", "readback", ex.read_back),
@@ -212,7 +222,7 @@
       showRun({ read_back: body.read_back });
       say("Refused by the policy check before any call, so it cost nothing.");
     } else if (body.unavailable) {
-      say(body.message + " Precomputed examples are shown below.", true);
+      say(body.message + shownBelow(), true);
       showExamples().catch(() => {});
     } else if (!r.ok || !body.job) {
       say(body.error || "Something went wrong.", true);
@@ -281,8 +291,7 @@
   loadKeyframes().catch((err) => say("Could not load the keyframes (" + err.message + ").", true));
   loadStatus().then((s) => {
     if (s.live && s.visitor_left_usd >= s.estimate_usd && s.day_left_usd >= s.estimate_usd) return;
-    say((s.message || "The live budget for today is used up.") +
-      " Precomputed examples are shown below.", !s.live);
+    say((s.message || "The live budget for today is used up.") + shownBelow(), !s.live);
     return showExamples();
   }).catch((err) => say("Could not load the playground's status (" + err.message + ").", true));
 })();

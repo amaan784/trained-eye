@@ -2,7 +2,8 @@
 
 Runs SAM 3.1 on each keyframe with the spec's `target.sam_prompt` (one concept per
 request) and keeps the largest confident match per frame. The boxes drive the "outline"
-visual.
+visual and the crops: te teach adds each keyframe cropped to its best box (`crop_box`, with
+a margin) as one more real example, labelled like the keyframe.
 
 SAM's output is special-token text in Meta's SAM 3 protocol. SPEC.md names Meta's
 `meta-sam-parser` package; this project reads the boxes with its own implementation of
@@ -27,6 +28,8 @@ from backend.meta.client import MetaAPIError, MetaClient
 from backend.skills.spec import SkillSpec
 
 MIN_SCORE = 0.5
+CROP_MARGIN = 0.25  # of the box's width and height, added on every side
+CROP_MIN_SIDE = 64  # pixels; a crop is grown to this, aspect kept, unless the frame is smaller
 
 
 @dataclass
@@ -74,6 +77,40 @@ def parse_sam_output(text: str, size: tuple[int, int] | None = None
 def best_detection(detections: list[Detection], min_score: float = MIN_SCORE) -> Detection | None:
     confident = [d for d in detections if d.score is None or d.score >= min_score]
     return max(confident, key=lambda d: d.area) if confident else None
+
+
+def crop_box(box: tuple[float, float, float, float], size: tuple[int, int],
+             margin: float = CROP_MARGIN, min_side: int = CROP_MIN_SIDE
+             ) -> tuple[int, int, int, int]:
+    """The crop around `box` (x1, y1, x2, y2) in a frame of `size` (width, height), as
+    whole pixels (left, top, right, bottom; right and bottom exclusive).
+
+    The box gets `margin` of its width and height on every side, is grown to at least
+    `min_side` pixels a side, then shrunk to fit the frame, each step keeping its aspect
+    ratio, and is moved inside the frame, centred on the box where it can be. Shrinking
+    never cuts the box (it fits the frame), so the frame only wins over `min_side`."""
+    width, height = size
+    if width < 1 or height < 1:
+        raise ValueError(f"frame size {width}x{height}")
+    x1, x2 = sorted(min(max(float(v), 0.0), width) for v in (box[0], box[2]))
+    y1, y2 = sorted(min(max(float(v), 0.0), height) for v in (box[1], box[3]))
+    w, h = max(x2 - x1, 1.0) * (1 + 2 * margin), max(y2 - y1, 1.0) * (1 + 2 * margin)
+    scale = max(1.0, min_side / min(w, h))
+    scale = min(scale, width / w, height / h)
+    cw = min(width, max(1, round(w * scale)))
+    ch = min(height, max(1, round(h * scale)))
+    left = min(max(round((x1 + x2 - cw) / 2), 0), width - cw)
+    top = min(max(round((y1 + y2 - ch) / 2), 0), height - ch)
+    return left, top, left + cw, top + ch
+
+
+def crop_image(image: bytes, crop: tuple[int, int, int, int]) -> bytes:
+    """The `crop` (from crop_box) of an encoded image, as PNG bytes."""
+    with Image.open(io.BytesIO(image)) as img:
+        part = img.convert("RGB").crop(crop)
+    buf = io.BytesIO()
+    part.save(buf, format="PNG")
+    return buf.getvalue()
 
 
 def locate(client: MetaClient, spec: SkillSpec, keyframes: list[bytes],

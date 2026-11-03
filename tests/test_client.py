@@ -4,6 +4,7 @@ network and nothing is billed."""
 import base64
 import io
 import json
+import threading
 import wave
 
 import httpx
@@ -581,3 +582,86 @@ def test_image_generate_with_refs_uses_edits(tmp_path):
     assert len(result.images) == 2 and result.info.cost_usd == pytest.approx(0.02)
     assert rec.requests[0].url.path == "/v1/images/edits"
     assert rec.requests[0].content.count(b'name="image[]"') == 2
+
+
+# -- spend caps with calls running at once (te serve: phone teach and watch sessions) ----
+
+def test_two_clients_cannot_both_pass_the_cap_with_a_call_in_flight(tmp_path):
+    sent, finish, results = threading.Event(), threading.Event(), []
+
+    def slow(request):  # the phone teach thread's call, still at Meta
+        sent.set()
+        finish.wait(5)
+        return httpx.Response(200, json=chat_reply('{"label": "yes"}'))
+
+    teach, _ = make_client(tmp_path, slow, TE_SKILL_CAP_USD="0.006")
+    watch_rec = Recorder()
+    watch, _ = make_client(tmp_path, watch_rec, TE_SKILL_CAP_USD="0.006")  # same ledger file
+    thread = threading.Thread(target=lambda: results.append(teach.structured(
+        "muse-spark-1.3", "x", SCHEMA, skill="washer_done", max_tokens=1024)))
+    thread.start()
+    assert sent.wait(5)
+    with pytest.raises(BudgetExceeded, match="in flight"):  # $0.0045 + $0.0045 > $0.006
+        watch.structured("muse-spark-1.3", "y", SCHEMA, skill="washer_done", max_tokens=1024)
+    assert watch_rec.requests == [] and watch.ledger.entries() == []  # never sent
+    finish.set()
+    thread.join(5)
+    [entry] = watch.ledger.entries()
+    assert results and entry["status"] == "ok" and watch.ledger.in_flight_usd() == 0.0
+
+
+@pytest.mark.parametrize("reply", [
+    httpx.Response(400, json={"error": "bad request"}),
+    chat_reply("not json"),
+    httpx.ConnectError("refused"),
+])
+def test_a_failed_call_leaves_no_reservation(tmp_path, reply):
+    client, _ = make_client(tmp_path, Recorder(*[reply] * 6))
+    with pytest.raises(MetaAPIError):
+        client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done")
+    assert client.ledger.in_flight_usd() == 0.0
+
+
+def test_a_call_whose_record_fails_still_releases(tmp_path, monkeypatch):
+    client, _ = make_client(tmp_path, Recorder(chat_reply('{"label": "yes"}')))
+
+    def full_disk(entry):
+        raise OSError("no space left")
+
+    monkeypatch.setattr(client.ledger, "record", full_disk)
+    with pytest.raises(OSError):
+        client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done")
+    assert client.ledger.in_flight_usd() == 0.0
+
+
+def test_a_retry_after_a_maybe_billed_attempt_reserves_the_grown_estimate(tmp_path):
+    seen = []
+    client, _ = make_client(tmp_path, lambda r: seen.append(client.ledger.in_flight_usd())
+                            or (httpx.Response(502) if len(seen) == 1
+                                else httpx.Response(200, json=chat_reply('{"label": "no"}'))))
+    client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done", max_tokens=1024)
+    assert seen[1] == pytest.approx(2 * seen[0])  # replaced by the grown one, not added
+    assert client.ledger.in_flight_usd() == 0.0
+
+
+def test_an_unpriceable_reply_is_still_recorded(tmp_path, monkeypatch):
+    import backend.meta.client as client_module
+
+    def broken(usage):
+        raise ZeroDivisionError
+
+    monkeypatch.setattr(client_module, "token_counts", broken)
+    client, _ = make_client(tmp_path, Recorder(chat_reply('{"label": "yes"}')))
+    client.structured("muse-spark-1.3", "x", SCHEMA)
+    [entry] = client.ledger.entries()
+    assert entry["usage"]["unpriced"] and entry["actual_usd"] == entry["estimate_usd"]
+    assert client.ledger.in_flight_usd() == 0.0
+
+
+def test_structured_entries_carry_their_images_and_text_estimate(tmp_path):
+    client, _ = make_client(tmp_path, Recorder(chat_reply('{"label": "yes"}')))
+    client.structured("muse-spark-1.3", [text_part("Is it done?"), image_part(JPEG),
+                                         image_part(JPEG)], SCHEMA, system="Answer.")
+    [entry] = client.ledger.entries()
+    assert entry["input_images"] == 2
+    assert entry["input_text_tokens"] == len("Answer.Is it done?") // 3 + 50

@@ -4,6 +4,7 @@
 import json
 
 from backend.playground import data, skills
+from backend.release import faces
 from backend.teach import TeachOptions, run_teach
 from tests.test_teach import FakeMeta, client_for, clip, png
 
@@ -129,3 +130,59 @@ def test_provided_keyframes(tmp_path):
         {"id": "playground/kettle.png", "url": "media/playground/keyframes/kettle.png"}]
     assert skills.keyframe_bytes(data_dir, "playground/kettle.png") == png((10, 10, 10))
     assert skills.keyframe_bytes(data_dir, first["id"]) is None  # no longer on offer
+
+
+def blur(src, dst):
+    """te blur's output folder (sources.json included), with a fake detector."""
+    return faces.blur_folder(src, dst, detector=lambda b: [(0, 0, 8, 8)])
+
+
+def test_public_copy_shows_blurred_keyframes_and_no_generated_images(tmp_path):
+    data_dir = make_skill(tmp_path)
+    folder = data_dir / "skills" / "washer_done"
+    rois = json.loads((folder / "roi.json").read_text())
+    rois[1]["best"] = {"box": [10, 20, 200, 180], "score": 0.8}
+    (folder / "roi.json").write_text(json.dumps(rois))
+    bare = skills.skill_detail(data_dir, "washer_done", public=True)
+    assert bare["keyframes"] == [] and bare["roi"]["frame"] is None  # not blurred yet
+    blur(folder / "keyframes", folder / "keyframes_blurred")
+    for f in (folder / "synthetic").glob("*.png"):
+        f.unlink()  # the public copy's data has no generated image: counts stay
+    detail = skills.skill_detail(data_dir, "washer_done", public=True)
+    assert detail["wall"] == [] and detail["wall_note"] == skills.WALL_NOTE
+    assert detail["wall_total"] == 12
+    originals = skills.keyframe_files(folder)
+    assert [k["file"] for k in detail["keyframes"]] == originals
+    assert detail["keyframes"][0]["spark_label"] == "no"  # same names: labels still match
+    for k in detail["keyframes"]:
+        assert k["url"].startswith("media/skills/washer_done/keyframes_blurred/")
+        assert data.media_path(data_dir, tmp_path, k["url"][6:], public=True)
+    frame = detail["roi"]["frame"]  # found through sources.json: the bytes differ
+    assert frame["url"] == detail["keyframes"][1]["url"] and frame["box"][0] == 10.0
+    blurred = (folder / "keyframes_blurred" / originals[1]).read_bytes()
+    assert skills.sha256_hex(blurred) != rois[1]["keyframe_sha256"]
+    (listed,) = skills.list_skills(data_dir, public=True)
+    assert listed["variations"] == 12 and listed["keyframes"] == len(originals)
+    assert skills.list_skills(data_dir)[0]["variations"] == 0  # locally: only files that exist
+    assert skills.examples(data_dir, public=True) == []
+    assert skills.skill_detail(data_dir, "washer_done")["wall_note"] is None
+
+
+def test_public_copy_offers_only_curated_blurred_keyframes(tmp_path):
+    data_dir = make_skill(tmp_path)
+    assert skills.provided_keyframes(data_dir, public=True) == []  # no fallback to originals
+    first = skills.provided_keyframes(data_dir)[0]["id"]
+    assert skills.keyframe_bytes(data_dir, first, public=True) is None
+    curated = data_dir / "playground" / "keyframes"
+    curated.mkdir(parents=True)
+    (curated / "by_hand.png").write_bytes(png((10, 10, 10)))
+    assert skills.provided_keyframes(data_dir, public=True) == []  # not from te blur
+    picked = tmp_path / "picked"
+    picked.mkdir()
+    (picked / "kettle.png").write_bytes(png((40, 50, 60)))
+    blur(picked, curated)
+    assert skills.provided_keyframes(data_dir, public=True) == [
+        {"id": "playground/kettle.png", "url": "media/playground/keyframes/kettle.png"}]
+    made = (curated / "kettle.png").read_bytes()
+    assert skills.keyframe_bytes(data_dir, "playground/kettle.png", public=True) == made
+    assert skills.keyframe_bytes(data_dir, "playground/by_hand.png", public=True) is None

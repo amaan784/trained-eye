@@ -11,25 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v37 (M2): The watcher
+## Build stage v38 (M2): Training bundle and the recipe's config
 
-backend/watch/watcher.py is watch mode for a set of taught skills: frames in, alerts
-out. For every frame and skill the student scores the frame, the skill's trigger
-decides whether it fires, and a skill that asks for it has Muse Spark check the frame
-first. If Spark says no, the skill is snoozed for a minute; if the check itself fails,
-the alert goes out marked unconfirmed, as missing the washer is worse than one
-unchecked alert. Thresholds come from te watch --threshold, then the trained run's
-calibration, then the skill's, else 0.5, and each frame log row says which. One
-CooldownBook holds each skill's quiet time for every session and is saved to
-data/watch/cooldowns.json, so a reconnect, a second phone or a restart does not
-announce a condition again inside its cooldown. Every scored frame is logged as one
-JSON line; frames themselves are never written.
+backend/training/prepare.py bundles taught skills into one training set for Modal: one
+adapter learns every skill, since the condition is in the prompt. The bundle holds
+train.jsonl, val.jsonl, the images and a manifest, with image paths where the folder
+will be on the Modal volume. The real, synthetic and mixed variants are Experiment 1's
+arms; the validation split is a fixed 10% once there are enough examples, a limit
+keeps a fixed subset per skill, and the same inputs always give the same bundle.
+Skills written with a different TE_SYSTEM_IN_USER are not mixed.
+backend/training/axolotl.py writes the run's Axolotl config from Meta's QLoRA recipe
+for Muse Glimmer (meta-oss-cookbook b30ca2c): every training value is the recipe's
+own, and only the paths, the W&B names and the gradient accumulation for one H100
+change. The tests for real session clips come with the clips stage.
 
 Files added or changed in this stage:
 
-- `backend/watch/watcher.py` (new): watch mode: scores, the Muse Spark check before an
-  alert, alert messages and the frame log
-- `tests/test_watcher.py` (new): tests
+- `backend/training/axolotl.py` (new): the Axolotl config for a training run: Meta's
+  QLoRA recipe with the run's paths, W&B names and gradient accumulation for one H100
+- `backend/training/prepare.py` (new): bundles taught skills into one training set for
+  Modal (real, synthetic or mixed, with a validation split and volume paths)
+- `tests/test_training_prep.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -48,14 +50,14 @@ set and no network to Meta); the output under each is what they printed.
     $ python -m pytest
     ........................................................................ [ 11%]
     ........................................................................ [ 23%]
-    ........................................................................ [ 35%]
-    ........................................................................ [ 47%]
-    ........................................................................ [ 59%]
-    ........................................................................ [ 70%]
-    ........................................................................ [ 82%]
-    ........................................................................ [ 94%]
-    .................................                                        [100%]
-    609 passed in 8.07s
+    ........................................................................ [ 34%]
+    ........................................................................ [ 46%]
+    ........................................................................ [ 58%]
+    ........................................................................ [ 69%]
+    ........................................................................ [ 81%]
+    ........................................................................ [ 93%]
+    ...........................................                              [100%]
+    619 passed in 12.72s
 
     $ ruff check .
     All checks passed!
@@ -79,6 +81,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
+- `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
+  recipe with the run's paths, W&B names and gradient accumulation for one H100.
+- `backend/training/prepare.py`: bundles taught skills into one training set for Modal
+  (real, synthetic or mixed, with a validation split and volume paths).
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -116,12 +122,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 609 tests, all offline; none calls a paid API.
+- `tests/`: 619 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v38 adds the training bundle (real, synthetic or mixed, with a fixed validation
-split) and Meta's QLoRA recipe as the Axolotl config.
+Stage v39 adds the processor preflight: bundle examples rendered with the pinned
+Glimmer processor before the paid smoke.
 
 ## Privacy and policy
 

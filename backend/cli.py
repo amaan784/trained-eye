@@ -17,6 +17,9 @@ named below.
   te export         merge a trained adapter on Modal and check it answers as before (asks)
   te serve-student  deploy or stop the trained model's endpoint on Modal (asks)
                     (backend/cli_serving.py)
+  te eval           score replayed, labelled clips: results.md and the charts (make eval)
+  te label          mark where a clip's condition is true, or hand-label generated images
+                    (backend/cli_eval.py)
 """
 
 from __future__ import annotations
@@ -451,6 +454,10 @@ def build_parser() -> argparse.ArgumentParser:
     from backend.cli_serving import add_parsers as serving_parsers
 
     serving_parsers(sub)
+
+    from backend.cli_eval import add_parsers as eval_parsers
+
+    eval_parsers(sub)
     return parser
 
 

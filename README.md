@@ -11,27 +11,31 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v71 (M3): The evaluation plan and report
+## Build stage v72 (M3): te eval, te label and make eval
 
-backend/eval/report.py is what te eval and make eval will run. The plan is a JSON file
-of evaluations, each with a unique name, its experiment (1 to 4), skill and variant,
-one or more pairs of a te watch frame log and the clip's human labels, the student's
-GPU price (none for the Mac), the price of a Spark check or of a per-frame scorer, and
-for Experiment 3 the synthetic images and what they cost. An evaluation whose log or
-labels do not exist yet is pending, so the plan can come before the clips. run_eval()
-scores the rest, records the thresholds each evaluation's logs were scored at and
-where they came from, pools Experiment 4's judges over the skills, reads Spark's error
-rate, label agreement and the regression result when given, and writes results.json,
-results.md, the charts and the galleries. With log_wandb, and wandb installed, it logs
-every number, the table and the charts to one W&B run in the trained-eye project, and
-the key is never shown. The gallery tests held back from v70 come back here.
+backend/cli_eval.py adds two commands, registered by backend/cli.py. te eval --plan
+<plan> --out <folder> runs report.run_eval with the data folder and
+eval/regression.json, says how many evaluations are scored and how many wait for
+clips, and points to the failure galleries with a reminder that they stay local;
+--wandb logs the run, and --wandb-entity names the team and needs --wandb. te label
+starts a labelling tool on 127.0.0.1, port 8766 by default, and opens the browser:
+--clip for a recorded clip, its labels saved beside it by default under the clip's
+name with .labels.json in place of its extension, or --skill with --sample (200 by
+default) and --seed for generated images. The Makefile's make eval runs te eval on
+eval/plan.json into eval/. backend/eval/readme.py writes, with te eval --readme, a
+results block between two marker comments in a README: headline tables, chart links,
+the regression line and Spark's error rate, all copied from results.json, whose
+SHA-256 it names as the source. It refuses when nothing is scored or the markers are
+broken, leaving the file as it was, and never links the galleries.
 
 Files added or changed in this stage:
 
-- `backend/eval/report.py` (new): the evaluation runner: the plan, results.json,
-  results.md and the SVG charts
-- `tests/test_eval_gallery.py` (new): tests
-- `tests/test_eval_report.py` (new): tests
+- `Makefile` (new):
+- `backend/cli.py` (changed): the te command line
+- `backend/cli_eval.py` (new): te eval and te label
+- `backend/eval/readme.py` (new):
+- `tests/test_cli_eval.py` (new): tests
+- `tests/test_eval_readme.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -52,18 +56,49 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 17%]
     ........................................................................ [ 25%]
     ........................................................................ [ 34%]
-    ........................................................................ [ 43%]
+    ........................................................................ [ 42%]
     ........................................................................ [ 51%]
-    ........................................................................ [ 60%]
+    ........................................................................ [ 59%]
     ........................................................................ [ 68%]
-    ........................................................................ [ 77%]
-    ........................................................................ [ 86%]
-    ........................................................................ [ 94%]
-    .............................................                            [100%]
-    837 passed in 33.84s
+    ........................................................................ [ 76%]
+    ........................................................................ [ 85%]
+    ........................................................................ [ 93%]
+    ....................................................                     [100%]
+    844 passed in 41.52s
 
     $ ruff check .
     All checks passed!
+
+    $ python -m backend.cli eval --help
+    usage: te eval [-h] --plan PLAN --out OUT [--wandb]
+                   [--wandb-entity WANDB_ENTITY] [--readme README]
+
+    options:
+      -h, --help            show this help message and exit
+      --plan PLAN           the evaluation plan (backend/eval/report.py)
+      --out OUT             folder for results.json, results.md, charts
+      --wandb               also log to W&B (needs wandb)
+      --wandb-entity WANDB_ENTITY
+                            with --wandb: the W&B team (default: your own account)
+      --readme README       also write the results block between the te eval
+                            markers in this file, e.g. README.md
+                            (backend/eval/readme.py)
+
+    $ python -m backend.cli label --help
+    usage: te label [-h] (--clip CLIP | --skill SKILL) [--sample SAMPLE]
+                    [--seed SEED] [--out OUT] [--port PORT] [--no-browser]
+
+    options:
+      -h, --help       show this help message and exit
+      --clip CLIP      a recorded clip, e.g.
+                       data/clips/<skill>/session3_test_a.mp4
+      --skill SKILL    hand-label sampled generated images of this skill
+      --sample SAMPLE  with --skill: images to label
+      --seed SEED      with --skill: same seed, same images
+      --out OUT        labels file; default <clip>.labels.json next to the clip,
+                       or data/skills/<skill>/human_labels.json
+      --port PORT
+      --no-browser     print the address only
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -81,6 +116,7 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   preflight.
 - `backend/cli_watch.py`: te watch and te calibrate.
 - `backend/cli_serving.py`: te export and te serve-student.
+- `backend/cli_eval.py`: te eval and te label.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -149,12 +185,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 837 tests, all offline; none calls a paid API.
+- `tests/`: 844 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v72 adds te eval and te label on the command line, make eval, and the README
-results block written from results.json only.
+Stage v73 adds labelled session clips as real training and validation frames, Muse
+Spark's label error rate against hand labels, and Experiment 2's arm without the Spark
+filter.
 
 ## Privacy and policy
 

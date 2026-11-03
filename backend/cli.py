@@ -20,6 +20,9 @@ named below.
   te eval           score replayed, labelled clips: results.md and the charts (make eval)
   te label          mark where a clip's condition is true, or hand-label generated images
                     (backend/cli_eval.py)
+  te clips          labelled session 1 and 2 clips as training and validation frames (free)
+  te experiments, te unfiltered, te spark-errors, te regress: M3
+                    (te clips too: backend/cli_experiments.py)
 """
 
 from __future__ import annotations
@@ -458,6 +461,10 @@ def build_parser() -> argparse.ArgumentParser:
     from backend.cli_eval import add_parsers as eval_parsers
 
     eval_parsers(sub)
+
+    from backend.cli_experiments import add_parsers as experiment_parsers
+
+    experiment_parsers(sub)
     return parser
 
 

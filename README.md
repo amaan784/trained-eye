@@ -11,31 +11,32 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v74 (M3): The experiment plan and its price
+## Build stage v75 (M3): The experiment commands and eval/plan.json
 
-backend/eval/plan.py lists every te train run of Experiments 1 to 3 with its
-arguments: exp1-real, exp1-synthetic and exp1-mixed, exp2-filtered and
-exp2-unfiltered, and exp3-25 to exp3-300 for 25, 50, 100, 200 and 300 generated images
-per skill. Every run trains the same fixed optimizer steps, one epoch over 300 images
-per skill, so Experiment 3's curve measures images rather than steps. Runs that would
-train the same bundle are marked as repeats of the first, which the printed plan says
-can be skipped. plan_cost() prices the runs from the smoke's timing as te train does,
-adds the final run, an export per model that needs one, a guessed number of serving
-hours per evaluated model and the Modal spend so far, and compares the total with the
-$150 credit; runs already finished on this Mac count in the spend instead.
-spark_usd_per_check() gives a Spark check's price, measured or estimated. The
-held-back tests of te train's pricing and fixed steps, te watch --scorer spark, the
-credit check before te train and te export, and the plan's Spark price come back here.
+backend/cli_experiments.py adds five commands, registered by backend/cli.py. te
+experiments --skills prints every training run with its price and what it still needs;
+--write-plan also writes eval/plan.json, never over an existing one unless --force. te
+unfiltered writes Experiment 2's arm without the Spark filter, te clips turns a
+skill's labelled session clips into dataset-clips/ and says what it left out, and te
+spark-errors saves Spark's error rate against the hand labels; all three are free. te
+regress asks a base and a fine-tuned endpoint the questions with the student's
+sampling and saves eval/regression.json and regression.md. backend/eval/plan_file.py
+builds the plan te eval reads: one evaluation per run and skill, plus Experiment 4's
+three judges, each with its test clips (or a placeholder named as the protocol says,
+pending until recorded), their frame logs and labels, the run whose replays they read,
+the prices and the skill's spoken alert. Each run the student replays also gets its
+session 2 clips under calibration. The held-back te clips test comes back here.
 
 Files added or changed in this stage:
 
-- `backend/eval/plan.py` (new): the experiment plan: every training run with fixed
-  steps and its price
-- `tests/test_cli_serving.py` (changed): tests
-- `tests/test_cli_train.py` (changed): tests
-- `tests/test_cli_watch.py` (changed): tests
-- `tests/test_ledger.py` (changed): tests
-- `tests/test_plan.py` (new): tests
+- `backend/cli.py` (changed): the te command line
+- `backend/cli_experiments.py` (new): te experiments, te unfiltered, te clips, te
+  spark-errors and te regress
+- `backend/eval/plan_file.py` (new): eval/plan.json: the runs, clips and logs make
+  eval reads
+- `tests/test_cli_experiments.py` (new): tests
+- `tests/test_plan_file.py` (new): tests
+- `tests/test_realclips.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -56,19 +57,41 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 16%]
     ........................................................................ [ 24%]
     ........................................................................ [ 32%]
-    ........................................................................ [ 41%]
-    ........................................................................ [ 49%]
-    ........................................................................ [ 57%]
+    ........................................................................ [ 40%]
+    ........................................................................ [ 48%]
+    ........................................................................ [ 56%]
     ........................................................................ [ 65%]
     ........................................................................ [ 73%]
-    ........................................................................ [ 82%]
-    ........................................................................ [ 90%]
-    ........................................................................ [ 98%]
-    .............                                                            [100%]
-    877 passed in 57.50s
+    ........................................................................ [ 81%]
+    ........................................................................ [ 89%]
+    ........................................................................ [ 97%]
+    ......................                                                   [100%]
+    886 passed in 54.18s
 
     $ ruff check .
     All checks passed!
+
+    $ python -m backend.cli experiments --help
+    usage: te experiments [-h] --skills SKILLS [--write-plan] [--force]
+                          [--endpoint-hours ENDPOINT_HOURS]
+
+    options:
+      -h, --help            show this help message and exit
+      --skills SKILLS       comma-separated, e.g. washer_done
+      --write-plan          also write eval/plan.json
+      --force               replace an existing eval/plan.json
+      --endpoint-hours ENDPOINT_HOURS
+                            hours of serving to price per evaluated model
+                            (default: backend/eval/plan.py's
+                            DEFAULT_ENDPOINT_HOURS)
+
+    $ python -m backend.cli clips --help
+    usage: te clips [-h] --skill SKILL [--clips CLIPS]
+
+    options:
+      -h, --help     show this help message and exit
+      --skill SKILL
+      --clips CLIPS  the clip folder (default data/clips/<skill>)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -87,6 +110,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/cli_watch.py`: te watch and te calibrate.
 - `backend/cli_serving.py`: te export and te serve-student.
 - `backend/cli_eval.py`: te eval and te label.
+- `backend/cli_experiments.py`: te experiments, te unfiltered, te clips, te
+  spark-errors and te regress.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -144,6 +169,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   and the SVG charts.
 - `backend/eval/plan.py`: the experiment plan: every training run with fixed steps and
   its price.
+- `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
+  reads.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -157,13 +184,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 877 tests, all offline; none calls a paid API.
+- `tests/`: 886 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v75 adds te experiments, te unfiltered, te clips, te spark-errors and te
-regress, and eval/plan.json written from the experiment plan with its test and
-validation clips.
+Stage v76 adds the replay engine that fills the plan's frame logs (warm-up, validation
+clips, then test clips) and the W&B report built from results.md.
 
 ## Privacy and policy
 

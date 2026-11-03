@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from backend import cli
 from backend.dataengine.realclips import (
     find_clips,
     frame_answers,
@@ -140,6 +141,25 @@ def test_clips_need_a_spec_usable_labels_and_the_teach_layout(tmp_path):
         write_clip_dataset(skill, clips, system_in_user=False)
     manifest = write_clip_dataset(skill, clips)  # the teach dataset's layout
     assert manifest["system_in_user"] is True and manifest["splits"] == {"train": 0, "val": 1}
+
+
+def test_te_clips_writes_the_dataset_and_says_what_it_left_out(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TE_DATA_DIR", str(tmp_path / "data"))
+    assert cli.main(["clips", "--skill", "washer_done"]) == 2
+    assert "no spec yet" in capsys.readouterr().err
+    skill_folder(tmp_path / "data/skills")
+    session_clips(tmp_path / "data/clips/washer_done")
+    assert cli.main(["clips", "--skill", "washer_done"]) == 0
+    out = capsys.readouterr().out
+    assert "  session1_kitchen (train): 24 of 30 frames, 7 yes and 17 no; 6 near a change" in out
+    assert "  left out session1_unlabelled: no session1_unlabelled.labels.json" in out
+    assert ("washer_done: dataset-clips with 33 examples (24 from session 1 to train, 9 from "
+            "session 2 to validate) -> data/skills/washer_done/dataset-clips") in out
+    elsewhere = frame_clip(tmp_path / "drive/session1_a", 3, {"true": []})
+    assert cli.main(["clips", "--skill", "washer_done", "--clips", str(elsewhere.parent)]) == 0
+    assert "no session 2 frames, so the clips hold nothing out" in capsys.readouterr().out
+    assert cli.main(["clips", "--skill", "Bad-Name"]) == 2
 
 
 def test_a_video_ffmpeg_cannot_read_is_left_out(tmp_path, monkeypatch):

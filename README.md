@@ -11,27 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v87 (M4): Playground: teach it yourself
+## Build stage v88 (M4): Playground: the page and its style
 
-backend/playground/api.py runs teach it yourself. Teacher.start takes a condition of
-at most 300 characters and a provided keyframe, turns "the kettle light turns off"
-into "Tell me when the kettle light turns off" and runs the local policy check, so a
-refusal costs nothing. Without a Meta key, or with a cap reached, it answers with a
-message and the precomputed examples. Otherwise it reserves the run's estimate, allows
-one run at a time per visitor and 4 at once in all, and works in a thread the page
-polls: Muse Wonder compiles the skill, Muse Image makes 6 edits that show the
-condition and 6 near-misses, and Muse Spark labels each one. Every call goes through
-MetaClient under the skill name playground, and a cap stops the run before its next
-call. Each image is returned as a data URL of Muse Image's own bytes, so the only copy
-on disk is the client's call cache. backend/playground/publish.py lists what the
-public copy may hold for a deploy; it is tested through te playground --deploy in
-stage v92.
+The playground's page arrives in backend/playground/static/. index.html has a section
+for each part: the recorded clips, with the video, the skill picker and the timeline;
+how each skill was built, with the keyframes, what SAM looks at and the training wall;
+teach it yourself, a form with a condition of at most 300 characters and a keyframe
+picker; the results; and the privacy notes (faces blurred, frames not stored, Muse
+Image provenance kept, no skills about specific people, nothing loaded from other
+sites, the address kept only as a salted hash). The clips, skills, teach and results
+sections each say whether they are precomputed or live. style.css follows the system's
+dark or light setting and styles the timeline, the wall's tiles and the yes and no
+tags. The Inter 4.1 variable font is bundled in fonts/ with its SIL Open Font License,
+so the page fetches nothing from a CDN. The scripts come in the next two stages, and
+the app's tests in v91 check the page.
 
 Files added or changed in this stage:
 
-- `backend/playground/api.py` (new):
-- `backend/playground/publish.py` (new):
-- `tests/test_playground_teach.py` (new): tests
+- `backend/playground/static/fonts/InterVariable.woff2` (new):
+- `backend/playground/static/fonts/LICENSE.txt` (new):
+- `backend/playground/static/index.html` (new):
+- `backend/playground/static/style.css` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -62,7 +62,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 87%]
     ........................................................................ [ 94%]
     .....................................................                    [100%]
-    988 passed, 1 skipped in 80.89s (0:01:20)
+    988 passed, 1 skipped in 75.27s (0:01:15)
 
     $ ruff check .
     All checks passed!
@@ -168,9 +168,9 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v88 adds the playground page, with its clips, skills, teach it yourself, results
-and privacy sections, the stylesheet with dark and light themes, and the bundled Inter
-font.
+Stage v89 adds the playground's two drawings: the live timeline of a clip's scores
+against the threshold with its spoken alerts, and the training wall of labelled
+variations.
 
 ## Privacy and policy
 

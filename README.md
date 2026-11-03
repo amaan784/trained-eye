@@ -11,26 +11,30 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v63 (M2): iOS: saved clips and the build guide
+## Build stage v64 (M3): Hand labels for generated images
 
-ios/TrainedEye/Clips/ClipStore.swift keeps the clips the user saved from the Watch
-screen, and nothing else: one folder per clip under Documents/Clips, named by the time
-it was saved, with the frames as f000.jpg, f001.jpg and so on and a clip.json (when,
-which camera, the watched skills, the last alert). A folder of frames is what te watch
---clip and te teach --clip read, so a clip copied to the Mac can be replayed there.
-Nothing is written without the tap, and a clip goes only when the user deletes it.
-ios/TrainedEye/UI/ClipsView.swift lists them newest first, opens one to its frames and
-deletes it after a confirmation. With these the app's files are all there.
-ios/README.md says how to build it in Xcode (the project, DAT 1.0.1 as an exact
-version, the build settings, the Info.plist and capabilities), how to point it at te
-serve, the mock device, the privacy rules, the files table and the checks still to do
-on the glasses. The code has still not been compiled.
+backend/labeltool/images.py is the first of two local labelling tools, for Experiment
+2's question of how often Muse Spark is wrong. sample_images() picks generated images
+at random from a skill's labels.jsonl, the same ones in the same order for the same
+seed, and never a real keyframe. The page shows one image at a time with the question
+Spark was asked, taken from the skill's spec.json, but never Spark's answer or the
+file name, since generated files are named for the answer they were made to show. The
+keys y, n and u answer yes, no or unsure, and Backspace goes back. Each answer is
+saved at once to a JSON file written in one step, the page resumes at the first image
+without an answer, and labels in the file for other images are kept. The page is
+static/images.html; static/style.css is the look both labelling tools share, with
+Inter bundled in static/fonts/ under the SIL Open Font License. te label, which starts
+the page, comes with te eval.
 
 Files added or changed in this stage:
 
-- `ios/README.md` (new): how to build the iPhone app in Xcode (not compiled yet)
-- `ios/TrainedEye/Clips/ClipStore.swift` (new):
-- `ios/TrainedEye/UI/ClipsView.swift` (new):
+- `backend/labeltool/images.py` (new): the labelling tool for generated images, for
+  Experiment 2
+- `backend/labeltool/static/fonts/InterVariable.woff2` (new):
+- `backend/labeltool/static/fonts/LICENSE.txt` (new):
+- `backend/labeltool/static/images.html` (new):
+- `backend/labeltool/static/style.css` (new):
+- `tests/test_labeltool_images.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -48,17 +52,17 @@ set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
     ........................................................................ [  9%]
-    ........................................................................ [ 19%]
+    ........................................................................ [ 18%]
     ........................................................................ [ 28%]
-    ........................................................................ [ 38%]
+    ........................................................................ [ 37%]
     ........................................................................ [ 47%]
-    ........................................................................ [ 57%]
+    ........................................................................ [ 56%]
     ........................................................................ [ 66%]
-    ........................................................................ [ 76%]
+    ........................................................................ [ 75%]
     ........................................................................ [ 85%]
-    ........................................................................ [ 95%]
-    ...................................                                      [100%]
-    755 passed in 35.69s
+    ........................................................................ [ 94%]
+    .......................................                                  [100%]
+    759 passed in 35.44s
 
     $ ruff check .
     All checks passed!
@@ -127,6 +131,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   OpenAI-compatible endpoint, read at its yes or no answer token.
 - `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
   alert, alert messages and the frame log.
+- `backend/labeltool/images.py`: the labelling tool for generated images, for
+  Experiment 2.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -140,12 +146,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 755 tests, all offline; none calls a paid API.
+- `tests/`: 759 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v64 adds the local page for hand-labelling generated training images, which
-shows each image with the question Muse Spark was asked and never Spark's answer.
+Stage v65 adds the clip labelling page: marking where a skill's condition is true in a
+recorded clip, saved as the time ranges te calibrate reads.
 
 ## Privacy and policy
 

@@ -11,24 +11,24 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v55 (M2): iOS: phone camera and spoken alerts
+## Build stage v56 (M2): iOS: the spoken request recorder
 
-ios/TrainedEye/Camera/PhoneCamera.swift is the fallback when the glasses are
-unavailable, built like the phone camera source in Meta's BirdSpotter sample: one
-capture session on its own queue with the back camera at 640x480, frames turned
-upright by a quarter turn, and only the frames the throttle wants converted. It asks
-for camera access the first time. iOS stops the camera in the background, so this
-source watches only with the app open. ios/TrainedEye/Audio/Speaker.swift speaks
-alerts on the glasses. DAT has no speaker API, so, as BirdSpotter does, a line is
-spoken only when the audio goes to a Bluetooth output and is dropped otherwise, never
-played from the iPhone's speaker. Lines queue rather than cut each other off, and the
-speaker reports whether a line was said. While the microphone is in use for a teach
-request, nothing is spoken and a line being said is cut short.
+ios/TrainedEye/Audio/RequestRecorder.swift records the spoken teach request ("tell me
+when the washer is done") as 16 kHz mono 16-bit WAV, since the backend reads a WAV
+file's length for its cost estimate. The audio session is set up the way CameraAccess
+records the glasses' microphone over Bluetooth HFP, with the glasses' input preferred;
+when it is not the input, the iPhone's microphone records instead. An audio engine tap
+in the input's own format is converted to 16 kHz as BirdSpotter does, and the tap is
+set up again when a device joins or leaves the route, when an interruption such as a
+call ends, and when the engine's configuration changes, keeping what was said before.
+The recorder notes which microphone recorded ("glasses", "iPhone" or "glasses, then
+iPhone") for the Teach screen. A recording under half a second counts as a tap and
+gives nothing, anything past a minute is dropped, and the WAV is built in memory with
+a 44-byte header: nothing goes to disk.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Audio/Speaker.swift` (new):
-- `ios/TrainedEye/Camera/PhoneCamera.swift` (new):
+- `ios/TrainedEye/Audio/RequestRecorder.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -56,7 +56,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 34.81s
+    755 passed in 35.48s
 
     $ ruff check .
     All checks passed!
@@ -141,8 +141,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v56 adds the request recorder: the spoken teach request as 16 kHz WAV in memory,
-from the glasses' microphone when it is the input, else the iPhone's.
+Stage v57 adds the teach client and the teach flow on the phone: hold to talk, a 10
+second capture, the upload, then the Mac's spend and read-back questions.
 
 ## Privacy and policy
 

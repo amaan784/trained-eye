@@ -11,31 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v48 (M2): Export and the student endpoint
+## Build stage v49 (M2): iOS: settings and the protocol
 
-backend/inference/modal_serve.py serves the student with vLLM's OpenAI-compatible
-server on Modal as the cookbook's vllm.md describes: its vllm/vllm-openai:muse-glimmer
-image and single-card arguments on one H100. TE_SERVE_RUN serves a run's merged model
-as the app trained-eye-student, model name trained-eye; TE_SERVE_BASE serves the base
-at its pinned revision as the app trained-eye-base, model name muse-glimmer, and
-TE_SERVE_LORAS adds each run's adapter as a model of its own, so the base and a
-fine-tuned endpoint can be up together. Every request needs STUDENT_API_KEY from the
-Modal Secret student, which reaches vLLM through its environment, never its command
-line. backend/cli_serving.py adds te export, which asks first, runs the merge (at most
-3 hours of GPU time), records that time also when interrupted and reports the check,
-and te serve-student, which asks before a deploy, stops the endpoint with --stop, and
-records the served run for GET /skills and the deploy in the Modal ledger. The test
-that te train and te export ask when the Modal credit would run out comes in v74, as
-its te train half needs the experiment plan.
+The iPhone app starts here. ios/TrainedEye/Models/Settings.swift keeps what the app
+remembers between launches in UserDefaults: the backend address
+(http://192.168.1.20:8765 until one is typed), the skills switched on for watching and
+which camera to use (by default the glasses, else the iPhone). The server token, which
+the teach routes need, goes to the keychain, readable only on this phone after the
+first unlock. The address may be http, https, ws or wss; the settings turn it into the
+HTTP base and the WebSocket address at /ws, and say whether it is on the local network
+(a private IPv4 address or a .local name) or taken to be a tunnel.
+ios/TrainedEye/Models/Protocol.swift has the WebSocket protocol's messages (the hello,
+the welcome, acks with scores, alerts and errors), the /health and /skills replies,
+and the status line the Skills screen shows for each skill. The training and served
+fields are read leniently, so an older backend still decodes.
 
 Files added or changed in this stage:
 
-- `backend/cli.py` (changed): the te command line
-- `backend/cli_serving.py` (new): te export and te serve-student
-- `backend/inference/modal_serve.py` (new): the Modal app that serves the merged model
-  with vLLM behind STUDENT_API_KEY
-- `tests/test_cli_serving.py` (new): tests
-- `tests/test_modal_serve.py` (new): tests
+- `ios/TrainedEye/Models/Protocol.swift` (new):
+- `ios/TrainedEye/Models/Settings.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -63,36 +57,10 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 37.27s
+    755 passed in 31.45s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli export --help
-    usage: te export [-h] --run RUN [--reference {bf16,nf4}] [--limit LIMIT]
-                     [--yes]
-
-    options:
-      -h, --help            show this help message and exit
-      --run RUN             the training run, e.g. exp1-mixed
-      --reference {bf16,nf4}
-                            base precision the merged model is compared against
-      --limit LIMIT         examples to compare
-      --yes                 no question (not over $15)
-
-    $ python -m backend.cli serve-student --help
-    usage: te serve-student [-h] [--run RUN] [--base] [--runs RUNS] [--stop]
-                            [--yes]
-
-    options:
-      -h, --help   show this help message and exit
-      --run RUN    the run whose merged model to serve
-      --base       serve the base model (app trained-eye-base, model muse-
-                   glimmer); with --stop, stop that app
-      --runs RUNS  comma-separated runs: the base with each run's adapter, each
-                   run a model name (vLLM --enable-lora; untried)
-      --stop       stop the endpoint
-      --yes        no question
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -174,9 +142,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v49 adds the iPhone app's first files: its settings, with the server token in
-the keychain, and the backend's WebSocket, /health and /skills messages as Swift
-types.
+Stage v50 adds the app's two clients: plain HTTP calls to te serve with the server
+token, and the watch WebSocket with one frame in flight, reconnects and a keepalive.
 
 ## Privacy and policy
 

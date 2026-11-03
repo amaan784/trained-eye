@@ -11,25 +11,24 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v54 (M2): iOS: the glasses stream and frame throttle
+## Build stage v55 (M2): iOS: phone camera and spoken alerts
 
-ios/TrainedEye/Glasses/GlassesCamera+Stream.swift is the stream half of the glasses
-camera. Once the session has started and the camera permission is granted, it adds a
-camera streaming HEVC (hvc1) at 7 fps, at low resolution (360x640) or medium
-(504x896), and decodes every frame on the SDK's thread with Meta's decoder. An image
-the decoder hands back unchanged went out already, so it is skipped and counted rather
-than sent as a new frame. A stream that stops on its own while the session is up is
-added again, up to 3 times 750 ms apart, as BirdSpotter's bringCameraBack does; frames
-flowing again reset the counts. ios/TrainedEye/Camera/FrameThrottle.swift turns frames
-into JPEGs (quality 0.7) at the pace it is set to, one a second unless told otherwise;
-the app model of v58 sets three a second for a teach capture. Only due frames are
-encoded, and the schedule moves on one interval at a time, so a 7 fps stream thinned
-to three a second gives three a second.
+ios/TrainedEye/Camera/PhoneCamera.swift is the fallback when the glasses are
+unavailable, built like the phone camera source in Meta's BirdSpotter sample: one
+capture session on its own queue with the back camera at 640x480, frames turned
+upright by a quarter turn, and only the frames the throttle wants converted. It asks
+for camera access the first time. iOS stops the camera in the background, so this
+source watches only with the app open. ios/TrainedEye/Audio/Speaker.swift speaks
+alerts on the glasses. DAT has no speaker API, so, as BirdSpotter does, a line is
+spoken only when the audio goes to a Bluetooth output and is dropped otherwise, never
+played from the iPhone's speaker. Lines queue rather than cut each other off, and the
+speaker reports whether a line was said. While the microphone is in use for a teach
+request, nothing is spoken and a line being said is cut short.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Camera/FrameThrottle.swift` (new):
-- `ios/TrainedEye/Glasses/GlassesCamera+Stream.swift` (new):
+- `ios/TrainedEye/Audio/Speaker.swift` (new):
+- `ios/TrainedEye/Camera/PhoneCamera.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -57,7 +56,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 36.95s
+    755 passed in 34.81s
 
     $ ruff check .
     All checks passed!
@@ -142,8 +141,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v55 adds the iPhone camera for when the glasses are not there, and spoken alerts
-that play only over Bluetooth, never from the phone's speaker.
+Stage v56 adds the request recorder: the spoken teach request as 16 kHz WAV in memory,
+from the glasses' microphone when it is the input, else the iPhone's.
 
 ## Privacy and policy
 

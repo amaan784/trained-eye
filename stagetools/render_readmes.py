@@ -9,6 +9,7 @@ Measured outputs are merged into stagetools/measured.json for VERSIONS.md.
 
 from __future__ import annotations
 
+import fcntl
 import filecmp
 import importlib.util
 import json
@@ -234,10 +235,12 @@ def main() -> None:
     shutil.copyfile(stages[-1] / "README.md", ROOT / "README.md")
     old = {}
     path = TOOLS / "measured.json"
-    if path.exists():
-        old = json.loads(path.read_text())
-    old.update(measured)
-    path.write_text(json.dumps(old, indent=1))
+    with open(TOOLS / "measured.json.lock", "w") as lock:  # renders may run side by side
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if path.exists():
+            old = json.loads(path.read_text())
+        old.update(measured)
+        path.write_text(json.dumps(old, indent=1))
 
 
 if __name__ == "__main__":

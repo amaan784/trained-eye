@@ -32,7 +32,7 @@ FILES = {
     "tests/test_teach_upload.py": 44, "tests/test_teach_api.py": 44,
     "backend/server.py": 45, "tests/test_server.py": 45,
     # te watch, export, serving
-    "backend/cli_watch.py": 46, "tests/test_cli_watch.py": 46,
+    "backend/cli_watch.py": 46, "tests/test_cli_watch.py": 46, "pyproject.toml": 46,
     "backend/training/export.py": 47, "backend/training/export_check.py": 47,
     "tests/test_export.py": 47,
     "backend/inference/modal_serve.py": 48, "backend/cli_serving.py": 48,
@@ -78,7 +78,7 @@ FILES = {
     "backend/eval/spark_scorer.py": 68, "backend/eval/regression.py": 68,
     "tests/test_spark_scorer.py": 68, "tests/test_regression.py": 68,
     "backend/eval/writeup.py": 69, "tests/test_eval_writeup.py": 69,
-    "backend/eval/gallery.py": 70, "tests/test_eval_gallery.py": 70,
+    "backend/eval/gallery.py": 70, "tests/test_eval_gallery.py": 71,  # its tests run report
     "backend/eval/report.py": 71, "tests/test_eval_report.py": 71,
     "backend/eval/readme.py": 72, "backend/cli_eval.py": 72, "Makefile": 72,
     "tests/test_eval_readme.py": 72, "tests/test_cli_eval.py": 72,
@@ -100,7 +100,7 @@ FILES = {
     "tests/test_regenerate.py": 81, "tests/test_release_weights.py": 81,
     "backend/release/test_set.py": 82, "tests/test_test_set.py": 82,
     "backend/cli_release.py": 83, "tests/test_cli_release.py": 83,
-    "backend/playground/data.py": 84, "tests/test_playground_data.py": 84,
+    "backend/playground/data.py": 84, "tests/test_playground_data.py": 84, ".gitignore": 84,
     "backend/playground/skills.py": 85, "tests/test_playground_skills.py": 85,
     "backend/playground/budget.py": 86, "backend/playground/runs.py": 86,
     "tests/test_playground_budget.py": 86, "tests/test_playground_runs.py": 86,
@@ -115,7 +115,7 @@ FILES = {
     "backend/playground/modal_app.py": 92, "backend/cli_playground.py": 92,
     "tests/test_playground_modal.py": 92, "tests/test_cli_playground.py": 92,
     # the notes, in their final form, with the last stage
-    ".gitignore": 92, "CLAUDE.md": 92, "HANDOVER.md": 92, "PROGRESS.md": 92,
+    "CLAUDE.md": 92, "HANDOVER.md": 92, "PROGRESS.md": 92,
     "CONTRIBUTIONS.md": 92,
 }
 
@@ -162,6 +162,37 @@ PIECES = {
     "tests/test_modal_train.py": [
         ("text", 42, "import pytest\n\nfrom backend import cli_train\n\n", "import pytest\n\n"),
         ("text", 42, '    assert cli_train.TRAIN_VOLUME == constants()["VOLUME"]\n', ""),
+    ],
+    "tests/test_cli.py": [
+        ("test", 45, "test_server_log_lines_reach_the_console_handler"),
+        ("test", 45, "test_serve_prints_an_address_the_phone_can_use_and_keeps_server_logs"),
+        ("test", 45, "test_serve_says_whether_the_phone_can_teach"),
+    ],
+    "tests/test_teach.py": [
+        ("test", 73, "test_keyframes_with_a_box_add_a_crop_labelled_like_them"),  # spark_errors
+    ],
+    "tests/test_cli_train.py": [  # te train's priced paths read eval/plan.py's fixed steps
+        ("test", 74, "test_train_needs_a_smoke_timing_before_a_real_run"),
+        ("test", 74, "test_train_over_fifteen_dollars_asks_even_with_yes"),
+        ("test", 74, "test_train_prices_the_real_run_from_the_smoke_and_asks"),
+        ("test", 74, "test_train_with_fixed_steps_prices_them_and_passes_them_on"),
+    ],
+    "tests/test_cli_watch.py": [  # Spark's price per check is in eval/plan.py
+        ("text", 74, "from tests.test_cli import answer, taught, use_transport, write_clip\n"
+         "from tests.test_teach import FakeMeta\n", "from tests.test_cli import taught, write_clip\n"),
+        ("test", 74, "test_watch_with_spark_asks_first_and_only_a_yes_fires"),
+        ("test", 74, "test_watch_with_spark_as_the_scorer_prices_and_asks_first"),
+    ],
+    "tests/test_cli_serving.py": [
+        ("text", 74, "from tests.test_cli_train import SMOKE_RESULT\n", ""),
+        ("test", 74, "test_train_and_export_ask_when_the_modal_credit_would_run_out"),
+    ],
+    "tests/test_realclips.py": [
+        ("text", 75, "from backend import cli\nfrom backend.dataengine.realclips", "from backend.dataengine.realclips"),
+        ("test", 75, "test_te_clips_writes_the_dataset_and_says_what_it_left_out"),  # te clips
+    ],
+    "tests/test_release_package.py": [
+        ("test", 81, "test_the_release_ships_the_blurred_keyframes_te_regenerate_needs"),
     ],
     "tests/test_ledger.py": [
         ("test", 74, "test_the_plans_spark_price_uses_the_measured_image_tokens"),

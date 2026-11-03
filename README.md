@@ -11,25 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v36 (M2): Training run records and the Modal spend ledger
+## Build stage v37 (M2): The watcher
 
-Two record keepers that the training and serving commands use later; neither calls
-Modal. backend/training/runs.py keeps a status file per training run in data/train
-(running, done or failed, its skills, start and finish). A run whose te train process
-has gone from this Mac reads as failed, unless it was launched detached, and
-serving.json says which run the student endpoint serves. GET /skills reads these for
-the app's Skills screen. backend/training/gpu_ledger.py keeps Modal GPU time in
-data/modal_ledger.jsonl, one line per training, export or serving job, priced at
-config.MODAL_GPU_USD_PER_HOUR, so te spend can print the Modal total and te train and
-te export can ask before the runs pass the $150 Modal credit. Serving time is an upper
-bound, and a row with a key is written only once.
+backend/watch/watcher.py is watch mode for a set of taught skills: frames in, alerts
+out. For every frame and skill the student scores the frame, the skill's trigger
+decides whether it fires, and a skill that asks for it has Muse Spark check the frame
+first. If Spark says no, the skill is snoozed for a minute; if the check itself fails,
+the alert goes out marked unconfirmed, as missing the washer is worse than one
+unchecked alert. Thresholds come from te watch --threshold, then the trained run's
+calibration, then the skill's, else 0.5, and each frame log row says which. One
+CooldownBook holds each skill's quiet time for every session and is saved to
+data/watch/cooldowns.json, so a reconnect, a second phone or a restart does not
+announce a condition again inside its cooldown. Every scored frame is logged as one
+JSON line; frames themselves are never written.
 
 Files added or changed in this stage:
 
-- `backend/training/gpu_ledger.py` (new):
-- `backend/training/runs.py` (new):
-- `tests/test_gpu_ledger.py` (new): tests
-- `tests/test_training_runs.py` (new): tests
+- `backend/watch/watcher.py` (new): watch mode: scores, the Muse Spark check before an
+  alert, alert messages and the frame log
+- `tests/test_watcher.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -46,16 +46,16 @@ These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 12%]
-    ........................................................................ [ 24%]
-    ........................................................................ [ 36%]
-    ........................................................................ [ 48%]
-    ........................................................................ [ 60%]
-    ........................................................................ [ 72%]
-    ........................................................................ [ 84%]
-    ........................................................................ [ 96%]
-    ...................                                                      [100%]
-    595 passed in 8.92s
+    ........................................................................ [ 11%]
+    ........................................................................ [ 23%]
+    ........................................................................ [ 35%]
+    ........................................................................ [ 47%]
+    ........................................................................ [ 59%]
+    ........................................................................ [ 70%]
+    ........................................................................ [ 82%]
+    ........................................................................ [ 94%]
+    .................................                                        [100%]
+    609 passed in 8.07s
 
     $ ruff check .
     All checks passed!
@@ -102,6 +102,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   threshold, then the cooldown; the threshold calibration on labelled clips.
 - `backend/inference/student.py`: scores a frame with the trained model on an
   OpenAI-compatible endpoint, read at its yes or no answer token.
+- `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
+  alert, alert messages and the frame log.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -114,12 +116,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 595 tests, all offline; none calls a paid API.
+- `tests/`: 609 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v37 adds watch mode itself: the student's scores, the trigger, the Muse Spark
-check before an alert, cooldowns kept across sessions and the frame log.
+Stage v38 adds the training bundle (real, synthetic or mixed, with a fixed validation
+split) and Meta's QLoRA recipe as the Axolotl config.
 
 ## Privacy and policy
 

@@ -4,6 +4,7 @@ network and nothing is billed."""
 import base64
 import io
 import json
+import threading
 import wave
 
 import httpx
@@ -11,6 +12,7 @@ import pytest
 
 from backend.config import ConfigError, MissingSecret, load_settings
 from backend.meta.client import (
+    CacheMiss,
     MetaAPIError,
     MetaClient,
     OutputError,
@@ -50,7 +52,7 @@ class Recorder:
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
         reply = self.replies.pop(0)
-        if isinstance(reply, Exception):
+        if isinstance(reply, BaseException):
             raise reply
         if isinstance(reply, httpx.Response):
             return reply
@@ -296,6 +298,77 @@ def test_odd_200_replies_are_always_recorded(tmp_path, body):
     assert entry["actual_usd"] > 0  # served, so counted against the caps either way
 
 
+@pytest.mark.parametrize("duration", ["NaN", "-9e9", "1e999"])
+def test_a_reported_cost_that_is_not_a_cost_is_charged_at_the_estimate(tmp_path, duration):
+    body = ('{"text": "tell me when the pot boils", "duration": ' + duration + "}").encode()
+    rec = Recorder(httpx.Response(200, content=body), chat_reply('{"label": "yes"}'))
+    client, _ = make_client(tmp_path, rec)
+    client.transcribe(wav_bytes(), skill="pot_boils")
+    [entry] = client.ledger.entries()
+    assert entry["actual_usd"] == pytest.approx(0.18 * 2 / 3600) and entry["usage"]["unpriced"]
+    client.structured("muse-spark-1.3", "x", SCHEMA, skill="pot_boils")  # the caps still work
+    assert client.ledger.spent() > entry["actual_usd"]
+
+
+def test_ctrl_c_during_a_call_is_charged(tmp_path):
+    rec = Recorder(KeyboardInterrupt(), chat_reply('{"label": "yes"}'))
+    client, _ = make_client(tmp_path, rec)
+    with pytest.raises(KeyboardInterrupt):
+        client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done")
+    [entry] = client.ledger.entries()
+    assert entry["status"] == "error" and entry["actual_usd"] > 0
+    assert client.ledger.spent("washer_done") == entry["actual_usd"]
+
+
+def test_failed_calls_carry_their_charge(tmp_path):
+    rec = Recorder(chat_reply("not json"), httpx.Response(400, text="bad image"))
+    client, _ = make_client(tmp_path, rec)
+    with pytest.raises(OutputError) as unusable:
+        client.structured("muse-spark-1.3", "x", SCHEMA)
+    with pytest.raises(MetaAPIError) as rejected:
+        client.structured("muse-spark-1.3", "y", SCHEMA)
+    billed, free = client.ledger.entries()
+    assert unusable.value.cost_usd == billed["actual_usd"] > 0
+    assert rejected.value.cost_usd == free["actual_usd"] == 0
+
+
+@pytest.mark.parametrize("reply", [
+    chat_reply("", finish_reason="length"),
+    chat_reply('{"label": "ye', finish_reason="length"),  # cut off mid-answer
+])
+def test_a_reply_cut_off_for_length_says_so(tmp_path, reply):
+    client, _ = make_client(tmp_path, Recorder(reply))
+    with pytest.raises(OutputError, match="finish_reason=length") as err:
+        client.structured("muse-spark-1.3", "x", SCHEMA)
+    assert err.value.finish_reason == "length"
+
+
+def test_cache_only_never_sends(tmp_path):
+    rec = Recorder(chat_reply('{"label": "no"}'))
+    client, _ = make_client(tmp_path, rec)
+    with pytest.raises(CacheMiss):
+        client.structured("muse-spark-1.3", "x", SCHEMA, cache_only=True)
+    assert rec.requests == [] and client.ledger.entries() == []
+    client.structured("muse-spark-1.3", "x", SCHEMA)
+    hit = client.structured("muse-spark-1.3", "x", SCHEMA, cache_only=True)
+    assert hit.info.cached and hit.data == {"label": "no"}
+
+
+def test_a_cached_reply_that_no_longer_passes_is_fetched_again(tmp_path):
+    rec = Recorder(chat_reply('{"label": "maybe"}'), chat_reply('{"label": "yes"}'))
+    client, _ = make_client(tmp_path, rec)
+    client.structured("muse-spark-1.3", "x", SCHEMA)  # cached under looser checks
+
+    def strict(data):
+        if data["label"] not in ("yes", "no"):
+            raise OutputError("label must be yes or no")
+
+    fresh = client.structured("muse-spark-1.3", "x", SCHEMA, validate=strict)
+    assert fresh.data == {"label": "yes"} and not fresh.info.cached
+    again = client.structured("muse-spark-1.3", "x", SCHEMA, validate=strict)
+    assert again.info.cached and len(rec.requests) == 2
+
+
 def test_fenced_json_and_missing_usage(tmp_path):
     rec = Recorder(chat_reply('```json\n{"label": "unsure"}\n```', usage=False))
     client, _ = make_client(tmp_path, rec)
@@ -348,23 +421,40 @@ def test_transcribe(tmp_path):
         client.transcribe(b"not a wav")
 
 
+@pytest.mark.parametrize("reply", [{"text": ""}, {"text": "  "}, {}, {"text": None}])
+def test_an_empty_transcript_is_billed_but_not_cached(tmp_path, reply):
+    rec = Recorder(reply, {"text": "tell me when the pot boils"})
+    client, _ = make_client(tmp_path, rec)
+    with pytest.raises(OutputError, match="no words.*--request"):
+        client.transcribe(wav_bytes(), skill="pot_boils")
+    assert client.transcribe(wav_bytes(), skill="pot_boils").text == "tell me when the pot boils"
+    assert [e["status"] for e in client.ledger.entries()] == ["output_error", "ok"]
+
+
 def sse(*events):
     body = "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events)
     return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=body)
 
 
+LANE = {"item_id": "msg_1", "output_index": 0, "content_index": 0}
+SAM_LINE = "<0f>0<|box;x1=10;y1=20;x2=299;y2=199;w=640;h=480;c=0.91|><|mask;x=0;y=0;data=2,2,!!!!#Kq|>"
+
+
 def test_sam_streamed(tmp_path):
     rec = Recorder(sse(
-        {"type": "response.output_text.delta", "delta": "<obj>washing machine display"},
-        {"type": "response.output_text.delta", "delta": "<box>10 20 300 200</box></obj>"},
+        {"type": "response.output_text.delta", "delta": SAM_LINE[:40], **LANE},
+        {"type": "response.output_text.delta", "delta": SAM_LINE[40:] + "\n", **LANE},
+        {"type": "response.content_part.done", **LANE,
+         "part": {"type": "output_text", "text": SAM_LINE + "\n"}},
         {"type": "response.completed", "response": {"usage": {"input_tokens": 900}}},
     ))
     client, _ = make_client(tmp_path, rec)
     result = client.sam_image("washing machine display", JPEG, skill="washer_done")
-    assert result.text == "<obj>washing machine display<box>10 20 300 200</box></obj>"
+    assert result.text == SAM_LINE + "\n"
     assert result.info.cost_usd == pytest.approx(0.0025)
     body = json.loads(rec.requests[0].content)
     assert body["model"] == "sam-3.1" and body["stream"] is True
+    assert body["metadata"] == {"include_confidence": "true"}
     assert [p["type"] for p in body["input"][0]["content"]] == ["input_text", "input_image"]
     assert client.sam_image("washing machine display", JPEG, skill="washer_done").info.cached
     [entry] = client.ledger.entries()
@@ -393,7 +483,7 @@ def test_sam_unfinished_stream_is_billed_not_cached(tmp_path, last):
     rec = Recorder(sse(delta, last), sse(delta, last))
     client, _ = make_client(tmp_path, rec)
     for _ in range(2):
-        with pytest.raises(OutputError, match="did not complete"):
+        with pytest.raises(OutputError, match="SAM stream ended with"):
             client.sam_image("pot", JPEG)
     assert len(rec.requests) == 2
     assert all(e["status"] == "output_error" and e["actual_usd"] == 0.0025
@@ -405,8 +495,30 @@ def test_sam_non_streamed_and_empty(tmp_path):
                    {"output": []})
     client, _ = make_client(tmp_path, rec)
     assert client.sam_image("pot", JPEG).text == "<none/>"
-    with pytest.raises(OutputError):
-        client.sam_image("lid", JPEG)
+    assert client.sam_image("lid", JPEG).text == ""  # SAM found nothing: an answer
+
+
+@pytest.mark.parametrize("events, message", [
+    ([{"type": "response.output_text.delta", "delta": "<0f>", **LANE},
+      {"type": "response.output_text.delta", "delta": "0", **LANE, "item_id": "msg_2"},
+      {"type": "response.completed", "response": {}}], "more than one output text lane"),
+    ([{"type": "response.output_text.delta", "delta": "<0f>0", **LANE},
+      {"type": "response.output_text.done", "text": "<0f>9", **LANE},
+      {"type": "response.completed", "response": {}}], "does not match"),
+    ([{"type": "response.refusal.done", "refusal": "no", **LANE}], "refused"),
+    ([{"type": "response.output_text.delta", "delta": "<0f>0", **LANE}], "did not complete"),
+])
+def test_sam_stream_lanes_follow_the_protocol(tmp_path, events, message):
+    client, _ = make_client(tmp_path, Recorder(sse(*events)))
+    with pytest.raises(OutputError, match=message):
+        client.sam_image("pot", JPEG)
+
+
+def test_sam_done_text_alone_is_the_whole_output(tmp_path):
+    rec = Recorder(sse({"type": "response.output_text.done", "text": SAM_LINE, **LANE},
+                       {"type": "response.completed", "response": {"usage": {}}}))
+    client, _ = make_client(tmp_path, rec)
+    assert client.sam_image("pot", JPEG).text == SAM_LINE
 
 
 def test_image_edit_keeps_bytes_exactly(tmp_path):
@@ -441,6 +553,28 @@ def test_image_url_download_never_sends_the_key(tmp_path):
     assert "authorization" not in redirected.headers
 
 
+def test_a_failed_image_download_is_a_billed_output_error(tmp_path):
+    rec = Recorder({"data": [{"url": "https://cdn.example.test/img/1.png"}]},
+                   httpx.Response(503), httpx.ReadTimeout("slow cdn"))
+    client, sleeps = make_client(tmp_path, rec)
+    with pytest.raises(OutputError, match="image download failed: ReadTimeout") as err:
+        client.image_edit(JPEG, "make the display show End", skill="washer_done")
+    assert len(rec.requests) == 3 and sleeps == [1.0]  # the download is tried twice
+    [entry] = client.ledger.entries()
+    assert entry["status"] == "output_error" and entry["actual_usd"] == pytest.approx(0.01)
+    assert err.value.cost_usd == pytest.approx(0.01)
+
+
+def test_an_image_reply_without_images_is_charged_for_what_was_asked(tmp_path):
+    rec = Recorder({"data": [{"image": "in a field the client does not know"}],
+                    "usage": {"images": 2}})
+    client, _ = make_client(tmp_path, rec)
+    with pytest.raises(OutputError, match="no images"):
+        client.image_generate("a washer display showing End", n=2)
+    [entry] = client.ledger.entries()
+    assert entry["status"] == "output_error" and entry["actual_usd"] == pytest.approx(0.02)
+
+
 def test_image_generate_with_refs_uses_edits(tmp_path):
     rec = Recorder({"data": [{"b64_json": base64.b64encode(PNG).decode()}] * 2})
     client, _ = make_client(tmp_path, rec)
@@ -448,3 +582,86 @@ def test_image_generate_with_refs_uses_edits(tmp_path):
     assert len(result.images) == 2 and result.info.cost_usd == pytest.approx(0.02)
     assert rec.requests[0].url.path == "/v1/images/edits"
     assert rec.requests[0].content.count(b'name="image[]"') == 2
+
+
+# -- spend caps with calls running at once (te serve: phone teach and watch sessions) ----
+
+def test_two_clients_cannot_both_pass_the_cap_with_a_call_in_flight(tmp_path):
+    sent, finish, results = threading.Event(), threading.Event(), []
+
+    def slow(request):  # the phone teach thread's call, still at Meta
+        sent.set()
+        finish.wait(5)
+        return httpx.Response(200, json=chat_reply('{"label": "yes"}'))
+
+    teach, _ = make_client(tmp_path, slow, TE_SKILL_CAP_USD="0.006")
+    watch_rec = Recorder()
+    watch, _ = make_client(tmp_path, watch_rec, TE_SKILL_CAP_USD="0.006")  # same ledger file
+    thread = threading.Thread(target=lambda: results.append(teach.structured(
+        "muse-spark-1.3", "x", SCHEMA, skill="washer_done", max_tokens=1024)))
+    thread.start()
+    assert sent.wait(5)
+    with pytest.raises(BudgetExceeded, match="in flight"):  # $0.0045 + $0.0045 > $0.006
+        watch.structured("muse-spark-1.3", "y", SCHEMA, skill="washer_done", max_tokens=1024)
+    assert watch_rec.requests == [] and watch.ledger.entries() == []  # never sent
+    finish.set()
+    thread.join(5)
+    [entry] = watch.ledger.entries()
+    assert results and entry["status"] == "ok" and watch.ledger.in_flight_usd() == 0.0
+
+
+@pytest.mark.parametrize("reply", [
+    httpx.Response(400, json={"error": "bad request"}),
+    chat_reply("not json"),
+    httpx.ConnectError("refused"),
+])
+def test_a_failed_call_leaves_no_reservation(tmp_path, reply):
+    client, _ = make_client(tmp_path, Recorder(*[reply] * 6))
+    with pytest.raises(MetaAPIError):
+        client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done")
+    assert client.ledger.in_flight_usd() == 0.0
+
+
+def test_a_call_whose_record_fails_still_releases(tmp_path, monkeypatch):
+    client, _ = make_client(tmp_path, Recorder(chat_reply('{"label": "yes"}')))
+
+    def full_disk(entry):
+        raise OSError("no space left")
+
+    monkeypatch.setattr(client.ledger, "record", full_disk)
+    with pytest.raises(OSError):
+        client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done")
+    assert client.ledger.in_flight_usd() == 0.0
+
+
+def test_a_retry_after_a_maybe_billed_attempt_reserves_the_grown_estimate(tmp_path):
+    seen = []
+    client, _ = make_client(tmp_path, lambda r: seen.append(client.ledger.in_flight_usd())
+                            or (httpx.Response(502) if len(seen) == 1
+                                else httpx.Response(200, json=chat_reply('{"label": "no"}'))))
+    client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done", max_tokens=1024)
+    assert seen[1] == pytest.approx(2 * seen[0])  # replaced by the grown one, not added
+    assert client.ledger.in_flight_usd() == 0.0
+
+
+def test_an_unpriceable_reply_is_still_recorded(tmp_path, monkeypatch):
+    import backend.meta.client as client_module
+
+    def broken(usage):
+        raise ZeroDivisionError
+
+    monkeypatch.setattr(client_module, "token_counts", broken)
+    client, _ = make_client(tmp_path, Recorder(chat_reply('{"label": "yes"}')))
+    client.structured("muse-spark-1.3", "x", SCHEMA)
+    [entry] = client.ledger.entries()
+    assert entry["usage"]["unpriced"] and entry["actual_usd"] == entry["estimate_usd"]
+    assert client.ledger.in_flight_usd() == 0.0
+
+
+def test_structured_entries_carry_their_images_and_text_estimate(tmp_path):
+    client, _ = make_client(tmp_path, Recorder(chat_reply('{"label": "yes"}')))
+    client.structured("muse-spark-1.3", [text_part("Is it done?"), image_part(JPEG),
+                                         image_part(JPEG)], SCHEMA, system="Answer.")
+    [entry] = client.ledger.entries()
+    assert entry["input_images"] == 2
+    assert entry["input_text_tokens"] == len("Answer.Is it done?") // 3 + 50

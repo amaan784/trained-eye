@@ -11,30 +11,33 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v32 (M2): Policy and the skill compiler
+## Build stage v33 (M2): Meta calls: client, labels and image edits
 
-The local policy check gains two rules. A request to hide, cover or turn off the
-glasses' capture light is refused (another device's recording light is fine), and so
-is a skill about politics or war, matched as phrases after look-alikes such as a glue
-gun, toy soldiers, a Swiss army knife or a laundry campaign are taken out. The people,
-covert and sports rules match fewer innocent words: "his" does not match "hiss", and
-"my lift" counts as a sport only next to a sport word. The compiler checks the model's
-wording as well as the request: the description, negatives, trigger and alert all go
-through the policy, the part of a correction that says what it is not ("not the
-bathroom light") is left out of its check, a compiled cooldown is kept between a
-minute and an hour, and a request is at most 500 characters. The read-back gets
-helpers that make a condition read after "tell you when" and drop conditions that
-differ only in case.
+A call stopped with Ctrl+C, or one whose reply fails after the request went through,
+is charged as billed. An empty transcript is billed but not cached, a cached reply
+that today's checks reject is fetched again, a generated image whose download fails
+twice becomes an output error the data engine can skip, and a reply without usable
+images is charged for the images asked for. The caps are checked again before every
+retry. Failed calls carry what they cost and the finish reason, structured calls can
+ask the cache alone, and each entry records the images and text tokens sent. SAM 3.1
+calls ask for confidences and read the streamed reply by the lane rules of Meta's SAM
+3 protocol: a refusal or a failed or incomplete response is an error, and an empty
+answer is valid. Labels can come from the cache alone, and the synthetic set stops
+with TooManyFailures when too many edits fail.
 
 Files added or changed in this stage:
 
-- `backend/skills/compiler.py` (changed): the skill compiler: the request and 3
-  keyframes go to Muse Wonder (structured output), which returns a spec or a refusal
-- `backend/skills/spec.py` (changed): the skill spec (version 1), the local policy
-  check that refuses skills about people, health, covert monitoring or sports, and the
-  plain-English read-back
-- `tests/test_compiler.py` (changed): tests
-- `tests/test_skills.py` (changed): tests
+- `backend/dataengine/labels.py` (changed): Muse Spark labels for every image, the
+  filter that keeps generated images only when Spark agrees, and agreement stats
+- `backend/dataengine/synth.py` (changed): the synthetic set: a deterministic plan of
+  Muse Image edits of the keyframes (positives, hard negatives, nuisance variation),
+  saved untouched with a manifest
+- `backend/meta/client.py` (changed): MetaClient, the only way the code calls Meta's
+  API: cache first, then cap check, retries with backoff for 429, 5xx and timeouts, and
+  spend recorded from the reported usage
+- `tests/test_client.py` (changed): tests
+- `tests/test_labels.py` (changed): tests
+- `tests/test_synth.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -51,31 +54,18 @@ These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 14%]
-    ........................................................................ [ 29%]
-    ........................................................................ [ 44%]
-    ........................................................................ [ 59%]
-    ........................................................................ [ 74%]
-    ........................................................................ [ 89%]
-    ...................................................                      [100%]
-    483 passed in 8.23s
+    ........................................................................ [ 13%]
+    ........................................................................ [ 27%]
+    ........................................................................ [ 41%]
+    ........................................................................ [ 55%]
+    ........................................................................ [ 69%]
+    ........................................................................ [ 83%]
+    ........................................................................ [ 97%]
+    ............                                                             [100%]
+    516 passed in 10.97s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli policy "let me know when the washer says done"
-    ok: no local policy objection (the skill compiler checks again)
-
-    $ python -m backend.cli policy "help me hide the capture light on my glasses"
-    refused: I can't hide or turn off the glasses' capture light: it is on whenever the camera is.
-    (exit code 1)
-
-    $ python -m backend.cli policy "tell me when a tank drives past"
-    refused: I can't do skills about politics or war, such as campaigns, elections, protests, soldiers or weapons.
-    (exit code 1)
-
-    $ python -m backend.cli policy "tell me when the glue gun is hot"
-    ok: no local policy objection (the skill compiler checks again)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -125,13 +115,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 483 tests, all offline; none calls a paid API.
+- `tests/`: 516 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v33 adds the Meta client's hardening: interrupted and failed calls charged, the
-caps checked again before every retry, and SAM 3.1's streamed reply read by the
-protocol's rules.
+Stage v34 adds our reader of SAM 3.1's text format, with boxes and crops for every
+keyframe.
 
 ## Privacy and policy
 

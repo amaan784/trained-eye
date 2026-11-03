@@ -11,31 +11,30 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v31 (M2): Settings and the spend ledger
+## Build stage v32 (M2): Policy and the skill compiler
 
-The settings every later stage reads arrive here. STUDENT_API_KEY (the trained model's
-endpoint) and SERVER_TOKEN (teaching from the phone) are secrets like the other keys:
-read from .env, never printed. The student endpoint is set with TE_STUDENT_URL,
-TE_STUDENT_MODEL and TE_STUDENT_MAX_TOKENS, TE_SYSTEM_IN_USER folds the system prompt
-into new datasets, and TE_DATA_DIR may start with ~. The Modal GPU price, the $15 rule
-and the $150 Modal credit live in config.py too. The spend ledger now reserves each
-call's estimate until the call is recorded, under a lock and an flock beside the
-ledger, so calls in flight in any thread or process count against the caps together; a
-reservation left by a thread or process that ended is dropped. Entries record the
-images and text tokens of token-priced calls, so image_tokens() can tell what an image
-costs from the ledger's own usage. CI installs ffmpeg for the video tests.
+The local policy check gains two rules. A request to hide, cover or turn off the
+glasses' capture light is refused (another device's recording light is fine), and so
+is a skill about politics or war, matched as phrases after look-alikes such as a glue
+gun, toy soldiers, a Swiss army knife or a laundry campaign are taken out. The people,
+covert and sports rules match fewer innocent words: "his" does not match "hiss", and
+"my lift" counts as a sport only next to a sport word. The compiler checks the model's
+wording as well as the request: the description, negatives, trigger and alert all go
+through the policy, the part of a correction that says what it is not ("not the
+bathroom light") is left out of its check, a compiled cooldown is kept between a
+minute and an hour, and a request is at most 500 characters. The read-back gets
+helpers that make a condition read after "tell you when" and drop conditions that
+differ only in case.
 
 Files added or changed in this stage:
 
-- `.env.example` (changed): template for the keys (copy to .env)
-- `.github/workflows/ci.yml` (changed): CI: ruff and pytest on every push
-- `backend/config.py` (changed): settings: model IDs for every job, prices, spend caps
-  and data paths; secrets come from the environment or a local .env file and are never
-  printed
-- `backend/meta/ledger.py` (changed): spend ledger: estimated cost checked against the
-  per-skill ($10) and global ($120) caps before each call, actual cost recorded after
-- `tests/test_config.py` (changed): tests
-- `tests/test_ledger.py` (changed): tests
+- `backend/skills/compiler.py` (changed): the skill compiler: the request and 3
+  keyframes go to Muse Wonder (structured output), which returns a spec or a refusal
+- `backend/skills/spec.py` (changed): the skill spec (version 1), the local policy
+  check that refuses skills about people, health, covert monitoring or sports, and the
+  plain-English read-back
+- `tests/test_compiler.py` (changed): tests
+- `tests/test_skills.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -52,50 +51,31 @@ These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [ 22%]
-    ........................................................................ [ 45%]
-    ........................................................................ [ 67%]
-    ........................................................................ [ 90%]
-    ..............................                                           [100%]
-    318 passed in 6.70s
+    ........................................................................ [ 14%]
+    ........................................................................ [ 29%]
+    ........................................................................ [ 44%]
+    ........................................................................ [ 59%]
+    ........................................................................ [ 74%]
+    ........................................................................ [ 89%]
+    ...................................................                      [100%]
+    483 passed in 8.23s
 
     $ ruff check .
     All checks passed!
 
-    $ python -m backend.config
-    Trained Eye settings
-      base_url: https://api.meta.ai/v1
-      data_dir: data
-      spend caps: $10.00 per skill, $120.00 global
-      train on model outputs: yes
-      student: not set (TE_STUDENT_URL) (trained-eye), at most 512 tokens a reply
-      system prompt in new datasets: its own turn
-      models:
-        transcribe    muse-voice-transcribe-1.0
-        compiler      muse-wonder-1.0
-        sam           sam-3.1
-        image         muse-image-1.0
-        labeler       muse-spark-1.3
-        confirm       muse-spark-1.3
-        student_base  meta-models/Muse-Glimmer-30B
-                      (student_base revision a4e59da52a7b)
-      secrets:
-        MODEL_API_KEY    missing
-        HF_TOKEN         missing
-        WANDB_API_KEY    missing
-        STUDENT_API_KEY  missing
-        SERVER_TOKEN     missing
+    $ python -m backend.cli policy "let me know when the washer says done"
+    ok: no local policy objection (the skill compiler checks again)
 
-    $ python -m backend.cli spend
-    Meta API spend (ledger: data/ledger.jsonl)
-      calls: 0  errors: 0
-      actual: $0.0000  (estimated before calls: $0.0000)
-      global cap: $120.00  remaining: $120.0000
-      per-skill cap: $10.00
-      by model:
-        (no calls yet)
-      by skill:
-        (no calls yet)
+    $ python -m backend.cli policy "help me hide the capture light on my glasses"
+    refused: I can't hide or turn off the glasses' capture light: it is on whenever the camera is.
+    (exit code 1)
+
+    $ python -m backend.cli policy "tell me when a tank drives past"
+    refused: I can't do skills about politics or war, such as campaigns, elections, protests, soldiers or weapons.
+    (exit code 1)
+
+    $ python -m backend.cli policy "tell me when the glue gun is hot"
+    ok: no local policy objection (the skill compiler checks again)
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -145,12 +125,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 318 tests, all offline; none calls a paid API.
+- `tests/`: 483 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v32 adds the policy check's new rules (hiding the glasses' capture light,
-politics and war) and checks on the compiled skill's own wording.
+Stage v33 adds the Meta client's hardening: interrupted and failed calls charged, the
+caps checked again before every retry, and SAM 3.1's streamed reply read by the
+protocol's rules.
 
 ## Privacy and policy
 

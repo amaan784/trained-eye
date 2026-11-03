@@ -25,6 +25,9 @@ named below.
                     (te clips too: backend/cli_experiments.py)
   te replay         replay a run's pending clips of eval/plan.json into the plan's logs
                     (backend/cli_replay.py)
+  te manifests, te regenerate, te blur, te release, te fetch-weights, te release-test-set,
+  te release-collection, te wandb-report: M4
+                    (backend/cli_release.py)
 """
 
 from __future__ import annotations
@@ -471,6 +474,10 @@ def build_parser() -> argparse.ArgumentParser:
     from backend.cli_replay import add_parsers as replay_parsers
 
     replay_parsers(sub)
+
+    from backend.cli_release import add_parsers as release_parsers
+
+    release_parsers(sub)
     return parser
 
 

@@ -11,29 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v60 (M2): iOS: app entry, tabs and project files
+## Build stage v61 (M2): iOS: Connect and Teach screens
 
-ios/TrainedEye/App/TrainedEyeApp.swift is the app entry: it configures Meta's DAT SDK
-once at launch, before the app model reads it, applies the theme at the root, and
-hands the Meta AI app's callbacks (registration and permission) to the SDK, as the
-CameraAccess sample does. ios/TrainedEye/UI/RootView.swift lays out the five tabs,
-Connect, Teach, Skills, Watch and Clips, with a bar above every one while any camera
-is on: it says which camera, or that the glasses are folded or out of reach, and opens
-the Watch screen when tapped. It also asks before the Meta AI app opens for the camera
-permission. ios/TrainedEye-Info.plist has the trainedeye:// callback scheme, the SDK's
-settings with its analytics and crash reporting turned off, the background modes
-(processing, Bluetooth, audio and the external accessory link), the Inter fonts, the
-camera, microphone, Bluetooth and local network usage strings, plain HTTP on the local
-network, and file sharing for saved clips. ios/TrainedEye.entitlements has the
-keychain group both of Meta's samples declare. The screens come in the next three
-stages.
+ios/TrainedEye/UI/ConnectView.swift is where the app finds the Mac and the glasses.
+The backend card takes the address te serve prints and the server token, says what
+kind of address it is, and checks the connection with GET /health, then fetches the
+skills. The glasses card shows the Meta AI registration, the paired glasses, their
+battery and the camera's state, with buttons to connect or disconnect and to update
+the glasses or the app on them when needed. A segmented picker chooses the camera, and
+Debug builds add a card for the mock glasses with fold, unfold and a touchpad tap.
+ios/TrainedEye/UI/TeachView.swift is the Teach screen: the name, hold to talk (at most
+30 seconds) or type the request, with a note that skills never cover a person, then
+the 10 second capture with its preview, frame size and countdown, and Send to the Mac.
+During the run on the Mac it shows the estimate to agree to, the read-back to confirm
+or correct, the last 8 progress lines, and the result and spend.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye-Info.plist` (new):
-- `ios/TrainedEye.entitlements` (new):
-- `ios/TrainedEye/App/TrainedEyeApp.swift` (new):
-- `ios/TrainedEye/UI/RootView.swift` (new):
+- `ios/TrainedEye/UI/ConnectView.swift` (new):
+- `ios/TrainedEye/UI/TeachView.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -61,7 +57,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 34.67s
+    755 passed in 35.24s
 
     $ ruff check .
     All checks passed!
@@ -146,9 +142,9 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v61 adds the Connect screen (the backend address and token, the glasses, the
-camera choice, the Debug mock) and the Teach screen with its capture and the Mac's
-questions.
+Stage v62 adds the Skills screen (each taught skill with its watch switch and status)
+and the Watch screen (alerts, scores, the connection, the glasses and the background
+counts).
 
 ## Privacy and policy
 

@@ -11,27 +11,29 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v51 (M2): iOS: Meta's HEVC decoder and teach messages
+## Build stage v52 (M2): iOS: glasses connection and the mock device
 
-Two files under ios/TrainedEye/Meta/ are Meta's own sample code from the DAT iOS SDK
-1.0.1, copied unchanged with Meta's header kept: VideoFrameDecoder.swift from the
-CameraAccess sample, and HEVCKeyframe.swift, the isHEVCKeyframe() check from its
-VideoCaptureHandler.swift, moved into a file of its own. The SDK's LICENSE (the Meta
-Wearables Developer Terms, not an open-source license) sits next to them. The decoder
-turns the glasses' HEVC frames into images, decoding in software so the session
-survives the app going to the background; while it waits for a keyframe, or when a
-frame fails, it hands back the last good image, and it builds a new session after 3
-failures in a row. ios/TrainedEye/Models/TeachModels.swift holds the teach API's
-messages: the status that all three teach routes return (the state, the open question,
-progress lines, the estimate, the read-back, the summary and the spend), read
-leniently so an unknown field never hides the rest, and the answer the app sends.
+ios/TrainedEye/Glasses/GlassesConnection.swift registers the app with the Meta AI app,
+which calls back through the app's URL scheme, and follows the paired glasses as
+Meta's CameraAccess and BirdSpotter samples do: it listens to each device's link,
+compatibility and state, and reports the first connected pair (else the first paired
+one) with its name, link and battery, which stays unknown while DAT reports 0. It says
+when the glasses need a firmware update and can open that update, or the update of the
+DAT app on the glasses. ios/TrainedEye/Glasses/MockGlasses.swift, in Debug builds
+only, drives DAT's Mock Device Kit: it pairs the "Meta Glasses" model, powers it on,
+unfolds and dons it, and sets its camera feed before any stream starts, to
+Resources/mock_feed.mp4 when the app has it, else the iPhone's back camera. Fold,
+unfold and a touchpad tap let the simulator check that watching comes back after a
+fold and is left alone while paused. ios/make_mock_feed.py makes that clip with Pillow
+and ffmpeg: a drawn washer display counting down to "End", HEVC tagged hvc1, 360x640,
+10 fps, 16 seconds.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Meta/HEVCKeyframe.swift` (new):
-- `ios/TrainedEye/Meta/LICENSE` (new):
-- `ios/TrainedEye/Meta/VideoFrameDecoder.swift` (new):
-- `ios/TrainedEye/Models/TeachModels.swift` (new):
+- `ios/TrainedEye/Glasses/GlassesConnection.swift` (new):
+- `ios/TrainedEye/Glasses/MockGlasses.swift` (new):
+- `ios/TrainedEye/Resources/mock_feed.mp4` (new):
+- `ios/make_mock_feed.py` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -59,7 +61,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 31.57s
+    755 passed in 34.79s
 
     $ ruff check .
     All checks passed!
@@ -144,9 +146,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v52 adds the glasses connection (registration with the Meta AI app, link,
-battery, firmware) and DAT's mock glasses for Debug builds, with a drawn washer clip
-as the simulator's feed.
+Stage v53 adds the glasses camera: a DAT session that comes back by itself after a
+fold or a link drop, the camera permission asked first, and a change of stream size.
 
 ## Privacy and policy
 

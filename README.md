@@ -11,31 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v81 (M4): Regeneration and fetching the weights
+## Build stage v82 (M4): The test clips as a dataset
 
-Generated images are never published, so backend/regenerate.py ships what rebuilds
-them. export_manifests copies each skill's synthetic/manifest.jsonl into a committed
-folder with only the fields that remake an image and check its provenance (no image
-bytes, file names or costs), sorted so reruns give the same file. regenerate runs the
-same edits again through MetaClient, so every call is cached, capped and in the
-ledger, and free where the images were made. It finds the keyframes by SHA-256, or
-face-blurred copies through the sources.json blur_folder writes, hands the plan and
-the estimate to a confirm callback before any call, so a no spends nothing, and counts
-how many images match the manifest's hashes, never failing on a difference.
-backend/release/weights.py downloads a run's adapter or merged build from the Modal
-volume trained-eye: only the top-level weight and config files, each checked against
-the size the volume lists, into a hidden folder first, so the result is always
-complete. The release test of the blurred keyframes, held back in v80, comes back
-here.
+backend/release/test_set.py prepares the held-out test clips for a dataset repo. Only
+session 3 clips go in (session3_test_<name>, recorded apart from the training clips),
+and only .mp4 videos blur_video wrote, whose blur record's output SHA-256 is the
+video's. Each clip needs the author's own labels from te label, found next to the
+blurred video or beside the original under a labels root, <root>/<skill>/. They are
+checked against the video's length from ffprobe, with 1.0 second of slack, and, when
+the original is there, its hash against the blur record. prepare_test_set writes
+<skill>/<clip>.mp4 with its labels, metadata.jsonl, a dataset card that states the
+labels are human only and lists the privacy steps, and release.json with each clip's
+blur record. There is no default license: the author picks one. check_folder, which
+package.upload runs for a test set, refuses any image, an unlisted or unblurred video,
+and metadata that does not match release.json.
 
 Files added or changed in this stage:
 
-- `backend/regenerate.py` (new): the prompt manifests and regenerating images from
-  them
-- `backend/release/weights.py` (new):
-- `tests/test_regenerate.py` (new): tests
-- `tests/test_release_package.py` (changed): tests
-- `tests/test_release_weights.py` (new): tests
+- `backend/release/test_set.py` (new):
+- `tests/test_test_set.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -62,11 +56,11 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 61%]
     ........................................................................ [ 68%]
     ........................................................................ [ 76%]
-    ........................................................................ [ 84%]
+    ........................................................................ [ 83%]
     ........................................................................ [ 91%]
     ........................................................................ [ 99%]
-    ....                                                                     [100%]
-    939 passed, 1 skipped in 57.16s
+    .......                                                                  [100%]
+    942 passed, 1 skipped in 62.77s (0:01:02)
 
     $ ruff check .
     All checks passed!
@@ -167,13 +161,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 939 tests, all offline; none calls a paid API.
+- `tests/`: 942 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v82 adds the human-labelled session 3 test clips as a Hugging Face dataset
-folder: only blurred videos with a matching blur record, under the license the author
-chooses.
+Stage v83 adds the M4 release commands: te manifests, te regenerate, te blur, te
+fetch-weights, te release, te release-test-set, te release-collection and te
+wandb-report, each asking before it spends or publishes unless given --yes.
 
 ## Privacy and policy
 

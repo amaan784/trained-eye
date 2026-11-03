@@ -11,22 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v39 (M2): The processor preflight
+## Build stage v40 (M2): The Modal training app
 
-backend/training/preflight.py checks, before the paid smoke, how training will see a
-few bundle examples. On Modal (a CPU job, no weights) the pinned Muse Glimmer
-processor renders each example in both layouts, with the system prompt as its own turn
-and folded into the user text, counting tokens the way the cookbook does. On this Mac
-summarize() judges the result: every example within the recipe's sequence length, the
-system prompt rendered once, the yes and no token IDs, the stop tokens, and which
-TE_SYSTEM_IN_USER to use. The file imports nothing from backend, so the training app
-can copy it into the container; the test of that Modal call comes with the training
-app.
+backend/training/modal_train.py trains the student on Modal with Meta's Axolotl
+recipe. The container follows the recipe's setup (meta-oss-cookbook b30ca2c): Python
+3.12, CUDA 13.0, torch 2.12.1, Axolotl 0.19.0, flash-attn 2.8.3 and Cut Cross Entropy
+at the pinned commit, built for the H100. Bundles, runs and the Hugging Face cache
+live on the Modal volume trained-eye, so the 30B base is downloaded once;
+WANDB_API_KEY and HF_TOKEN come only from the Modal Secrets wandb and huggingface.
+--smoke runs the recipe's two-step check, whose seconds per step price the real run.
+Every run writes result.json on the volume, so a detached run can be collected later.
+W&B gets the run's tags, the bundle summary and, only when asked, the bundle and
+adapter as artifacts. --preflight runs no training: a CPU function loads the pinned
+processor and renders examples with preflight.py. Nothing here runs in the tests,
+which read the file's syntax tree; the te train check comes with te train.
 
 Files added or changed in this stage:
 
-- `backend/training/preflight.py` (new):
-- `tests/test_training_preflight.py` (new): tests
+- `backend/training/modal_train.py` (new): the Modal app that trains on one H100 with
+  the recipe's pins, the trained-eye volume and the wandb and huggingface Secrets
+- `tests/test_modal_train.py` (new): tests
+- `tests/test_training_preflight.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -44,15 +49,15 @@ set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
     ........................................................................ [ 11%]
-    ........................................................................ [ 23%]
-    ........................................................................ [ 34%]
-    ........................................................................ [ 46%]
-    ........................................................................ [ 57%]
-    ........................................................................ [ 69%]
-    ........................................................................ [ 80%]
-    ........................................................................ [ 92%]
-    ..................................................                       [100%]
-    626 passed in 15.01s
+    ........................................................................ [ 22%]
+    ........................................................................ [ 33%]
+    ........................................................................ [ 45%]
+    ........................................................................ [ 56%]
+    ........................................................................ [ 67%]
+    ........................................................................ [ 78%]
+    ........................................................................ [ 90%]
+    ..............................................................           [100%]
+    638 passed in 15.61s
 
     $ ruff check .
     All checks passed!
@@ -80,6 +85,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   recipe with the run's paths, W&B names and gradient accumulation for one H100.
 - `backend/training/prepare.py`: bundles taught skills into one training set for Modal
   (real, synthetic or mixed, with a validation split and volume paths).
+- `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
+  recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
 - `backend/skills/spec.py`: the skill spec (version 1), the local policy check that
   refuses skills about people, health, covert monitoring or sports, and the
   plain-English read-back.
@@ -117,12 +124,11 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 626 tests, all offline; none calls a paid API.
+- `tests/`: 638 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v40 adds the Modal training app: Meta's QLoRA recipe on one H100 with the
-recipe's pins, the two-step smoke, detached runs and the processor preflight on a CPU.
+The next stages add the teach flow with SAM crops and te teach, then te train.
 
 ## Privacy and policy
 

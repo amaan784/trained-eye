@@ -7,6 +7,7 @@ import ast
 import copy
 import json
 import re
+import types
 from pathlib import Path
 
 import pytest
@@ -159,3 +160,31 @@ def test_the_preflight_file_imports_nothing_from_backend():
             assert node.module == "__future__", node.module
         elif isinstance(node, ast.Import):
             assert all(alias.name in ("copy",) for alias in node.names)
+
+
+def test_run_preflight_renders_on_modal_and_saves_the_verdict(tmp_path):
+    from backend.config import STUDENT_BASE_REVISION
+
+    tree = ast.parse((SCRIPT / "modal_train.py").read_text())
+    node = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                and n.name == "run_preflight")
+    seen = {}
+
+    def remote(base, revision, items):
+        seen.update(base=base, revision=revision, n=len(items))
+        return preflight.render_all(FakeProcessor(), items, generation_eos=[200001, 200008])
+
+    ns = {"json": json, "Path": Path, "PREFLIGHT_EXAMPLES": 4,
+          "upload": lambda bundle, run: seen.update(uploaded=run),
+          "preflight": types.SimpleNamespace(remote=remote)}
+    code = compile(ast.Module(body=[node], type_ignores=[]), "modal_train.py", "exec")
+    exec(code, ns)  # noqa: S102 - our own script's function, without modal
+    bundle = tmp_path / "exp1-mixed"
+    bundle.mkdir()
+    (bundle / "train.jsonl").write_text("".join(json.dumps(r) + "\n" for r in RECORDS))
+    result = tmp_path / "exp1-mixed.preflight.json"
+    ns["run_preflight"](bundle, "exp1-mixed", {"system_in_user": False}, str(result))
+    assert (seen["base"], seen["revision"], seen["n"], seen["uploaded"]) == (
+        "meta-models/Muse-Glimmer-30B", STUDENT_BASE_REVISION, 8, "exp1-mixed")
+    saved = json.loads(result.read_text())
+    assert saved["ok"] and saved["run"] == "exp1-mixed" and saved["sequence_len"] == 4096

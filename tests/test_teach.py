@@ -529,6 +529,34 @@ def test_te_system_in_user_folds_the_system_prompt_into_the_dataset(tmp_path):
     assert json.loads((root / "washer_done-teach.manifest.json").read_text())["system_in_user"]
 
 
+def test_keyframes_with_a_box_add_a_crop_labelled_like_them(tmp_path):
+    from backend.dataengine.roi import crop_image
+    from backend.eval.spark_errors import write_unfiltered_dataset
+
+    report, said = teach(tmp_path, client_for(tmp_path, FakeMeta(sam=boxed)))
+    root = tmp_path / "skills/washer_done"
+    rois = {r["keyframe_sha256"]: r for r in json.loads((root / "roi.json").read_text())}
+    index = {e["id"]: e for e in report["dataset"]["examples_index"]}
+    crops = [e for e in index.values() if e.get("kind") == "crop"]
+    assert len(crops) == report["crop_examples"] == report["roi_frames_with_box"] > 0
+    keyframes = {hashlib.sha256(p.read_bytes()).hexdigest(): p.read_bytes()
+                 for p in (root / "keyframes").iterdir()}
+    for entry in crops:
+        keyframe = index[entry["id"].removesuffix("-crop")]
+        assert entry["answer"] == keyframe["answer"] and entry["source"] == "real"
+        assert entry["keyframe_sha256"] == keyframe["original_sha256"]
+        assert rois[entry["keyframe_sha256"]]["best"] is not None
+        assert entry["box"] == list(SAM_BOX) and entry["crop"] == [70, 30, 250, 210]
+        crop = crop_image(keyframes[entry["keyframe_sha256"]], tuple(entry["crop"]))
+        assert entry["original_sha256"] == hashlib.sha256(crop).hexdigest()
+    without = {k for k, r in rois.items() if r["best"] is None}
+    assert len(without) == report["roi_frames_without_box"] > 0
+    assert not without & {e["keyframe_sha256"] for e in crops}
+    assert any(f"{len(crops)} of them keyframes cropped to SAM's box" in s for s in said)
+    unfiltered = write_unfiltered_dataset(root)  # Experiment 2's other arm has them too
+    assert sum(e.get("kind") == "crop" for e in unfiltered["examples_index"]) == len(crops)
+
+
 def test_the_fallback_adds_no_crops(tmp_path):
     client = fallback_client(tmp_path, FakeMeta(sam=boxed))
     teach(tmp_path, client)  # stops for labels, after writing the keyframes

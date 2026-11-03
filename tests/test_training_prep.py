@@ -149,6 +149,55 @@ def split_ids(out):
             for split in ("train", "val") if (out / f"{split}.jsonl").exists()}
 
 
+@pytest.mark.parametrize("variant", ["real", "mixed"])
+def test_real_and_mixed_take_the_clips_and_session_2_only_validates(tmp_path, variant):
+    skill, clips = taught_with_clips(tmp_path)
+    session = {e["id"]: e["session"] for e in clips["examples_index"]}
+    manifest = bundle([skill], tmp_path / "out", "/vol/b", variant=variant)
+    ids = split_ids(tmp_path / "out")
+    assert {i for i, s in session.items() if s == "session1"} <= ids["train"]
+    assert {i for i, s in session.items() if s == "session2"} <= ids["val"]
+    assert not {i for i, s in session.items() if s == "session2"} & ids["train"]
+    assert manifest["clips"] == {"washer_done": {"jsonl_sha256": clips["jsonl_sha256"],
+                                                 "train": 24, "val": 9}}
+    teach_val = len(ids["val"]) - 9  # the teach examples' own 10%, once there are 50
+    assert teach_val == 0 if variant == "real" else 0 < teach_val < 15
+    assert manifest["train_examples"] == (10 if variant == "real" else 50) + 24 - teach_val
+    assert manifest["counts"]["val/washer_done/real/yes"] >= 4  # session 2 opens true
+    val = read(tmp_path / "out/val.jsonl")
+    for record in val:
+        path = record["messages"][-2]["content"][0]["path"]
+        assert path.startswith("/vol/b/images/")
+        assert (tmp_path / "out/images" / path.rsplit("/", 1)[1]).is_file()
+    synthetic = bundle([skill], tmp_path / "out", "/vol/b", variant="synthetic")
+    assert synthetic["clips"] == {} and not set(session) & set().union(
+        *split_ids(tmp_path / "out").values())
+
+
+def test_a_limit_counts_session_1_frames_but_never_session_2(tmp_path):
+    skill, _ = taught_with_clips(tmp_path)
+    manifest = bundle([skill], tmp_path / "out", "/vol/b", variant="real", limit=12)
+    assert manifest["train_examples"] == 12 and manifest["val_examples"] == 9
+    assert manifest["clips"]["washer_done"]["val"] == 9
+
+
+def test_clips_from_another_spec_or_tampered_ones_are_refused(tmp_path):
+    from tests.test_realclips import SPEC
+
+    other = SPEC.model_copy(update={"positive": "the display shows Done"})
+    skill, _ = taught_with_clips(tmp_path, spec=other)
+    with pytest.raises(ValueError, match="dataset-clips was written for another spec or "
+                       "prompt layout than dataset: run te clips --skill washer_done again"):
+        bundle([skill], tmp_path / "out", "/vol/b", variant="real")
+    assert bundle([skill], tmp_path / "out", "/vol/b", variant="synthetic")["clips"] == {}
+    skill, _ = taught_with_clips(tmp_path / "again")
+    jsonl = skill / "dataset-clips/washer_done-clips.jsonl"
+    jsonl.write_text(jsonl.read_text().replace('"no"', '"yes"'))
+    with pytest.raises(ValueError, match="dataset-clips does not match its manifest; run te "
+                       "clips --skill washer_done again"):
+        bundle([skill], tmp_path / "out", "/vol/b")
+
+
 def test_experiment_2s_arms_must_share_one_prompt_layout(tmp_path):
     from backend.dataengine.dataset import Example, write_dataset
 

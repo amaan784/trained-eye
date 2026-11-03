@@ -11,31 +11,32 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v72 (M3): te eval, te label and make eval
+## Build stage v73 (M3): Session clips and Spark's error rate
 
-backend/cli_eval.py adds two commands, registered by backend/cli.py. te eval --plan
-<plan> --out <folder> runs report.run_eval with the data folder and
-eval/regression.json, says how many evaluations are scored and how many wait for
-clips, and points to the failure galleries with a reminder that they stay local;
---wandb logs the run, and --wandb-entity names the team and needs --wandb. te label
-starts a labelling tool on 127.0.0.1, port 8766 by default, and opens the browser:
---clip for a recorded clip, its labels saved beside it by default under the clip's
-name with .labels.json in place of its extension, or --skill with --sample (200 by
-default) and --seed for generated images. The Makefile's make eval runs te eval on
-eval/plan.json into eval/. backend/eval/readme.py writes, with te eval --readme, a
-results block between two marker comments in a README: headline tables, chart links,
-the regression line and Spark's error rate, all copied from results.json, whose
-SHA-256 it names as the source. It refuses when nothing is scored or the markers are
-broken, leaving the file as it was, and never links the galleries.
+backend/dataengine/realclips.py turns the labelled session clips of the recording
+protocol into real examples for Experiment 1: session 1 clips train, session 2 clips
+only validate, and session 3 test clips are never read. Frames are sampled at 1 fps; a
+frame inside a labelled range answers yes and one outside no, and frames within 1.5 s
+of a change are left out, as the moment of change is unclear. The examples go to
+dataset-clips/ with the teach dataset's prompt layout, and clips without usable labels
+are listed as skipped. backend/eval/spark_errors.py compares Muse Spark's labels with
+the hand labels from the labelling page: Spark's error rate with a 95% Wilson
+interval, a confusion table, and the error rates of the generated-for labels and of
+the ones the filter keeps. write_unfiltered_dataset() writes dataset-unfiltered/,
+every generated image with the label it was made for. docs/recording-protocol.md gains
+notes on recording the teach look. The bundle tests for session clips and the keyframe
+crop test come back here; the te clips test arrives in v75 with that command.
 
 Files added or changed in this stage:
 
-- `Makefile` (new):
-- `backend/cli.py` (changed): the te command line
-- `backend/cli_eval.py` (new): te eval and te label
-- `backend/eval/readme.py` (new):
-- `tests/test_cli_eval.py` (new): tests
-- `tests/test_eval_readme.py` (new): tests
+- `backend/dataengine/realclips.py` (new):
+- `backend/eval/spark_errors.py` (new):
+- `docs/recording-protocol.md` (changed): what real clips to record for the three
+  skills, and how to keep training and test sessions apart
+- `tests/test_realclips.py` (new): tests
+- `tests/test_spark_errors.py` (new): tests
+- `tests/test_teach.py` (changed): tests
+- `tests/test_training_prep.py` (changed): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -53,52 +54,21 @@ set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
     ........................................................................ [  8%]
-    ........................................................................ [ 17%]
+    ........................................................................ [ 16%]
     ........................................................................ [ 25%]
-    ........................................................................ [ 34%]
-    ........................................................................ [ 42%]
-    ........................................................................ [ 51%]
-    ........................................................................ [ 59%]
-    ........................................................................ [ 68%]
-    ........................................................................ [ 76%]
-    ........................................................................ [ 85%]
-    ........................................................................ [ 93%]
-    ....................................................                     [100%]
-    844 passed in 41.52s
+    ........................................................................ [ 33%]
+    ........................................................................ [ 41%]
+    ........................................................................ [ 50%]
+    ........................................................................ [ 58%]
+    ........................................................................ [ 66%]
+    ........................................................................ [ 75%]
+    ........................................................................ [ 83%]
+    ........................................................................ [ 91%]
+    .......................................................................  [100%]
+    863 passed in 48.69s
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli eval --help
-    usage: te eval [-h] --plan PLAN --out OUT [--wandb]
-                   [--wandb-entity WANDB_ENTITY] [--readme README]
-
-    options:
-      -h, --help            show this help message and exit
-      --plan PLAN           the evaluation plan (backend/eval/report.py)
-      --out OUT             folder for results.json, results.md, charts
-      --wandb               also log to W&B (needs wandb)
-      --wandb-entity WANDB_ENTITY
-                            with --wandb: the W&B team (default: your own account)
-      --readme README       also write the results block between the te eval
-                            markers in this file, e.g. README.md
-                            (backend/eval/readme.py)
-
-    $ python -m backend.cli label --help
-    usage: te label [-h] (--clip CLIP | --skill SKILL) [--sample SAMPLE]
-                    [--seed SEED] [--out OUT] [--port PORT] [--no-browser]
-
-    options:
-      -h, --help       show this help message and exit
-      --clip CLIP      a recorded clip, e.g.
-                       data/clips/<skill>/session3_test_a.mp4
-      --skill SKILL    hand-label sampled generated images of this skill
-      --sample SAMPLE  with --skill: images to label
-      --seed SEED      with --skill: same seed, same images
-      --out OUT        labels file; default <clip>.labels.json next to the clip,
-                       or data/skills/<skill>/human_labels.json
-      --port PORT
-      --no-browser     print the address only
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -185,13 +155,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 844 tests, all offline; none calls a paid API.
+- `tests/`: 863 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v73 adds labelled session clips as real training and validation frames, Muse
-Spark's label error rate against hand labels, and Experiment 2's arm without the Spark
-filter.
+Stage v74 adds the experiment plan: every training run of Experiments 1 to 3 at the
+same fixed steps, priced from the smoke with exports, serving and the Modal credit.
 
 ## Privacy and policy
 

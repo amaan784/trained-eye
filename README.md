@@ -11,25 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v65 (M3): Hand labels for recorded clips
+## Build stage v66 (M3): Evaluation metrics and the chart style
 
-backend/labeltool/clips.py is the second labelling tool: it marks where a skill's
-condition is true in a recorded clip. Its page, static/clips.html, plays the clip with
-a bar under it: [ marks where the condition becomes true and ] where it stops, Space
-plays or pauses, the arrow keys step 1 s (0.1 s with Shift), and Ctrl or Cmd with S
-saves. The ranges can be fixed in a list before saving. clean_ranges() sorts them,
-merges the ones that overlap or touch, and refuses any range that is not inside the
-clip's length. The file is one line, {"clip", "duration_s", "true"}, the format te
-calibrate --labels reads; an existing file is loaded to resume, and one that holds
-labels for a different clip is refused. The video is served with Range requests
-answered as 206, which Safari needs. Test labels come from a person only.
+backend/eval/metrics.py scores watch mode from te watch's frame logs and the human
+labels of each clip. Per skill, over one or more clips, a frame says yes when it
+scored at or over the threshold the watcher used, and it is true when its time falls
+inside a labelled range: that gives frame precision, recall, F1 and accuracy. Each
+labelled range is one event, caught within the window when its first alert comes at
+most 5 s after it starts, or caught at all when any alert falls inside it. It also
+counts false alarms per hour, time to alert, the median and 90th percentile latency,
+student errors, and dollars per hour in three parts: the student's GPU, the Muse Spark
+checks and any per-frame scorer. backend/eval/svg.py holds what every chart shares:
+one accent colour and a grey, Inter with the system sans as fallback, light colours
+with dark ones under prefers-color-scheme, dot markers with a hover title, and all
+text escaped.
 
 Files added or changed in this stage:
 
-- `backend/labeltool/clips.py` (new): the labelling tool for clips: where the
-  condition is true, saved as time ranges
-- `backend/labeltool/static/clips.html` (new):
-- `tests/test_labeltool_clips.py` (new): tests
+- `backend/eval/metrics.py` (new): evaluation metrics from watch frame logs and labels
+- `backend/eval/svg.py` (new):
+- `tests/test_eval_metrics.py` (new): tests
+- `tests/test_eval_svg.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -49,15 +51,15 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [  9%]
     ........................................................................ [ 18%]
     ........................................................................ [ 27%]
-    ........................................................................ [ 37%]
-    ........................................................................ [ 46%]
-    ........................................................................ [ 55%]
+    ........................................................................ [ 36%]
+    ........................................................................ [ 45%]
+    ........................................................................ [ 54%]
     ........................................................................ [ 64%]
-    ........................................................................ [ 74%]
-    ........................................................................ [ 83%]
-    ........................................................................ [ 92%]
-    .........................................................                [100%]
-    777 passed in 41.73s
+    ........................................................................ [ 73%]
+    ........................................................................ [ 82%]
+    ........................................................................ [ 91%]
+    ..................................................................       [100%]
+    786 passed in 37.64s
 
     $ ruff check .
     All checks passed!
@@ -130,6 +132,7 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   true, saved as time ranges.
 - `backend/labeltool/images.py`: the labelling tool for generated images, for
   Experiment 2.
+- `backend/eval/metrics.py`: evaluation metrics from watch frame logs and labels.
 - `docs/glasses-check.md`: how to check, with Meta's own sample app, that the glasses
   stream camera frames, deliver the mic and play audio.
 - `docs/recording-protocol.md`: what real clips to record for the three skills, and
@@ -143,13 +146,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 777 tests, all offline; none calls a paid API.
+- `tests/`: 786 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v66 adds the evaluation metrics from te watch frame logs and human labels (frame
-and event scores, false alarms per hour, latency, dollars per hour) and the shared SVG
-chart style.
+Stage v67 adds the evaluation charts drawn as SVG by hand: grouped bars, F1 against
+the number of synthetic images, F1 against dollars per hour, and the live timeline of
+one clip.
 
 ## Privacy and policy
 

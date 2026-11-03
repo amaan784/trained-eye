@@ -11,24 +11,26 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v56 (M2): iOS: the spoken request recorder
+## Build stage v57 (M2): iOS: the teach client and flow
 
-ios/TrainedEye/Audio/RequestRecorder.swift records the spoken teach request ("tell me
-when the washer is done") as 16 kHz mono 16-bit WAV, since the backend reads a WAV
-file's length for its cost estimate. The audio session is set up the way CameraAccess
-records the glasses' microphone over Bluetooth HFP, with the glasses' input preferred;
-when it is not the input, the iPhone's microphone records instead. An audio engine tap
-in the input's own format is converted to 16 kHz as BirdSpotter does, and the tap is
-set up again when a device joins or leaves the route, when an interruption such as a
-call ends, and when the engine's configuration changes, keeping what was said before.
-The recorder notes which microphone recorded ("glasses", "iPhone" or "glasses, then
-iPhone") for the Teach screen. A recording under half a second counts as a tap and
-gives nothing, anything past a minute is dropped, and the WAV is built in memory with
-a 44-byte header: nothing goes to disk.
+ios/TrainedEye/Network/TeachClient.swift calls the teach routes: POST /teach/start
+with the skill, the request (a WAV recording or typed text) and the captured JPEGs as
+a multipart form built in memory, with a 120 second timeout since the server checks
+every frame first; GET /teach/status for one skill, or for the latest session; and
+POST /teach/answer. ios/TrainedEye/Teach/TeachFlow.swift runs the Teach screen's
+steps: a skill name the backend accepts (snake_case, 2 to 40 characters), hold to talk
+or type the request, then a 3 second countdown and a 10 second capture that keeps
+three frames a second in memory. After the upload it sends the user's answers to the
+server's two questions (spend the estimate, and is the read-back right, with an
+optional correction) and polls the status once a second until the run ends. Frames are
+dropped once the Mac has them and kept for another try when the upload fails. A
+session still running on the Mac can be picked up again at launch, when the server
+token is set. The flow uses the app model of the next stage.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Audio/RequestRecorder.swift` (new):
+- `ios/TrainedEye/Network/TeachClient.swift` (new):
+- `ios/TrainedEye/Teach/TeachFlow.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -56,7 +58,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 35.48s
+    755 passed in 31.33s
 
     $ ruff check .
     All checks passed!
@@ -141,8 +143,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v57 adds the teach client and the teach flow on the phone: hold to talk, a 10
-second capture, the upload, then the Mac's spend and read-back questions.
+Stage v58 adds the app model that ties the parts together: which camera runs, where
+its frames go, what an alert does, and what went out while the screen was locked.
 
 ## Privacy and policy
 

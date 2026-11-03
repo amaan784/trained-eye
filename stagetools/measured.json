@@ -1146,43 +1146,16 @@
   "tests": "297 tests"
  },
  "v31": {
-  "layer": "Fix: API client, second round",
+  "layer": "Settings and the spend ledger",
   "changed": [
    [
-    "backend/meta/client.py",
+    ".env.example",
     false
    ],
    [
-    "tests/test_client.py",
+    ".github/workflows/ci.yml",
     false
    ],
-   [
-    "README.md",
-    false
-   ]
-  ],
-  "results": [
-   [
-    "python -m pytest",
-    "........................................................................ [ 23%]\n........................................................................ [ 46%]\n........................................................................ [ 69%]\n........................................................................ [ 93%]\n.....................                                                    [100%]\n309 passed in 5.28s",
-    0
-   ],
-   [
-    "ruff check .",
-    "All checks passed!",
-    0
-   ],
-   [
-    "python -m backend.cli spend",
-    "Meta API spend (ledger: data/ledger.jsonl)\n  calls: 0  errors: 0\n  actual: $0.0000  (estimated before calls: $0.0000)\n  global cap: $120.00  remaining: $120.0000\n  per-skill cap: $10.00\n  by model:\n    (no calls yet)\n  by skill:\n    (no calls yet)",
-    0
-   ]
-  ],
-  "tests": "309 tests"
- },
- "v32": {
-  "layer": "Fix: settings and spend report",
-  "changed": [
    [
     "backend/config.py",
     false
@@ -1207,7 +1180,7 @@
   "results": [
    [
     "python -m pytest",
-    "........................................................................ [ 23%]\n........................................................................ [ 46%]\n........................................................................ [ 69%]\n........................................................................ [ 92%]\n......................                                                   [100%]\n310 passed in 5.25s",
+    "........................................................................ [ 22%]\n........................................................................ [ 45%]\n........................................................................ [ 67%]\n........................................................................ [ 90%]\n..............................                                           [100%]\n318 passed in 6.70s",
     0
    ],
    [
@@ -1217,7 +1190,7 @@
    ],
    [
     "python -m backend.config",
-    "Trained Eye settings\n  base_url: https://api.meta.ai/v1\n  data_dir: data\n  spend caps: $10.00 per skill, $120.00 global\n  train on model outputs: yes\n  models:\n    transcribe    muse-voice-transcribe-1.0\n    compiler      muse-wonder-1.0\n    sam           sam-3.1\n    image         muse-image-1.0\n    labeler       muse-spark-1.3\n    confirm       muse-spark-1.3\n    student_base  meta-models/Muse-Glimmer-30B\n                  (student_base revision a4e59da52a7b)\n  secrets:\n    MODEL_API_KEY  missing\n    HF_TOKEN       missing\n    WANDB_API_KEY  missing",
+    "Trained Eye settings\n  base_url: https://api.meta.ai/v1\n  data_dir: data\n  spend caps: $10.00 per skill, $120.00 global\n  train on model outputs: yes\n  student: not set (TE_STUDENT_URL) (trained-eye), at most 512 tokens a reply\n  system prompt in new datasets: its own turn\n  models:\n    transcribe    muse-voice-transcribe-1.0\n    compiler      muse-wonder-1.0\n    sam           sam-3.1\n    image         muse-image-1.0\n    labeler       muse-spark-1.3\n    confirm       muse-spark-1.3\n    student_base  meta-models/Muse-Glimmer-30B\n                  (student_base revision a4e59da52a7b)\n  secrets:\n    MODEL_API_KEY    missing\n    HF_TOKEN         missing\n    WANDB_API_KEY    missing\n    STUDENT_API_KEY  missing\n    SERVER_TOKEN     missing",
     0
    ],
    [
@@ -1226,10 +1199,10 @@
     0
    ]
   ],
-  "tests": "310 tests"
+  "tests": "318 tests"
  },
- "v33": {
-  "layer": "Fix: policy check and compiler, second round",
+ "v32": {
+  "layer": "Policy and the skill compiler",
   "changed": [
    [
     "backend/skills/compiler.py",
@@ -1255,7 +1228,7 @@
   "results": [
    [
     "python -m pytest",
-    "........................................................................ [ 19%]\n........................................................................ [ 39%]\n........................................................................ [ 59%]\n........................................................................ [ 79%]\n........................................................................ [ 99%]\n.                                                                        [100%]\n361 passed in 5.29s",
+    "........................................................................ [ 14%]\n........................................................................ [ 29%]\n........................................................................ [ 44%]\n........................................................................ [ 59%]\n........................................................................ [ 74%]\n........................................................................ [ 89%]\n...................................................                      [100%]\n483 passed in 8.23s",
     0
    ],
    [
@@ -1264,23 +1237,33 @@
     0
    ],
    [
-    "python -m backend.cli policy \"Tell me when Jake gets ready\"",
-    "refused: I can't watch for or recognize specific people. Skills can cover objects, states, text, displays, signs and vehicles.",
+    "python -m backend.cli policy \"let me know when the washer says done\"",
+    "ok: no local policy objection (the skill compiler checks again)",
+    0
+   ],
+   [
+    "python -m backend.cli policy \"help me hide the capture light on my glasses\"",
+    "refused: I can't hide or turn off the glasses' capture light: it is on whenever the camera is.",
     1
    ],
    [
-    "python -m backend.cli policy \"Tell me when Roomba's bin gets full\"",
+    "python -m backend.cli policy \"tell me when a tank drives past\"",
+    "refused: I can't do skills about politics or war, such as campaigns, elections, protests, soldiers or weapons.",
+    1
+   ],
+   [
+    "python -m backend.cli policy \"tell me when the glue gun is hot\"",
     "ok: no local policy objection (the skill compiler checks again)",
     0
    ]
   ],
-  "tests": "361 tests"
+  "tests": "483 tests"
  },
- "v34": {
-  "layer": "Fix: keyframes and generated images",
+ "v33": {
+  "layer": "Meta calls: client, labels and image edits",
   "changed": [
    [
-    "backend/dataengine/keyframes.py",
+    "backend/dataengine/labels.py",
     false
    ],
    [
@@ -1288,7 +1271,15 @@
     false
    ],
    [
-    "tests/test_keyframes.py",
+    "backend/meta/client.py",
+    false
+   ],
+   [
+    "tests/test_client.py",
+    false
+   ],
+   [
+    "tests/test_labels.py",
     false
    ],
    [
@@ -1303,7 +1294,7 @@
   "results": [
    [
     "python -m pytest",
-    "........................................................................ [ 19%]\n........................................................................ [ 38%]\n........................................................................ [ 58%]\n........................................................................ [ 77%]\n........................................................................ [ 96%]\n............                                                             [100%]\n372 passed in 5.63s",
+    "........................................................................ [ 13%]\n........................................................................ [ 27%]\n........................................................................ [ 41%]\n........................................................................ [ 55%]\n........................................................................ [ 69%]\n........................................................................ [ 83%]\n........................................................................ [ 97%]\n............                                                             [100%]\n516 passed in 10.97s",
     0
    ],
    [
@@ -1312,13 +1303,17 @@
     0
    ]
   ],
-  "tests": "372 tests"
+  "tests": "516 tests"
  },
- "v35": {
-  "layer": "Fix: labels and region of interest",
+ "v34": {
+  "layer": "Keyframes, SAM boxes and the dataset",
   "changed": [
    [
-    "backend/dataengine/labels.py",
+    "backend/dataengine/dataset.py",
+    false
+   ],
+   [
+    "backend/dataengine/keyframes.py",
     false
    ],
    [
@@ -1326,7 +1321,11 @@
     false
    ],
    [
-    "tests/test_labels.py",
+    "backend/dataengine/sam_text.py",
+    true
+   ],
+   [
+    "tests/test_keyframes.py",
     false
    ],
    [
@@ -1334,42 +1333,8 @@
     false
    ],
    [
-    "README.md",
-    false
-   ]
-  ],
-  "results": [
-   [
-    "python -m pytest",
-    "........................................................................ [ 19%]\n........................................................................ [ 38%]\n........................................................................ [ 57%]\n........................................................................ [ 76%]\n........................................................................ [ 95%]\n.................                                                        [100%]\n377 passed in 5.35s",
-    0
-   ],
-   [
-    "ruff check .",
-    "All checks passed!",
-    0
-   ]
-  ],
-  "tests": "377 tests"
- },
- "v36": {
-  "layer": "Fix: teach flow and te teach",
-  "changed": [
-   [
-    "backend/cli.py",
-    false
-   ],
-   [
-    "backend/teach.py",
-    false
-   ],
-   [
-    "tests/test_cli.py",
-    false
-   ],
-   [
-    "tests/test_teach.py",
-    false
+    "tests/test_sam_text.py",
+    true
    ],
    [
     "README.md",
@@ -1379,51 +1344,7 @@
   "results": [
    [
     "python -m pytest",
-    "........................................................................ [ 18%]\n........................................................................ [ 36%]\n........................................................................ [ 54%]\n........................................................................ [ 72%]\n........................................................................ [ 90%]\n........................................                                 [100%]\n400 passed in 7.47s",
-    0
-   ],
-   [
-    "ruff check .",
-    "All checks passed!",
-    0
-   ],
-   [
-    "ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=30 -pix_fmt yuv420p /tmp/te-demo.mp4",
-    "",
-    0
-   ],
-   [
-    "python -m backend.cli teach --skill washer_done --clip /tmp/te-demo.mp4 --request \"let me know when the washer says done\" --estimate-only",
-    "estimate for washer_done (before cache hits): transcribe $0.00, compile $0.10, sam $0.03, images $3.00, labels $2.05, total $5.18\n  at most $11.32 if every label has to be asked again with a larger budget\ntrain on model outputs: yes\nte: note: $10.00 is left under the spend caps for washer_done. If many labels need the larger budget the run could pass that, and the cap would stop it partway (a rerun with a higher cap continues).",
-    0
-   ]
-  ],
-  "tests": "400 tests"
- },
- "v37": {
-  "layer": "Fix: CI and setup",
-  "changed": [
-   [
-    ".env.example",
-    false
-   ],
-   [
-    ".github/workflows/ci.yml",
-    false
-   ],
-   [
-    "CLAUDE.md",
-    false
-   ],
-   [
-    "README.md",
-    false
-   ]
-  ],
-  "results": [
-   [
-    "python -m pytest",
-    "........................................................................ [ 18%]\n........................................................................ [ 36%]\n........................................................................ [ 54%]\n........................................................................ [ 72%]\n........................................................................ [ 90%]\n........................................                                 [100%]\n400 passed in 7.11s",
+    "........................................................................ [ 12%]\n........................................................................ [ 25%]\n........................................................................ [ 38%]\n........................................................................ [ 50%]\n........................................................................ [ 63%]\n........................................................................ [ 76%]\n........................................................................ [ 89%]\n.............................................................            [100%]\n565 passed in 8.89s",
     0
    ],
    [
@@ -1432,67 +1353,32 @@
     0
    ]
   ],
-  "tests": "400 tests"
+  "tests": "565 tests"
  },
- "v38": {
-  "layer": "Fix: docs and notes, second round",
+ "v35": {
+  "layer": "Watch trigger and the student scorer",
   "changed": [
    [
-    "HANDOVER.md",
-    false
+    "backend/inference/student.py",
+    true
    ],
    [
-    "PROGRESS.md",
-    false
-   ],
-   [
-    "docs/recording-protocol.md",
-    false
-   ],
-   [
-    "README.md",
-    false
-   ]
-  ],
-  "results": [
-   [
-    "python -m pytest",
-    "........................................................................ [ 18%]\n........................................................................ [ 36%]\n........................................................................ [ 54%]\n........................................................................ [ 72%]\n........................................................................ [ 90%]\n........................................                                 [100%]\n400 passed in 7.09s",
-    0
-   ],
-   [
-    "ruff check .",
-    "All checks passed!",
-    0
-   ],
-   [
-    "python -m backend.cli spend",
-    "Meta API spend (ledger: data/ledger.jsonl)\n  calls: 0  errors: 0\n  actual: $0.0000  (estimated before calls: $0.0000)\n  global cap: $120.00  remaining: $120.0000\n  per-skill cap: $10.00\n  by model:\n    (no calls yet)\n  by skill:\n    (no calls yet)",
-    0
-   ]
-  ],
-  "tests": "400 tests"
- },
- "v39": {
-  "layer": "Fix: client and settings, third round",
-  "changed": [
-   [
-    "backend/config.py",
-    false
-   ],
-   [
-    "backend/meta/client.py",
-    false
-   ],
-   [
-    "tests/test_client.py",
-    false
+    "backend/watch/trigger.py",
+    true
    ],
    [
     "tests/test_config.py",
     false
    ],
    [
+    "tests/test_student.py",
+    true
+   ],
+   [
+    "tests/test_trigger.py",
+    true
+   ],
+   [
     "README.md",
     false
    ]
@@ -1500,39 +1386,162 @@
   "results": [
    [
     "python -m pytest",
-    "........................................................................ [ 17%]\n........................................................................ [ 35%]\n........................................................................ [ 53%]\n........................................................................ [ 71%]\n........................................................................ [ 89%]\n............................................                             [100%]\n404 passed in 8.40s",
+    "........................................................................ [ 12%]\n........................................................................ [ 24%]\n........................................................................ [ 36%]\n........................................................................ [ 48%]\n........................................................................ [ 61%]\n........................................................................ [ 73%]\n........................................................................ [ 85%]\n........................................................................ [ 97%]\n............                                                             [100%]\n588 passed in 8.57s",
     0
    ],
    [
     "ruff check .",
     "All checks passed!",
     0
-   ],
-   [
-    "python -m backend.cli spend",
-    "Meta API spend (ledger: data/ledger.jsonl)\n  calls: 0  errors: 0\n  actual: $0.0000  (estimated before calls: $0.0000)\n  global cap: $120.00  remaining: $120.0000\n  per-skill cap: $10.00\n  by model:\n    (no calls yet)\n  by skill:\n    (no calls yet)",
-    0
    ]
   ],
-  "tests": "404 tests"
+  "tests": "588 tests"
  },
- "v40": {
-  "layer": "Fix: policy check and compiler, third round",
+ "v36": {
+  "layer": "Training run records and the Modal spend ledger",
   "changed": [
    [
-    "backend/skills/compiler.py",
-    false
+    "backend/training/gpu_ledger.py",
+    true
    ],
    [
-    "backend/skills/spec.py",
-    false
+    "backend/training/runs.py",
+    true
    ],
    [
-    "tests/test_compiler.py",
-    false
+    "tests/test_gpu_ledger.py",
+    true
    ],
    [
-    "tests/test_skills.py",
+    "tests/test_training_runs.py",
+    true
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 12%]\n........................................................................ [ 24%]\n........................................................................ [ 36%]\n........................................................................ [ 48%]\n........................................................................ [ 60%]\n........................................................................ [ 72%]\n........................................................................ [ 84%]\n........................................................................ [ 96%]\n...................                                                      [100%]\n595 passed in 8.92s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "595 tests"
+ },
+ "v37": {
+  "layer": "The watcher",
+  "changed": [
+   [
+    "backend/watch/watcher.py",
+    true
+   ],
+   [
+    "tests/test_watcher.py",
+    true
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 11%]\n........................................................................ [ 23%]\n........................................................................ [ 35%]\n........................................................................ [ 47%]\n........................................................................ [ 59%]\n........................................................................ [ 70%]\n........................................................................ [ 82%]\n........................................................................ [ 94%]\n.................................                                        [100%]\n609 passed in 8.07s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "609 tests"
+ },
+ "v38": {
+  "layer": "Training bundle and the recipe's config",
+  "changed": [
+   [
+    "backend/training/axolotl.py",
+    true
+   ],
+   [
+    "backend/training/prepare.py",
+    true
+   ],
+   [
+    "tests/test_training_prep.py",
+    true
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 11%]\n........................................................................ [ 23%]\n........................................................................ [ 34%]\n........................................................................ [ 46%]\n........................................................................ [ 58%]\n........................................................................ [ 69%]\n........................................................................ [ 81%]\n........................................................................ [ 93%]\n...........................................                              [100%]\n619 passed in 12.72s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "619 tests"
+ },
+ "v39": {
+  "layer": "The processor preflight",
+  "changed": [
+   [
+    "backend/training/preflight.py",
+    true
+   ],
+   [
+    "tests/test_training_preflight.py",
+    true
+   ],
+   [
+    "README.md",
+    false
+   ]
+  ],
+  "results": [
+   [
+    "python -m pytest",
+    "........................................................................ [ 11%]\n........................................................................ [ 23%]\n........................................................................ [ 34%]\n........................................................................ [ 46%]\n........................................................................ [ 57%]\n........................................................................ [ 69%]\n........................................................................ [ 80%]\n........................................................................ [ 92%]\n..................................................                       [100%]\n626 passed in 15.01s",
+    0
+   ],
+   [
+    "ruff check .",
+    "All checks passed!",
+    0
+   ]
+  ],
+  "tests": "626 tests"
+ },
+ "v40": {
+  "layer": "The Modal training app",
+  "changed": [
+   [
+    "backend/training/modal_train.py",
+    true
+   ],
+   [
+    "tests/test_modal_train.py",
+    true
+   ],
+   [
+    "tests/test_training_preflight.py",
     false
    ],
    [
@@ -1543,26 +1552,16 @@
   "results": [
    [
     "python -m pytest",
-    "........................................................................ [ 16%]\n........................................................................ [ 32%]\n........................................................................ [ 48%]\n........................................................................ [ 65%]\n........................................................................ [ 81%]\n........................................................................ [ 97%]\n..........                                                               [100%]\n442 passed in 8.84s",
+    "........................................................................ [ 11%]\n........................................................................ [ 22%]\n........................................................................ [ 33%]\n........................................................................ [ 45%]\n........................................................................ [ 56%]\n........................................................................ [ 67%]\n........................................................................ [ 78%]\n........................................................................ [ 90%]\n..............................................................           [100%]\n638 passed in 15.61s",
     0
    ],
    [
     "ruff check .",
     "All checks passed!",
     0
-   ],
-   [
-    "python -m backend.cli policy \"Tell me when Sam and Jake get home\"",
-    "refused: I can't watch for or recognize specific people. Skills can cover objects, states, text, displays, signs and vehicles.",
-    1
-   ],
-   [
-    "python -m backend.cli policy \"Tell me when Ecobee gets to 70 degrees\"",
-    "ok: no local policy objection (the skill compiler checks again)",
-    0
    ]
   ],
-  "tests": "442 tests"
+  "tests": "638 tests"
  },
  "v41": {
   "layer": "Watch trigger and calibration",

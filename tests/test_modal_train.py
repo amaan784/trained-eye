@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from backend import cli
+from backend import cli_train
 
 SCRIPT = Path(__file__).resolve().parents[1] / "backend" / "training" / "modal_train.py"
 SECRET_NAMES = ("WANDB_API_KEY", "HF_TOKEN", "MODEL_API_KEY")
@@ -226,7 +226,7 @@ def test_the_preflight_is_a_cpu_function_with_the_pinned_processor():
                   "config.check_model_allowed(base)", "upload(bundle, run)"):
         assert piece in funcs["run_preflight"], piece
     assert "return run_preflight(" in funcs["main"]
-    assert cli.TRAIN_VOLUME == constants()["VOLUME"]
+    assert cli_train.TRAIN_VOLUME == constants()["VOLUME"]
 
 
 # -- the W&B parts of the config (backend/training/axolotl.py) -------------------------

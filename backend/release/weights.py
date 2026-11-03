@@ -4,7 +4,7 @@ Training leaves the adapter in /vol/runs/<run>/out of the volume "trained-eye"
 (backend/training/modal_train.py) and `te export` the merged build in /vol/runs/<run>/merged
 (backend/training/export.py). `fetch_weights` lists that folder through
 modal.Volume.from_name(VOLUME).listdir and downloads with read_file only the top-level
-files te release ships (model_card.WEIGHT_SUFFIXES, no README): no checkpoint-* or other
+files te release ships (package.WEIGHT_SUFFIXES, no README): no checkpoint-* or other
 folders, no pickles (.bin, .pt). It checks that the files the release needs are there and
 that each download has the size the volume lists, into a hidden folder first, so a folder
 at `out_dir` is always complete. Modal is imported only when no volume is given (tests
@@ -17,7 +17,7 @@ import shutil
 import tempfile
 from pathlib import Path, PurePosixPath
 
-from backend.release.model_card import WEIGHT_SUFFIXES
+from backend.release.package import WEIGHT_SUFFIXES
 from backend.training.runs import RUN_NAME
 
 VOLUME = "trained-eye"  # modal_train.py's and export.py's VOLUME

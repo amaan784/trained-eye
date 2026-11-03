@@ -207,7 +207,7 @@ rooms.
 | 2. Backend and WebSocket clients | `Network/BackendClient.swift`, `Network/WatchSocket.swift` |
 | 3. Meta's HEVC decoder (copied) | `Meta/VideoFrameDecoder.swift`, `Meta/HEVCKeyframe.swift`, `Meta/LICENSE` |
 | 4. Glasses connection and mock | `Glasses/GlassesConnection.swift`, `Glasses/MockGlasses.swift` |
-| 5. Glasses camera | `Glasses/GlassesCamera.swift` |
+| 5. Glasses camera | `Glasses/GlassesCamera.swift`, `Glasses/GlassesCamera+Stream.swift` |
 | 6. iPhone camera, throttle, speech | `Camera/FrameThrottle.swift`, `Camera/PhoneCamera.swift`, `Audio/Speaker.swift` |
 | 7. Teach client and recorder | `Models/TeachModels.swift`, `Network/TeachClient.swift`, `Audio/RequestRecorder.swift` |
 | 8. Teach flow | `Teach/TeachFlow.swift` |
@@ -241,14 +241,15 @@ samples' calls and structure (named in each file's header) but was written for t
 No TODO is left in the code, but these behaviours were written without a compiler or the
 glasses, and each needs one check on the glasses (and in the simulator where it says so):
 
-- **A fold mid-watch** (`Glasses/GlassesCamera.swift`, `App/AppModel.swift`): fold the
+- **A fold mid-watch** (`Glasses/GlassesCamera.swift`, `Glasses/GlassesCamera+Stream.swift`,
+  `App/AppModel.swift`): fold the
   glasses while watching. The bar and the Watch screen should say they are folded or out of
   reach, and no frames go out while the socket stays connected. Unfold them and put them on:
   a new session should start by itself, frames come back, and the Glasses card's "Came back
   by itself" counts one. Then tap the touchpad: nothing may restart while the stream is
   paused. Walk out of Bluetooth range and back too. In the simulator, do the same with the
   mock glasses' Fold, Unfold and "Tap the touchpad" buttons.
-- **The screen locked** (`App/AppModel.swift`, `Glasses/GlassesCamera.swift`): watch with the
+- **The screen locked** (`App/AppModel.swift`, `Glasses/GlassesCamera+Stream.swift`): watch with the
   glasses, lock the phone for two minutes, unlock it. The Watch screen's "Last time in the
   background" card should show about one frame a second from the camera, sent and acked.
   If frames came from the camera but none went out, the socket stopped in the background; if
@@ -272,7 +273,7 @@ glasses, and each needs one check on the glasses (and in the simulator where it 
   send a capture and, while the Mac asks "Spend it?", close the app from the app switcher
   and open it again. The Teach screen should show the same question (the server token must
   be set), and answering it should carry on. After a fresh `te serve` it starts empty.
-- **Medium resolution for the teach capture** (`Glasses/GlassesCamera.swift`,
+- **Medium resolution for the teach capture** (`Glasses/GlassesCamera+Stream.swift`,
   `App/AppModel.swift`): during a capture with the glasses, the Teach screen's frame size
   should read 504x896 (less if the SDK lowers it for bandwidth), and the Watch screen's
   360x640 when watching again afterwards. Compare a skill taught at medium with one at low

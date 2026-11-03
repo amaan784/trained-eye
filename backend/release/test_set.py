@@ -11,7 +11,7 @@ prepare_test_set writes the folder to upload (uploading nothing): <skill>/<clip>
 <skill>/<clip>.labels.json, metadata.jsonl (one row per clip: file_name, skill, session,
 duration, true ranges, SHA-256), the dataset card README.md and release.json, which lists
 every clip with its blur record. The license is the author's choice: there is no default.
-model_card.upload sends the folder to a dataset repo after check_folder: no image at all,
+package.upload sends the folder to a dataset repo after check_folder: no image at all,
 and a video only when release.json lists it with a matching blur record.
 """
 
@@ -26,7 +26,8 @@ from pathlib import Path
 
 from backend.eval.metrics import check_ranges
 from backend.release.faces import BLUR_RECORD, file_sha256
-from backend.release.model_card import LICENSE_ID, MEDIA_SUFFIXES, TEST_SET_KIND
+from backend.release.model_card import LICENSE_ID
+from backend.release.package import MEDIA_SUFFIXES, TEST_SET_KIND
 from backend.skills.spec import check_name
 
 SESSION3 = re.compile(r"session3_test_[A-Za-z0-9][A-Za-z0-9_.-]*")  # a file stem

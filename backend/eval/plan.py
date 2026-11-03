@@ -1,5 +1,5 @@
-"""The experiment plan: every `te train` run of Experiments 1 to 3, their price before any
-is launched, and the skeleton of eval/plan.json for the evaluation.
+"""The experiment plan: every `te train` run of Experiments 1 to 3 and their price before
+any is launched. The skeleton of eval/plan.json for the evaluation is in plan_file.py.
 
   exp1-real, exp1-synthetic, exp1-mixed  real only (keyframes, their crops and the
                                         session 1 clips), generated images only, both
@@ -18,7 +18,7 @@ passes) differ; small sets may overfit, the cost of fewer images. exp1-real does
 Runs with the same bundle and steps train the same thing (exp2-filtered is exp1-mixed; an
 exp3 point at or over what a skill has is exp1-synthetic): see `same_bundle_as`. Such a
 run, and Experiment 4's fine-tuned arm (exp1-mixed's model), are never replayed apart:
-their evaluations read the first run's frame logs (an evaluation's "run").
+their evaluations read the first run's frame logs (an evaluation's "run": plan_file.log_runs).
 
 The price (plan_cost) is everything the $150 of Modal credit pays for: the training runs,
 the final run (every skill, mixed, the recipe's epoch: `final_run`), an export and a
@@ -29,22 +29,16 @@ in that spend instead of their estimate. An export is priced at te export's limi
 (EXPORT_MAX_HOURS) until one is timed; serving at an endpoint-hours guess per model
 (te experiments --endpoint-hours). Serving the runs as adapters on the base endpoint
 (te serve-student --runs, untried) would need no export per run.
-
-The plan (plan_skeleton) also has each replayed model's validation clips (the session 2
-clips, which training never sees: realclips.SESSIONS) in "calibration", so te replay
-calibrates every run's threshold on its own replays before it replays the test clips.
 """
 
 from __future__ import annotations
 
-import itertools
 import json
 import math
-import os
 from pathlib import Path
 
-from backend import config
-from backend.cli import EXPORT_MAX_HOURS, GPU, train_estimate
+from backend.cli_serving import EXPORT_MAX_HOURS
+from backend.cli_train import GPU, train_estimate
 from backend.config import (
     ASK_ABOVE_USD,
     MODAL_CREDIT_USD,
@@ -52,7 +46,6 @@ from backend.config import (
     Settings,
 )
 from backend.dataengine import labels
-from backend.dataengine.realclips import find_clips, labels_path
 from backend.eval.spark_scorer import default_log, sent_summary
 from backend.meta.ledger import image_tokens, token_cost
 from backend.skills.spec import check_name
@@ -75,15 +68,11 @@ ARMS = (  # run, experiment, arm, bundle variant, dataset folder, images per ski
     ("exp2-unfiltered", 2, "unfiltered", "mixed", "dataset-unfiltered", None),
     *((f"exp3-{n}", 3, str(n), "synthetic", "dataset", n) for n in EXP3_IMAGES),
 )
-EXP4 = (("exp4-finetuned", "finetuned"), ("exp4-base", "base"), ("exp4-spark", "spark"))
 BASE_RUN = "exp4-base"  # the base endpoint (te serve-student --base): served, never exported
 FINAL_RUN = "final"  # HANDOVER, M2: about 10 experiment runs plus 1 final
 DEFAULT_ENDPOINT_HOURS = 1.0  # our guess per model, not measured: its replays at 1 fps,
 # the cold start and the idle minutes before the container stops (te experiments
 # --endpoint-hours)
-TIMELINE_RUNS = ("exp1-mixed", "exp4-finetuned")  # their first test clip draws the timeline
-# before the clips are recorded, the plan names them as docs/recording-protocol.md does
-TEST_PLACEHOLDER, VALIDATION_PLACEHOLDER = "session3_test_a.mp4", "session2_a.mp4"
 
 
 def fixed_steps(skills: list[str]) -> int:
@@ -314,101 +303,3 @@ def spark_usd_per_check(settings: Settings) -> float:
     price = settings.price(settings.model("labeler"))
     per_image = image_tokens(settings).per_image
     return measured or round(token_cost(price, per_image + 250, labels.MAX_TOKENS[0]), 6)
-
-
-def _spec_alert(skill_dir: Path) -> str | None:
-    """The spoken alert in the skill's spec.json, for the timeline's marker."""
-    try:
-        alert = json.loads((skill_dir / "spec.json").read_text(encoding="utf-8")).get("alert")
-    except (OSError, ValueError, AttributeError):
-        return None
-    return alert if isinstance(alert, str) and alert.strip() else None
-
-
-def log_runs(runs: dict[str, dict]) -> dict[str, str]:
-    """For each arm, the run whose replays its evaluations read (data/watch/<run>/): its
-    own, the first run with the same bundle, exp1-mixed's for Experiment 4's fine-tuned
-    arm, and exp4-base and exp4-spark for the other two judges."""
-    out = {name: run.get("same_bundle_as") or name for name, run in runs.items()}
-    out.update({name: out["exp1-mixed"] if arm == "finetuned" else name for name, arm in EXP4})
-    return out
-
-
-def plan_skeleton(skills: list[str], settings: Settings, plan_dir: Path | None = None) -> dict:
-    """eval/plan.json for te eval (backend/eval/report.py): one evaluation per run (and
-    Experiment 4's three judges) and skill. Each test clip (data/clips/<skill>/
-    session3_test_*, or a placeholder, pending until it exists) gets its clip, the frame
-    log to replay it into, data/watch/<run>/<skill>/<clip>.jsonl, and its labels,
-    <clip>.labels.json, relative to `plan_dir` (eval/). `run` is whose replays those are
-    (log_runs: a run with the same bundle as an earlier one reads that one's), `scorer`
-    who scores the frames. The first test clip of exp1-mixed and exp4-finetuned draws the
-    live timeline, and every evaluation takes its skill's spoken alert (spec.json).
-    `calibration` lists each replayed model's validation clips (session 2, or a placeholder)
-    per skill, so te replay calibrates its own threshold first; Muse Spark needs none.
-    `images` counts generated training images per skill (Experiment 3 without data: the
-    target); `generation_usd` is what they cost at config prices (te teach paid for every
-    image Spark judged; the unfiltered arm needs no labels). Students are priced on an
-    H100 (null for the Mac); exp4-spark pays Spark per frame."""
-    data, plan_dir = settings.data_dir, Path(plan_dir or config.PROJECT_ROOT / "eval")
-    runs = {r["name"]: r for r in training_runs(skills, skills_root=data / "skills")}
-    image_usd = settings.price(settings.model("image")).per_image
-    check = spark_usd_per_check(settings)
-    arms = [(r["name"], r["experiment"], r["arm"], r) for r in runs.values()]
-    arms += [(name, 4, arm, runs["exp1-mixed"] if arm == "finetuned" else {})
-             for name, arm in EXP4]
-    replays = log_runs(runs)
-
-    def rel(path: Path) -> str:
-        return os.path.relpath(path, plan_dir)
-
-    def clip_entry(run: str, skill: str, clip: Path) -> dict:
-        return {"clip": rel(clip), "log": rel(data / "watch" / run / skill / f"{clip.stem}.jsonl"),
-                "labels": rel(labels_path(clip))}
-
-    entries = []
-    for (name, experiment, arm, run), skill in itertools.product(arms, skills):
-        counts = (run.get("examples") or {}).get("per_skill", {}).get(skill)
-        images = (counts["synthetic"] if counts else run.get("limit")) or None
-        stats_path = data / "skills" / skill / "label_stats.json"
-        stats = json.loads(stats_path.read_text()) if stats_path.is_file() else {}
-        generation = images * image_usd if images else None
-        if images and arm != "unfiltered":  # te teach paid for every image Spark judged
-            kept = stats.get("kept")
-            # label errors were generated and paid for too, though not judged
-            paid = stats.get("total", 0) + stats.get("label_errors", 0)
-            generation = images * paid / kept * (image_usd + check) if kept else None
-        folder = data / "clips" / skill
-        clips = [c for c in sorted(folder.glob("session3_test_*")) if c.suffix != ".json"]
-        tests = [clip_entry(replays[name], skill, c)  # a placeholder named as the protocol says
-                 for c in clips or [folder / TEST_PLACEHOLDER]]
-        if name in TIMELINE_RUNS:
-            tests[0]["timeline"] = True
-        entry = {"name": f"{name}-{skill}", "experiment": experiment, "skill": skill,
-                 "variant": arm, "run": replays[name],
-                 "scorer": "spark" if arm == "spark" else "student", "clips": tests,
-                 "gpu_usd_per_hour": MODAL_GPU_USD_PER_HOUR[GPU], "spark_usd_per_check": check,
-                 "images": images, "highlight": arm == "finetuned",
-                 "generation_usd": None if generation is None else round(generation, 4)}
-        if alert := _spec_alert(data / "skills" / skill):
-            entry["alert_text"] = alert
-        if arm == "spark":  # its confirmations repeat the same request: cached, free
-            entry.update(gpu_usd_per_hour=0.0, spark_usd_per_check=0.0, scorer_usd_per_frame=check)
-        entries.append(entry)
-    calibration = []
-    for run in dict.fromkeys(e["run"] for e in entries if e["scorer"] == "student"):
-        for skill in skills:
-            folder = data / "clips" / skill
-            valid = [c.path for c in find_clips(folder) if c.split == "val"]
-            calibration.append({"run": run, "skill": skill, "clips": [
-                clip_entry(run, skill, c) for c in valid or [folder / VALIDATION_PLACEHOLDER]]})
-    return {"evaluations": entries, "calibration": calibration}
-
-
-def write_plan(path: Path, plan: dict, *, force: bool = False) -> Path:
-    """Write eval/plan.json, never over one that exists (it is edited by hand) unless forced."""
-    path = Path(path)
-    if path.exists() and not force:
-        raise FileExistsError(f"{path} exists; it may hold your edits (pass force to replace)")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(plan, indent=1) + "\n", encoding="utf-8")
-    return path

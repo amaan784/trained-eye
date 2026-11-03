@@ -1,4 +1,4 @@
-"""te replay (backend/eval/replay.py, cli_experiments.cmd_replay): a run's pending clips of
+"""te replay (backend/eval/replay.py, cli_replay.cmd_replay): a run's pending clips of
 eval/plan.json replayed into the plan's logs, its threshold calibrated on its own
 validation clips first. Fakes only: no endpoint, nothing paid."""
 
@@ -10,7 +10,7 @@ from PIL import Image
 
 from backend import cli, config
 from backend.eval import replay
-from backend.eval.plan import plan_skeleton, write_plan
+from backend.eval.plan_file import plan_skeleton, write_plan
 from backend.eval.report import Plan, run_eval
 from backend.inference import student
 from backend.inference.student import StudentError
@@ -234,7 +234,7 @@ def test_te_replay_refuses_what_the_plan_does_not_say(env, monkeypatch, capsys):
 
 
 def test_te_replay_warns_when_another_run_is_served(env, monkeypatch, capsys):
-    from backend.cli_experiments import serving_note
+    from backend.cli_replay import serving_note
 
     (env / "data/train").mkdir(parents=True)
     (env / "data/train/serving.json").write_text(json.dumps({"run": "exp1-real",
@@ -265,7 +265,7 @@ def test_te_replay_with_spark_prices_and_asks_first(env, monkeypatch, capsys):
 
 def test_labels_added_later_recalibrate_the_run(env, monkeypatch, capsys):
     from backend import config
-    from backend.eval.plan import plan_skeleton, write_plan
+    from backend.eval.plan_file import plan_skeleton, write_plan
 
     plan = recorded(env)
     monkeypatch.setenv("TE_STUDENT_URL", "http://127.0.0.1:8080/v1")
@@ -288,7 +288,7 @@ def test_labels_added_later_recalibrate_the_run(env, monkeypatch, capsys):
 
 def test_a_failed_recalibration_holds_the_test_clips(env, monkeypatch, capsys):
     from backend import config
-    from backend.eval.plan import plan_skeleton, write_plan
+    from backend.eval.plan_file import plan_skeleton, write_plan
 
     plan = recorded(env)
     monkeypatch.setenv("TE_STUDENT_URL", "http://127.0.0.1:8080/v1")

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from backend import cli
+from backend import cli_serving
 from backend.config import DEFAULT_MODELS, STUDENT_BASE_REVISION, Settings
 from backend.inference.student import OpenAIStudent
 from backend.training.axolotl import RECIPE
@@ -76,9 +76,9 @@ def test_the_base_is_the_pinned_hub_model_under_its_own_app_and_model_name():
     assert (c["BASE_MODEL"], c["BASE_REVISION"]) == (DEFAULT_MODELS["student_base"],
                                                      STUDENT_BASE_REVISION)
     assert c["BASE_APP"] != c["APP"]  # both endpoints can be up at once
-    assert (cli.STUDENT_APP, cli.BASE_APP, cli.BASE_MODEL_NAME) == (
+    assert (cli_serving.STUDENT_APP, cli_serving.BASE_APP, cli_serving.BASE_MODEL_NAME) == (
         c["APP"], c["BASE_APP"], c["BASE_MODEL_NAME"])
-    assert cli.SERVE_ENVS == (c["RUN_ENV"], c["BASE_ENV"], c["LORAS_ENV"])
+    assert cli_serving.SERVE_ENVS == (c["RUN_ENV"], c["BASE_ENV"], c["LORAS_ENV"])
     cmd = ns["serve_command"](c["BASE_MODEL"], c["BASE_MODEL_NAME"], c["BASE_REVISION"])
     f = flags(cmd)
     assert cmd[:3] == ["vllm", "serve", "meta-models/Muse-Glimmer-30B"]

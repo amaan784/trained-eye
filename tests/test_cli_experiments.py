@@ -1,5 +1,5 @@
-"""CLI tests for M3's experiment commands (backend/cli_experiments.py) and te watch with
-Muse Spark as the scorer. Fakes only: nothing is sent or billed."""
+"""CLI tests for M3's experiment commands (backend/cli_experiments.py). Fakes only:
+nothing is sent or billed."""
 
 import json
 
@@ -7,8 +7,7 @@ import httpx
 import pytest
 
 from backend import cli, config
-from tests.test_cli import answer, taught, use_transport, write_clip
-from tests.test_teach import FakeMeta
+from tests.test_cli import taught
 
 
 @pytest.fixture
@@ -76,24 +75,6 @@ def test_regress_asks_both_models_with_the_student_sampling(env, monkeypatch, ca
     assert [s[2] for s in sent] == [None, None]  # never greedy, as Meta's notes say
     assert all(s[3]["chat_template_kwargs"]["reasoning_strength"] == "low" for s in sent)
     assert (config.PROJECT_ROOT / "eval/regression.md").is_file()
-
-
-def test_watch_with_spark_as_the_scorer_prices_and_asks_first(env, monkeypatch, capsys):
-    taught(env)
-    fake = FakeMeta(answer=lambda label, real: "yes")
-    use_transport(monkeypatch, fake)
-    clip = write_clip(env / "clip", n=4)
-    prompts = answer(monkeypatch, "n")
-    assert cli.main(["watch", "--skills", "washer_done", "--clip", str(clip),
-                     "--scorer", "spark"]) == 1
-    assert prompts and fake.calls == {}  # nothing paid before the yes
-    log = env / "replay.jsonl"
-    assert cli.main(["watch", "--skills", "washer_done", "--clip", str(clip), "--scorer",
-                     "spark", "--yes", "--no-cloud", "--log", str(log)]) == 0
-    out = capsys.readouterr().out
-    assert "Muse Spark on 4 frames x 1 skills" in out and '"frames": 4' in out
-    rows = [json.loads(line) for line in log.read_text().splitlines()]
-    assert [r["p"] for r in rows] == [1.0] * 4
 
 
 def test_unfiltered_passes_te_system_in_user_on(env, monkeypatch, capsys):

@@ -7,10 +7,10 @@ import sys
 import pytest
 
 from backend.release import faces
-from backend.release.model_card import upload
+from backend.release.package import upload
 from backend.release.test_set import check_folder, prepare_test_set
 from tests.test_faces import fake_ffmpeg
-from tests.test_model_card import fake_hub
+from tests.test_release_package import fake_hub
 
 REPO = "someone/trained-eye-test"
 

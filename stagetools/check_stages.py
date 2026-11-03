@@ -3,9 +3,10 @@
 Usage: python check_stages.py <repo_root> [--run]
 
 Checks:
-  1. v1 has at most 5 files; stages v2 to v49 add or change at most 5 files; from v50 on
-     (the author's newer rule) a stage changes 150 to 300 lines against the one before
-     it, counting added plus removed lines and leaving out its README.
+  1. v1 has at most 5 files; stages v2 to v30 add or change at most 5 files; from v31 on
+     (the author's newer rule) a stage changes 200 to 400 lines of code against the one
+     before it, counting added plus removed lines. Its tests, docs, license texts and
+     binary files ride along and are not counted, nor is its README.
   2. every stage contains every file of the previous stage (no deletes or renames).
   3. the last stage matches the root byte for byte (local-only paths excluded).
   4. every file path a stage README names exists in that stage.
@@ -84,8 +85,22 @@ def same(a: Path, b: Path) -> bool:
     return filecmp.cmp(a, b, shallow=False)
 
 
-LINE_RULE_FROM = 50  # stages before this were built under the 5-file rule
-MIN_LINES, MAX_LINES = 150, 300
+LINE_RULE_FROM = 31  # stages before this were built under the 5-file rule
+MIN_LINES, MAX_LINES = 200, 400
+NOT_CODE = re.compile(r"(^tests/|^docs/|\.md$|(^|/)LICENSE[^/]*$|\.txt$)")
+
+
+def is_code(rel: str, path: Path | None) -> bool:
+    """Whether a file's lines count toward a stage's size: not tests, docs, license texts
+    or a binary file (fonts, video), which ride along with the code they belong to."""
+    if NOT_CODE.search(rel):
+        return False
+    if path is not None and path.is_file():
+        try:
+            path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            return False
+    return True
 
 
 def lines_of(path: Path | None) -> list[str]:
@@ -97,11 +112,15 @@ def lines_of(path: Path | None) -> list[str]:
         return [path.read_bytes().hex()[:64]]
 
 
-def changed_lines(prev: dict[str, Path], cur: dict[str, Path], changed: list[str]) -> int:
-    """Added plus removed lines over the changed files, README.md left out."""
+def changed_lines(prev: dict[str, Path], cur: dict[str, Path], changed: list[str],
+                  code_only: bool = False) -> int:
+    """Added plus removed lines over the changed files, README.md left out (and, with
+    code_only, the files is_code leaves out)."""
     total = 0
     for rel in changed:
         if rel == "README.md":
+            continue
+        if code_only and not is_code(rel, cur.get(rel) or prev.get(rel)):
             continue
         diff = difflib.unified_diff(lines_of(prev.get(rel)), lines_of(cur.get(rel)), lineterm="",
                                     n=0)
@@ -153,10 +172,11 @@ def main() -> int:
             changed = sorted(r for r in cur if r not in prev or not same(cur[r], prev[r]))
             number = int(STAGE_RE.match(stage.name).group(1))
             if number >= LINE_RULE_FROM:
-                count = changed_lines(prev, cur, changed)
-                print(f"{stage.name}: {count} lines changed (README left out)")
+                count = changed_lines(prev, cur, changed, code_only=True)
+                print(f"{stage.name}: {count} lines of code changed (tests, docs, licenses, "
+                      "binaries and the README left out)")
                 if not MIN_LINES <= count <= MAX_LINES:
-                    problems.append(f"{stage.name}: changes {count} lines "
+                    problems.append(f"{stage.name}: changes {count} lines of code "
                                     f"({MIN_LINES} to {MAX_LINES} allowed)")
             elif len(changed) > 5:
                 problems.append(f"{stage.name}: adds or changes {len(changed)} files (max 5)")

@@ -5,7 +5,7 @@ import ast
 import tomllib
 from pathlib import Path
 
-from backend import cli_release
+from backend import cli_playground
 from backend.config import Settings
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,11 +84,11 @@ def test_the_budget_and_the_ledger_are_committed_to_the_volume():
 
 def test_the_cli_names_the_same_app_volume_secret_and_caps():
     c = constants()
-    assert cli_release.PLAYGROUND_APP == c["APP"]
-    assert cli_release.PLAYGROUND_VOLUME == c["VOLUME"]
-    assert cli_release.PLAYGROUND_SECRET == c["API_SECRET"]
-    assert set(cli_release.CAP_ENVS) == {c["VISITOR_CAP_ENV"], c["DAILY_CAP_ENV"]}
-    assert set(c["CAP_ENVS"]) >= {*cli_release.CAP_ENVS, "TE_SKILL_CAP_USD",
+    assert cli_playground.PLAYGROUND_APP == c["APP"]
+    assert cli_playground.PLAYGROUND_VOLUME == c["VOLUME"]
+    assert cli_playground.PLAYGROUND_SECRET == c["API_SECRET"]
+    assert set(cli_playground.CAP_ENVS) == {c["VISITOR_CAP_ENV"], c["DAILY_CAP_ENV"]}
+    assert set(c["CAP_ENVS"]) >= {*cli_playground.CAP_ENVS, "TE_SKILL_CAP_USD",
                                   "TE_GLOBAL_CAP_USD"}
 
 

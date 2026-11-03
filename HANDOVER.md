@@ -35,7 +35,7 @@ Code map (all under `backend/`, namespace packages without `__init__.py`):
 | `meta/cache.py` | Content-addressed cache in `data/cache/`: SHA-256 of model, endpoint and normalized request, media replaced by its own hash |
 | `meta/ledger.py` | Spend ledger `data/ledger.jsonl`: each call's estimate reserved before it runs (thread lock and `data/ledger.jsonl.lock`, so concurrent te processes cannot pass a cap), actual cost after, report, image tokens measured from past calls |
 | `meta/client.py` | `MetaClient`: structured output (Chat Completions, strict json_schema, optional validate hook), Voice Transcribe, SAM 3.1 (Responses API, streamed), Muse Image edit and generate, model list; retries 429/5xx/timeouts, never 4xx; conservative spend accounting; key redaction |
-| `cli.py` | `te`: spend, models, api-smoke, serve, ws-selftest, policy, teach, train, watch, calibrate, export, serve-student, eval, label (and the commands in `cli_experiments.py` and `cli_release.py`) |
+| `cli.py` | `te`: spend, models, api-smoke, serve, ws-selftest, policy, teach, the shared helpers (`ask`, `make_client`, `modal_ready`), and the registration of the commands in the other `cli_*.py` files |
 | `server.py` | Starlette backend: `/health`, WebSocket `/ws` protocol 1 (hello, JPEG frames, acks; watch mode with scores and alerts); frames never stored |
 | `training/wandb_smoke.py` | Modal app that logs one W&B run; key only from the Modal Secret `wandb` |
 | `training/axolotl.py` | The Axolotl config: Meta's QLoRA recipe with this run's paths and W&B names |
@@ -49,10 +49,11 @@ Code map (all under `backend/`, namespace packages without `__init__.py`):
 | `training/export.py`, `training/export_check.py` | Modal app that merges the adapter and checks the merged model's answers |
 | `inference/modal_serve.py` | Modal app serving the merged model with vLLM, behind STUDENT_API_KEY; also base Glimmer (`--base`) and several adapters on one base (`--runs`) |
 | `labeltool/` | The labelling tool: true time ranges in a clip, yes/no on generated images |
-| `eval/` | Metrics, SVG charts, results.md (`te eval`), Spark as a scorer, Spark's error rate, the experiment plan with its costs, the regression check, `te replay`, Experiment 1 failure galleries, the README results block, the W&B report |
-| `regenerate.py`, `release/` | Prompt manifests and regeneration, face blurring (with manual boxes and blur records), the model card and the release folder (base license, blurred keyframes), the test set as a dataset, weights from the Modal volume |
+| `eval/` | Metrics, SVG charts, results.md (`te eval`), Spark as a scorer, Spark's error rate, the experiment plan with its costs (`plan.py`) and `eval/plan.json` (`plan_file.py`), the regression check, `te replay`, Experiment 1 failure galleries, the README results block, the W&B report |
+| `regenerate.py`, `release/` | Prompt manifests and regeneration, face blurring (with manual boxes and blur records), the model card (`model_card.py`) and the release folder, upload and collection (`package.py`: base license, blurred keyframes), the test set as a dataset, weights from the Modal volume |
 | `playground/` | The web playground: clips with the live timeline, how each skill was built, teach it yourself (capped), results; a public mode and its Modal app (`modal_app.py`, `publish.py`) |
-| `cli_experiments.py`, `cli_release.py` | The M3 and M4 te commands |
+| `cli_train.py`, `cli_watch.py`, `cli_serving.py`, `cli_eval.py` | te train; te watch and te calibrate; te export and te serve-student; te eval and te label |
+| `cli_experiments.py`, `cli_replay.py`, `cli_release.py`, `cli_playground.py` | te experiments, unfiltered, clips, spark-errors and regress; te replay; the M4 release commands; te playground and te playground-clip |
 | `skills/spec.py` | `SkillSpec` v1, read-back sentence, local `policy_check` (people, health, covert watching, the capture light, sensitive places, sports, politics and war), `check_name` |
 | `skills/compiler.py` | Muse Wonder compiler: request + 3 keyframes to a spec or a refusal; re-checks the model's wording |
 | `dataengine/keyframes.py` | 20 to 24 sharp, distinct keyframes from a video (ffmpeg, bit-exact) or a frame folder |

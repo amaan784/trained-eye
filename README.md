@@ -11,27 +11,27 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v67 (M3): Evaluation charts and the live timeline
+## Build stage v68 (M3): Regression check and Spark as scorer
 
-backend/eval/charts.py draws the experiment charts as SVG with the pieces in svg.py.
-grouped_bars() shows one group per variant and one or two series from 0 to 1, the
-first in the accent colour and the second in grey, with each value written on its bar
-and n/a where one is missing (Experiments 1 and 2). line_chart() plots F1 against the
-number of synthetic images on a log scale, with a note such as the generation cost
-under each point (Experiment 3), and scatter() places each judge by its F1 and its
-dollars per hour, the points marked highlight (the fine-tuned one) in the accent
-colour and points without numbers listed under the chart (Experiment 4).
-backend/eval/timeline.py draws one skill's frames from a frame log: the
-yes-probability as a line with gaps where the student failed, the threshold dashed,
-the labelled true ranges shaded, and each alert as a dot with the words the glasses
-spoke, its label on one of two rows so two close alerts do not overlap.
+backend/eval/regression.py asks whether fine-tuning on yes or no frames costs general
+visual skill. It reads a JSON-lines file of questions written by hand, each with an
+optional image, an answer and a match rule (exact, contains or choice), asks the base
+and the fine-tuned model each one through an OpenAI-compatible endpoint, at
+temperature 0 by default, and grades the replies, ignoring case, spaces and end
+punctuation. A failed request counts as wrong and is listed, and the report gives
+accuracy with and without images, the questions whose result changed and a markdown
+table. backend/eval/spark_scorer.py makes Muse Spark a per-frame judge with the
+student's shape, so the watcher uses it unchanged: yes is 1.0, no 0.0 and unsure 0.5,
+and each request is cached and billed to the skill. A latency log keeps the seconds of
+the frames actually sent, so a cached frame reports the latency measured when it was
+sent, and one cached by another caller is marked as having none.
 
 Files added or changed in this stage:
 
-- `backend/eval/charts.py` (new):
-- `backend/eval/timeline.py` (new):
-- `tests/test_eval_charts.py` (new): tests
-- `tests/test_eval_timeline.py` (new): tests
+- `backend/eval/regression.py` (new):
+- `backend/eval/spark_scorer.py` (new):
+- `tests/test_regression.py` (new): tests
+- `tests/test_spark_scorer.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -48,19 +48,19 @@ These commands were run inside this folder on 2026-11-03 (Python 3.13, Linux, no
 set and no network to Meta); the output under each is what they printed.
 
     $ python -m pytest
-    ........................................................................ [  9%]
-    ........................................................................ [ 18%]
-    ........................................................................ [ 27%]
-    ........................................................................ [ 36%]
-    ........................................................................ [ 45%]
-    ........................................................................ [ 54%]
-    ........................................................................ [ 63%]
-    ........................................................................ [ 72%]
-    ........................................................................ [ 81%]
-    ........................................................................ [ 90%]
-    ........................................................................ [ 99%]
-    ..                                                                       [100%]
-    794 passed in 38.14s
+    ........................................................................ [  8%]
+    ........................................................................ [ 17%]
+    ........................................................................ [ 26%]
+    ........................................................................ [ 35%]
+    ........................................................................ [ 43%]
+    ........................................................................ [ 52%]
+    ........................................................................ [ 61%]
+    ........................................................................ [ 70%]
+    ........................................................................ [ 78%]
+    ........................................................................ [ 87%]
+    ........................................................................ [ 96%]
+    ..............................                                           [100%]
+    822 passed in 35.19s
 
     $ ruff check .
     All checks passed!
@@ -147,12 +147,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 794 tests, all offline; none calls a paid API.
+- `tests/`: 822 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v68 adds the regression check of the base model against the fine-tuned one on
-general visual questions, and Muse Spark as a per-frame scorer for Experiment 4.
+Stage v69 adds the results write-up: the SVG charts and results.md, one section per
+experiment with its tables of accuracy, speed and cost.
 
 ## Privacy and policy
 

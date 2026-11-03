@@ -160,8 +160,10 @@ def compile_skill(
         # also the person and sensitive-place rules.
         # The trigger is checked with its "when" put back, as the user would say it.
         description = spec.target.description
+        # With the request, so "the gun" in a negative reads as the request's glue gun.
         refusal = (policy_check(f"{spec.target.sam_prompt}. When {spec.positive}")
-                   or topic_check(". ".join([description, *spec.negatives, spec.alert])))
+                   or topic_check(". ".join([request, description, *spec.negatives,
+                                             spec.alert])))
         if not refusal and policy_check(description) == REFUSALS["person"]:
             refusal = REFUSALS["person"]
         if not refusal and _has_word(OBJECT_PHRASES.sub(" ", normalise(description)), PLACES):

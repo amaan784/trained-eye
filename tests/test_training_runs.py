@@ -53,6 +53,7 @@ def test_serving_lists_the_run_s_skills_from_its_status_or_bundle(tmp_path):
     assert runs.serving(tmp_path)["skills"] == ["pot_boils", "washer_done"]
     path.write_text(json.dumps({"run": "../etc", "deployed": "x"}))
     assert runs.serving(tmp_path) is None
+    assert not runs.serving_known(tmp_path / "elsewhere")
     runs.clear_serving(tmp_path)
     runs.clear_serving(tmp_path)  # twice is fine
-    assert not path.exists()
+    assert runs.serving(tmp_path) is None and runs.serving_known(tmp_path)  # stopped, known

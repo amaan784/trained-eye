@@ -63,6 +63,7 @@ PRICES = {
 # not reachable from the build sandbox. Check modal.com/pricing and fix it here.
 MODAL_GPU_USD_PER_HOUR = {"H100": 3.95}
 ASK_ABOVE_USD = 15.0  # the author's rule: ask before any job estimated over this
+MODAL_CREDIT_USD = 150.0  # HANDOVER, M2: stop and ask if the Modal runs would pass this
 
 
 class ConfigError(RuntimeError):

@@ -156,9 +156,12 @@ def test_playground_deploy_asks_first_and_copies_only_public_files(env, monkeypa
     prompts = answer(monkeypatch, "y")
     assert cli.main(["playground", "--deploy", "--visitor-cap", "0.25"]) == 0
     assert "public URL" in prompts[0]
-    assert [c[1:3] for c, _ in commands] == [["volume", "create"], ["volume", "put"],
-                                             ["volume", "put"], ["deploy",
-                                                                 "backend/playground/modal_app.py"]]
+    assert [c[1:3] for c, _ in commands] == [
+        ["volume", "create"], *[["volume", "rm"]] * 4, ["volume", "put"], ["volume", "put"],
+        ["deploy", "backend/playground/modal_app.py"]]
+    removed = [c[-1] for c, _ in commands if c[1:3] == ["volume", "rm"]]
+    assert removed == list(cli_release.PUBLISHED_TREES)  # not the budget, ledger or cache
+    assert "/data/playground/budget.json" not in removed and "/data" not in removed
     assert staged == {
         "/data/skills/washer_done/spec.json", "/data/skills/washer_done/roi.json",
         "/data/skills/washer_done/synthetic/manifest.jsonl",

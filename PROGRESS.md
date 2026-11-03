@@ -181,6 +181,43 @@ cut; the fixes are in the stages that add that code (v50 to v105).
   read as 0; the wall clears between runs, counts unsure apart, and alert labels do not
   collide
 
+### Code completion, Mon Nov 2 to Tue Nov 3
+
+An audit compared HANDOVER, PROGRESS and the docs with the code and listed what was
+missing; everything that can be written and tested here is built (offline, with fakes).
+Three reviews then reproduced 12 defects in it, all fixed: playground redeploys left
+removed files public, blur records counted boxes off the picture, te replay kept stale
+or failed calibrations, an interrupted te train lost its GPU time, galleries outside
+eval/ were not gitignored, the politics rule refused glue guns and ad campaigns but let
+pistols through, GET /skills hid Ready before any deploy was recorded, Experiment 2's
+arms could mix prompt layouts, and a skill-wide calibrate did not say te serve uses the
+served run's threshold.
+
+- [x] SAM 3.1 boxes read with our own reader of Meta's SAM 3 text format (masks are not
+  decoded); boxes drive the outline and crops of the teaching keyframes
+- [x] Inter 4.1 bundled; the model card takes the base model's license (apache-2.0) and
+  ships its text
+- [x] Policy: a politics and war rule; compiled cooldowns clamped to 60 to 3600 s
+- [x] Spend: the ledger reserves each estimate (thread and file lock) so concurrent te
+  processes cannot pass a cap; image token estimates come from past calls
+- [x] Watch: cooldowns kept across reconnects; `TE_SYSTEM_IN_USER`, `TE_STUDENT_MAX_TOKENS`;
+  thresholds per training run; GET /skills reports training and served
+- [x] Training: `--preflight`, `--detach`/`--collect`, W&B hashes, entity and opt-in
+  artifacts, base and multi-adapter serving, the Modal spend ledger and the $150 check
+- [x] Data: `te clips` (session 1 trains, session 2 validates, session 3 is never used)
+- [x] Evaluation: `te replay`, plan costs with exports and serving, per-run calibration,
+  the pooled Experiment 4 chart, Experiment 1 failure galleries, Spark's error rate and
+  the regression check in results.md, `te eval --readme`
+- [x] iOS: a new session after a fold, keepalive pings, recording through an engine tap,
+  medium resolution for the teach capture, teach resume, the training status
+- [x] Playground: a public mode, the Modal app and `te playground --deploy`,
+  `te playground-clip`; clips moved to `data/playground/clips/` (gitignored)
+- [x] Release: blur records and manual boxes, blurred keyframes in the release, the test
+  set as a dataset, a collection, `te fetch-weights`, `te wandb-report`
+- [ ] Not built, for the author: decoding SAM masks (needs Meta's `meta-sam-parser`,
+  under the SAM License), a GGUF release for the Mac (needs llama.cpp's converter),
+  scoring at the answer token by prefill (needs the real model's tokenizer)
+
 ### M5, Tue Nov 3: demo
 
 - [ ] Footage, video edit, polish
@@ -273,6 +310,13 @@ cut; the fixes are in the stages that add that code (v50 to v105).
 - **The teach routes need a token** (`SERVER_TOKEN` in `.env`, typed once into the app):
   `te serve` listens on the whole network, and without it anyone there could agree to a
   phone run's spend. `/ws` and `/skills` stay open, as in M1.
+- **Session clips:** session 1 is training data, session 2 validation (never trained on;
+  every run calibrates its threshold on it, so the arms stay comparable), session 3 the
+  test set only. Experiment 1's real arm is the keyframes, their SAM crops and session 1.
+- **SAM 3 text format, our own reader:** Meta's protocol spec (meta-models/meta-sam,
+  SAM License) was read and implemented; no code or test data is copied from it.
+- **Cooldowns are per skill, not per session:** te serve keeps them across reconnects,
+  skill toggles and restarts, so one condition is announced once per cooldown.
 - **Training config as JSON:** the Axolotl config is Meta's recipe written as JSON (YAML
   reads it), with only the paths, the W&B names and gradient accumulation changed.
 - **Provenance:** generated images are stored exactly as returned; the padded dataset PNGs
@@ -318,10 +362,8 @@ sources disagree with SPEC.md, the sources win.
   and the Modal run happen on the Mac. The network policy can be widened in the cloud
   environment settings if needed.
 - Mac memory unknown (`sysctl hw.memsize`); it decides local vs Modal serving.
-- The spend cap is not safe across concurrent processes (the check and the record are not
-  atomic). Fine while calls run one at a time; fix before parallel labeling.
-- `meta-sam-parser` (SAM output parsing) could not be installed or read; M1 stores SAM's
-  raw output and parses it once a real cached response shows the format.
+- SAM masks are not decoded: our reader takes boxes only. Outlines are boxes until the
+  author approves Meta's `meta-sam-parser` (SAM License).
 - SPEC.md is not in the repository, so a fresh session needs it uploaded again.
 - From the review, for the author: whether to add `httpx2` (Starlette 1.2 and later warn
   without it in `TestClient`) or cap `starlette<1.2`, and whether the project's own
@@ -330,16 +372,19 @@ sources disagree with SPEC.md, the sources win.
   organizers with the training question).
 - The dataset JSONL holds absolute image paths (the recipe's format); M2 writes it again
   under the Modal volume mount.
-- For the author: the playground's spend also counts against `TE_SKILL_CAP_USD` (all
-  time) under the skill name "playground", and its training wall shows generated images,
-  which are never published; decide before deploying (HANDOVER.md, item 12). Uploading
-  to Hugging Face needs `huggingface_hub`, and face blurring needs
-  `opencv-python-headless` (approved). Inter 4.1 is bundled in the app and the pages.
+- The public playground turns the walls off and serves only blurred keyframes and clips,
+  from Modal with a private Volume (`te playground --deploy`); check per-visitor budgets
+  from two networks after the first deploy. Uploading to Hugging Face needs
+  `huggingface_hub` and the W&B report `wandb-workspaces` (neither approved yet); face
+  blurring needs `opencv-python-headless` (approved). Inter 4.1 is bundled.
 - SAM output parsing follows Meta's SAM 3 protocol (meta-models/meta-sam, our own reader in
   `backend/dataengine/sam_text.py`); the first live run should confirm it reads SAM 3.1's
   real output (the raw text is stored with every frame, so it can be read again for free).
-- Image token counts are unknown, so estimates assume 1,500 tokens per image; the real
-  per-image cost comes from the first run's usage.
+- Image token counts are unknown until the first calls: estimates assume 1,500 tokens per
+  image, then use the mean measured from the ledger's compile and label calls.
+- Unverified until run for real: everything on Modal (preflight, detached runs, base and
+  multi-adapter serving), the W&B report's API calls, and every iOS change (not compiled;
+  `ios/README.md` lists the checks on the glasses).
 - The teach flow takes keyframes from a video file or a folder of frames; the iOS Teach
   screen (M2) will send the 10 s capture as frames.
 

@@ -305,15 +305,23 @@ def cmd_replay(args) -> int:
                 failed[job.log] = "every frame was a student error"
 
     replay_all("validation")
+    uncalibrated: set[str] = set()
     for cal in [c for c in plan.calibration if c.run == run and c.skill in calibrates]:
         logs = [(base / c.log).resolve() for c in cal.clips]
         labels = [(base / c.labels).resolve() for c in cal.clips]
         target = run_threshold_file(settings.data_dir, run, cal.skill)
-        fresh = any(log in replayed for log in logs)
-        if (target.is_file() and not fresh) or not all(p.is_file() for p in logs + labels):
+        if not all(p.is_file() for p in logs + labels):
             continue
-        cmd_calibrate(Namespace(skill=cal.skill, run=run, log=[str(p) for p in logs],
-                                labels=[str(p) for p in labels]))
+        if target.is_file() and not (any(log in replayed for log in logs)
+                                     or _calibration_changed(target, logs, labels)):
+            continue
+        if cmd_calibrate(Namespace(skill=cal.skill, run=run, log=[str(p) for p in logs],
+                                   labels=[str(p) for p in labels])) != 0:
+            uncalibrated.add(cal.skill)  # an older threshold must not score the test clips
+    for job in [j for j in todo if j.kind == "test" and j.skill in uncalibrated]:
+        held[job.log] = (f"te calibrate --run {run} failed for {job.skill} (see above): fix "
+                         "the validation labels, then te replay again")
+    todo = [j for j in todo if j.log not in held]
     replay_all("test")
     if args.threshold is None:
         held.update(_stale(jobs, calibrates, settings, run, held))
@@ -324,7 +332,21 @@ def cmd_replay(args) -> int:
         print("still pending:")
         for job, note in notes:
             print(f"  {job.kind} {job.skill} {shown_path(job.log)}: {note}")
-    return 1 if failed else 0
+    return 1 if failed or uncalibrated else 0
+
+
+def _calibration_changed(target: Path, logs: list[Path], labels: list[Path]) -> bool:
+    """Whether a run threshold was computed on other validation clips than the plan's now,
+    or before one of their logs or labels changed (labels added after a replay)."""
+    try:
+        used = json.loads(target.read_text(encoding="utf-8")).get("clips") or []
+        recorded = {(c.get("log"), c.get("labels")) for c in used}
+    except (OSError, ValueError, AttributeError):
+        return True
+    if recorded != {(log.name, lab.name) for log, lab in zip(logs, labels, strict=True)}:
+        return True
+    made = target.stat().st_mtime
+    return any(p.stat().st_mtime > made for p in [*logs, *labels])
 
 
 def cmd_unfiltered(args) -> int:

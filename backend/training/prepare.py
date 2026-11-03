@@ -110,6 +110,12 @@ def bundle(skill_dirs: list[Path], out_dir: Path, image_root: str, *, variant: s
         raise ValueError(f"the datasets put the system prompt differently (folded into the "
                          f"user text: {folded}; its own turn: {apart}). Set TE_SYSTEM_IN_USER "
                          "and run te teach again for the odd ones (cached calls are free)")
+    if dataset_dir != "dataset":  # Experiment 2's arms must differ in their labels only
+        teach = prompt_layouts(skill_dirs, "dataset")
+        if odd := sorted(n for n, v in layouts.items() if n in teach and teach[n] != v):
+            raise ValueError(f"{dataset_dir} puts the system prompt differently from the "
+                             f"teach dataset for {', '.join(odd)}: run te unfiltered --skill "
+                             f"{odd[0]} again, so both arms share one layout")
     out_dir = Path(out_dir)
     shutil.rmtree(out_dir, ignore_errors=True)
     (out_dir / "images").mkdir(parents=True)

@@ -715,7 +715,9 @@ def test_serve_student_records_the_served_run_and_stop_clears_it(env, monkeypatc
     assert (env / "data/train/serving.json").exists()
     codes[:] = [0]
     assert cli.main(["serve-student", "--stop"]) == 0
-    assert not (env / "data/train/serving.json").exists()
+    from backend.training import runs
+
+    assert runs.serving(env / "data") is None and runs.serving_known(env / "data")  # stopped
 
 
 def scoring(monkeypatch, p=0.9):
@@ -1073,3 +1075,55 @@ def test_eval_wandb_entity_needs_wandb(env, capsys):
     plan.write_text('{"evaluations": []}')
     args = ["eval", "--plan", str(plan), "--out", str(env / "out"), "--wandb-entity", "team"]
     assert cli.main(args) == 2 and "--wandb-entity needs --wandb" in capsys.readouterr().err
+
+
+def test_an_interrupted_train_or_export_still_records_its_gpu_time(env, monkeypatch):
+    from backend.training import gpu_ledger
+
+    taught(env)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
+
+    def interrupted(command, **kw):
+        if command[0] != "modal":
+            return subprocess.CompletedProcess(command, 0, stdout="abc1234\n", stderr="")
+        if "backend/training/modal_train.py" in command:  # as modal_train.main writes on ^C
+            path = command[command.index("--result") + 1]
+            Path(path).write_text(json.dumps({"run": "exp1-mixed", "ok": False, "smoke": True,
+                                              "seconds_upper_bound": True, "seconds": 1800.0}))
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli.subprocess, "run", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        cli.main([*TRAIN, "--smoke", "--yes"])
+    [row] = gpu_ledger.read(env / "data")
+    assert (row["kind"], row["seconds"]) == ("train", 1800.0)
+    (env / "data/train/exp1-mixed/manifest.json").write_text("{}")  # a bundle to export
+    with pytest.raises(KeyboardInterrupt):
+        cli.main(["export", "--run", "exp1-mixed", "--yes"])
+    rows = gpu_ledger.read(env / "data")
+    assert [r["kind"] for r in rows] == ["train", "export"] and rows[1]["upper_bound"]
+
+
+def test_a_skill_wide_calibrate_says_when_te_serve_uses_the_served_run_s(env, capsys):
+    from backend.training import runs
+
+    taught(env)
+    log, labels = env / "replay.jsonl", env / "labels.json"
+    probs = [0.6 if i % 1800 < 3 else 0.2 for i in range(3600)] + [0.9] * 30
+    log.write_text("".join(json.dumps({"t": float(i), "skill": "washer_done", "p": p}) + "\n"
+                           for i, p in enumerate(probs)))
+    labels.write_text(json.dumps({"true": [[3600, 3630]]}))
+    calibrate = ["calibrate", "--skill", "washer_done", "--log", str(log), "--labels",
+                 str(labels)]
+    assert cli.main(calibrate) == 0
+    assert "te serve scores" not in capsys.readouterr().out  # nothing served: no note
+    runs.write_status(env / "data", "exp1-mixed", "done", ["washer_done"],
+                      started="2026-11-03T10:00:00Z", finished="2026-11-03T11:00:00Z")
+    runs.write_serving(env / "data", "exp1-mixed")
+    run_file = env / "data/watch/exp1-mixed/washer_done/threshold.json"
+    run_file.parent.mkdir(parents=True)
+    run_file.write_text('{"threshold": 0.8}')
+    assert cli.main(calibrate) == 0
+    assert "run exp1-mixed's own threshold" in capsys.readouterr().out
+    assert cli.main([*calibrate, "--run", "exp1-mixed"]) == 0
+    assert "te serve scores" not in capsys.readouterr().out

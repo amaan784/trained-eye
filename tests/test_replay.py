@@ -261,3 +261,49 @@ def test_te_replay_with_spark_prices_and_asks_first(env, monkeypatch, capsys):
     rows = [json.loads(line) for line in log.read_text().splitlines()]
     assert {(r["p"], r["threshold"], r["threshold_source"]) for r in rows} == {
         (1.0, 1.0, "spark")}
+
+
+def test_labels_added_later_recalibrate_the_run(env, monkeypatch, capsys):
+    from backend import config
+    from backend.eval.plan import plan_skeleton, write_plan
+
+    plan = recorded(env)
+    monkeypatch.setenv("TE_STUDENT_URL", "http://127.0.0.1:8080/v1")
+    fake_student(monkeypatch, true=lambda i: 10 <= i <= 25)
+    cmd = ["replay", "--plan", str(plan), "--run", "exp1-mixed"]
+    assert cli.main(cmd) == 0
+    threshold = env / "data/watch/exp1-mixed/washer_done/threshold.json"
+    assert [c["log"] for c in json.loads(threshold.read_text())["clips"]] == ["session2_a.jsonl"]
+    clips = env / "data/clips/washer_done"
+    frame_folder(clips / "session2_b", 30)  # recorded later, labelled after its replay
+    settings = config.load_settings(env={"TE_DATA_DIR": str(env / "data")}, env_file=None)
+    write_plan(plan, plan_skeleton(["washer_done"], settings), force=True)
+    assert cli.main(cmd) == 0
+    (clips / "session2_b.labels.json").write_text(json.dumps({"true": [[0, 5]]}))
+    capsys.readouterr()
+    assert cli.main(cmd) == 0
+    assert sorted(c["log"] for c in json.loads(threshold.read_text())["clips"]) == [
+        "session2_a.jsonl", "session2_b.jsonl"]  # the run now calibrates on both
+
+
+def test_a_failed_recalibration_holds_the_test_clips(env, monkeypatch, capsys):
+    from backend import config
+    from backend.eval.plan import plan_skeleton, write_plan
+
+    plan = recorded(env)
+    monkeypatch.setenv("TE_STUDENT_URL", "http://127.0.0.1:8080/v1")
+    fake_student(monkeypatch, true=lambda i: 10 <= i <= 25)
+    cmd = ["replay", "--plan", str(plan), "--run", "exp1-mixed"]
+    assert cli.main(cmd) == 0
+    clips = env / "data/clips/washer_done"
+    frame_folder(clips / "session2_b", 30)
+    (clips / "session2_b.labels.json").write_text(json.dumps({"true": [[20, 10]]}))  # a typo
+    frame_folder(clips / "session3_test_b", 30)
+    (clips / "session3_test_b.labels.json").write_text(json.dumps({"true": [[15, 25]]}))
+    settings = config.load_settings(env={"TE_DATA_DIR": str(env / "data")}, env_file=None)
+    write_plan(plan, plan_skeleton(["washer_done"], settings), force=True)
+    capsys.readouterr()
+    assert cli.main(cmd) == 1
+    out = capsys.readouterr().out
+    assert "te calibrate --run exp1-mixed failed for washer_done" in out
+    assert not (env / "data/watch/exp1-mixed/washer_done/session3_test_b.jsonl").exists()

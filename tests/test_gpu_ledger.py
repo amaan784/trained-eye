@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from backend.eval.plan import MODAL_CREDIT_USD
+from backend.config import MODAL_CREDIT_USD
 from backend.training import gpu_ledger
 
 T0 = datetime(2026, 11, 3, 14, 0, tzinfo=UTC)

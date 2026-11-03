@@ -14,8 +14,12 @@
   te eval           score replayed, labelled clips: results.md and the charts (make eval)
   te export         merge a trained adapter on Modal and check it answers as before (asks)
   te serve-student  deploy or stop the trained model's endpoint on Modal (asks)
-  te experiments, te unfiltered, te spark-errors, te regress: M3 (backend/cli_experiments.py)
-  te manifests, te regenerate, te blur, te release, te playground: M4 (backend/cli_release.py)
+  te clips          labelled session 1 and 2 clips as training and validation frames (free)
+  te experiments, te unfiltered, te spark-errors, te regress, te replay: M3
+                    (backend/cli_experiments.py)
+  te manifests, te regenerate, te blur, te release, te fetch-weights, te release-test-set,
+  te release-collection, te wandb-report, te playground, te playground-clip: M4
+                    (backend/cli_release.py)
 """
 
 from __future__ import annotations
@@ -392,6 +396,15 @@ def git_commit() -> str:
 TRAIN_VOLUME = "trained-eye"  # backend/training/modal_train.py's VOLUME
 
 
+def read_result(path: Path) -> dict | None:
+    """A Modal job's local result file, or None (missing or half written)."""
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def record_train_spend(settings, result: dict) -> None:
     """Add a training result's container seconds to the Modal ledger (once per run end)."""
     seconds = result.get("seconds")
@@ -553,7 +566,8 @@ def cmd_train(args) -> int:
     if manifest["system_in_user"] != settings.system_in_user:
         print(f"note: these datasets were written with TE_SYSTEM_IN_USER="
               f"{int(manifest['system_in_user'])}, not {int(settings.system_in_user)} as now; "
-              "run te teach again to rewrite them the new way")
+              + ("run te unfiltered --skill <skill> again" if args.dataset == "dataset-unfiltered"
+                 else "run te teach again") + " to rewrite them the new way")
     if args.preflight:
         return preflight_train(settings, args, out)
     timing_path = settings.data_dir / "train" / "smoke-timing.json"
@@ -631,9 +645,9 @@ def cmd_train(args) -> int:
         elif code is None:
             print(f"\nte: stopped here; the detached run goes on: te train --collect "
                   f"{args.run} fetches its result when it is done", file=sys.stderr)
-    result = json.loads(result_path.read_text()) if result_path.is_file() else None
-    if result is not None:  # also a failed run: its GPU time was billed
-        record_train_spend(settings, {"run": args.run, **result})
+        result = read_result(result_path)
+        if result is not None:  # also a failed or interrupted run: its GPU time was billed
+            record_train_spend(settings, {"run": args.run, **result})
     if result is None and args.detach:
         print(f"te: the Modal client stopped (exit {code}); the detached run may still be "
               f"going: te train --collect {args.run} fetches its result when it is done",
@@ -684,6 +698,8 @@ def cmd_watch(args) -> int:
         elif args.run and skill.threshold_source == "skill":
             print(f"note: {name} has no threshold for run {args.run} yet (te calibrate --run "
                   f"{args.run}); using the skill-wide {threshold:.3f}")
+        if args.threshold is None and (note := served_run_note(settings, name, args.run)):
+            print(note)
     if bundle is not None and (untrained := sorted(set(names) - set(bundle.get("skills", {})))):
         print(f"note: run {args.run} was not trained on {', '.join(untrained)}")
     if folded:
@@ -731,6 +747,21 @@ def cmd_watch(args) -> int:
     if args.scorer == "spark":
         print(f"Spark: {json.dumps(student.summary())}")
     return 0
+
+
+def served_run_note(settings, skill: str, run: str | None) -> str | None:
+    """Without --run: a note when te serve scores this skill at the served run's own
+    threshold, which a skill-wide calibrate or replay does not change."""
+    from backend.training import runs
+    from backend.watch.watcher import run_threshold_file
+
+    served = runs.serving(settings.data_dir)
+    if run or served is None or skill not in served["skills"]:
+        return None
+    if not run_threshold_file(settings.data_dir, served["run"], skill).is_file():
+        return None
+    return (f"note: te serve scores {skill} with run {served['run']}'s own threshold, not "
+            f"the skill-wide one: pass --run {served['run']} to change or test what it uses")
 
 
 def cmd_calibrate(args) -> int:
@@ -784,6 +815,8 @@ def cmd_calibrate(args) -> int:
           f"{result['events']} events caught"
           + (f", median delay {delay:.0f} s" if delay is not None else ""))
     print(f"saved: {shown_path(target)}")
+    if note := served_run_note(settings, args.skill, args.run):
+        print(note)
     if minutes < 60:
         print("note: under an hour of footage, so even one false alarm is too many here")
     return 0
@@ -833,11 +866,17 @@ def cmd_export(args) -> int:
     command = ["modal", "run", "backend/training/export.py", "--run", args.run, "--bundle",
                str(bundle), "--limit", str(args.limit), "--reference", args.reference,
                "--result", str(result_path)]
-    code = subprocess.run(command, cwd=PROJECT_ROOT, check=False).returncode
-    result = json.loads(result_path.read_text()) if result_path.is_file() else None
-    seconds = (result or {}).get("seconds")
-    if isinstance(seconds, (int, float)) and not isinstance(seconds, bool):
-        gpu_ledger.record(settings.data_dir, "export", args.run, seconds, gpu=GPU)
+    began, code, result = time.monotonic(), None, None
+    try:
+        code = subprocess.run(command, cwd=PROJECT_ROOT, check=False).returncode
+    finally:  # also on Ctrl+C: the container was billed while it ran
+        result = read_result(result_path)
+        seconds = (result or {}).get("seconds")
+        if isinstance(seconds, (int, float)) and not isinstance(seconds, bool):
+            gpu_ledger.record(settings.data_dir, "export", args.run, seconds, gpu=GPU)
+        elif code is None:  # interrupted before a result: count the wall time, at most
+            gpu_ledger.record(settings.data_dir, "export", args.run,
+                              time.monotonic() - began, gpu=GPU, upper_bound=True)
     if code != 0 or result is None or result.get("ok") is False:
         print(f"te: the export failed (exit {code})", file=sys.stderr)
         return code or 1

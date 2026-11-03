@@ -298,6 +298,15 @@ def test_policy_allows_object_skills(request_text):
     "spot weapons in the crowd",
     "tell me when the air raid siren light flashes",
     "tell me when a drone strike shows on the news",
+    "Tell me when the pistol is out of its case",
+    "Tell me when the shotgun is off the rack",
+    "Tell me when my gun is not in the safe",
+    "Tell me when guns are on the table",
+    "Tell me when the revolver is loaded",
+    "Tell me when the tank rolls past the window",
+    "Tell me when bullets are on the counter",
+    "Tell me when the ammo box is open",
+    "Tell me when war planes fly over",
 ])
 def test_policy_refuses_politics_and_war(request_text):
     assert policy_check(request_text) == REFUSALS["politics"]
@@ -325,6 +334,16 @@ def test_policy_refuses_politics_and_war(request_text):
     "tell me when the Salvation Army truck arrives",
     "tell me when the black soldier fly bin is full",
     "tell me when the toy fighter jet stops spinning",
+    "Tell me when the President's Choice cookies are on the shelf",
+    "Tell me when the Presidents' Day sale banner goes up",
+    "Tell me when my gun-metal grey kettle boils",
+    "Tell me when the ad campaign posters in the shop window change",
+    "Tell me when the marketing campaign banners are up in the store",
+    "Tell me when the fundraising campaign rally signs are delivered",
+    "Tell me when the 3D printer finishes the soldier figurine",
+    "Tell me when the demonstrator unit on the shelf turns on",
+    "Tell me when the staple gun is unplugged",
+    "Tell me when the pistol grip sprayer stops dripping",
 ])
 def test_politics_rule_allows_look_alike_objects(request_text):
     assert policy_check(request_text) is None

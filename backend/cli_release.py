@@ -313,6 +313,9 @@ def cmd_wandb_report(args) -> int:
 
 PLAYGROUND_APP = "trained-eye-playground"  # backend/playground/modal_app.py's APP
 PLAYGROUND_VOLUME = "trained-eye-playground"  # and its VOLUME
+# What a deploy publishes on the Volume, cleared before each copy (see deploy_playground)
+PUBLISHED_TREES = ("/data/skills", "/data/playground/clips", "/data/playground/keyframes",
+                   "/eval")
 PLAYGROUND_SECRET = "meta"  # and its API_SECRET, which holds MODEL_API_KEY
 CAP_ENVS = ("TE_PLAYGROUND_VISITOR_CAP", "TE_PLAYGROUND_DAILY_CAP")  # modal_app.py reads them
 LOG_SLACK_S = 1.0  # a frame log may end this far past the video (frame times are rounded)
@@ -380,12 +383,17 @@ def deploy_playground(args) -> int:
                               env=env, stdout=out, stderr=out).returncode
 
     modal("volume", "create", PLAYGROUND_VOLUME, quiet=True)  # fails when it exists: fine
+    # `volume put` only adds and overwrites, so a file removed here (a clip pulled for a face
+    # the detector missed) would stay public: clear the published trees first. The budget,
+    # the ledger and the call cache on the Volume are kept.
+    for published in PUBLISHED_TREES:
+        modal("volume", "rm", "-r", PLAYGROUND_VOLUME, published, quiet=True)  # may not exist
     with tempfile.TemporaryDirectory() as tmp:
         stage(picked["files"], Path(tmp))
         for part in ("data", "eval"):
-            if (Path(tmp) / part).is_dir() and (code := modal(
-                    "volume", "put", "--force", PLAYGROUND_VOLUME, str(Path(tmp) / part),
-                    f"/{part}")):
+            (Path(tmp) / part).mkdir(exist_ok=True)
+            if code := modal("volume", "put", "--force", PLAYGROUND_VOLUME,
+                             str(Path(tmp) / part), f"/{part}"):
                 print(f"te: copying {part}/ to the Volume failed (exit {code}); nothing was "
                       "deployed", file=sys.stderr)
                 return code

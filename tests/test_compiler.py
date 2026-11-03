@@ -324,6 +324,24 @@ def test_politics_look_alikes_in_the_model_wording_pass(tmp_path, monkeypatch, f
     assert not spec.refused
 
 
+@pytest.mark.parametrize("request_text, wording", [
+    ("Tell me when the glue gun is hot",
+     {"target_description": "the hot glue gun on its stand",
+      "negatives": ["the ready light is off", "the gun is unplugged"]}),
+    ("Tell me when the bath bomb has dissolved",
+     {"target_description": "a bath bomb in the tub",
+      "negatives": ["the bomb is still fizzing", "half of it is left"]}),
+    ("Tell me when the toy soldiers are back in their box",
+     {"target_description": "the toy soldiers on the rug",
+      "negatives": ["a few soldiers are still on the rug", "the box is empty"]}),
+])
+def test_a_look_alike_named_back_by_its_head_noun_passes(tmp_path, monkeypatch, request_text,
+                                                         wording):
+    monkeypatch.chdir(tmp_path)
+    spec = compile_skill(client_with({**ACCEPTED, **wording}, []), request_text, [JPEG])
+    assert not spec.refused, spec.refusal_reason
+
+
 def test_a_politics_request_is_refused_before_any_call(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     requests = []

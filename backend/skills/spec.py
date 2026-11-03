@@ -213,14 +213,16 @@ SPORTS_FORM = re.compile(
 # knife pass; ARMS_LOOKALIKES (toy weapons, a Salvation Army truck) are removed first.
 POLITICS_WORDS = ("politic*", "propaganda", "partisan*", "democrat*", "republican*", "maga",
                   "ballot", "ballots", "voter*", "vote for", "voting for", "voted for", "protest",
-                  "protests", "protester*", "protestor*", "protesting", "demonstrator*",
+                  "protests", "protester*", "protestor*", "protesting",
                   "picket line*", "riot police", "riot gear", "the president",
                   "prime minister", "senator", "senators", "soldier*", "troops", "militia*",
-                  "weapon*", "firearm*", "rifle*", "handgun*", "a gun", "the gun", "gunfire",
+                  "weapon*", "firearm*", "rifle*", "handgun*", "a gun", "the gun", "my gun",
+                  "guns", "pistol*", "shotgun*", "revolver*", "ammo", "bullets", "gunfire",
                   "gunshot*", "gunman", "gunmen", "missile*", "rocket launcher*", "grenade*",
                   "landmine*", "land mine*", "artillery", "ammunition", "a bomb", "the bomb",
                   "bombing*", "car bomb*", "airstrike*", "air strike*", "air raid*",
-                  "drone strike*", "warplane*", "fighter jet*", "war zone", "warzone",
+                  "drone strike*", "warplane*", "war plane*", "fighter jet*", "war zone",
+                  "warzone",
                   "war crime*", "at war")
 POLITICS_FORM = re.compile(
     r"\b(?:campaign|election)\s+(?:\w+\s+)?(?:signs?|posters?|banners?|flyers?|stickers?|"
@@ -229,13 +231,30 @@ POLITICS_FORM = re.compile(
     r"|\b(?:military|army)\s+(?:vehicles?|trucks?|convoys?|tanks?|aircraft|planes?|jets?|"
     r"helicopters?|drones?|bases?|parades?|police|checkpoints?|uniforms?|personnel|units?|"
     r"forces?|equipment|activity|movements?|exercises?|operations?|targets?)\b"
-    r"|\bbattle\s+tanks?\b",
+    r"|\bbattle\s+tanks?\b|\btanks?\s+(?:rolls?|rolling|drives?|driving|fires?|firing)\b",
     re.IGNORECASE)
+TOOL_GUNS = (r"\b(?:glue|staple|nail|heat|caulk|caulking|spray|sprayer|paint|grease|solder|"
+             r"soldering|massage|lint|price|label|tape|foam|nerf|water|squirt|toy|tin|lego|"
+             r"plastic|bubble|confetti)\s+guns?\b")
 ARMS_LOOKALIKES = re.compile(
     r"\b(?:toy|tin|lego|plastic|foam|nerf|water|squirt)\s+(?:soldiers?|tanks?|guns?|pistols?|"
     r"rifles?|weapons?|missiles?|grenades?|fighter jets?|warplanes?)\b"
-    r"|\bsalvation\s+army\b|\bsoldier\s+(?:fly|flies|ants?|beetles?)\b",
+    r"|\bsalvation\s+army\b|\bsoldier\s+(?:fly|flies|ants?|beetles?)\b"
+    rf"|{TOOL_GUNS}|\bgun[- ]?metal\b|\bpistol[- ]grip\b|\bbath\s+bombs?\b"
+    r"|\bsoldiers?\s+(?:figurines?|figures?|miniatures?|models?)\b"
+    r"|\b(?:ad|advertising|marketing|sales|brand|product|promo|promotional|fundraising|"
+    r"charity)\s+campaigns?\b|\bpresidents?'?s?\s+(?:choice|day)\b",
     re.IGNORECASE)
+# A compound the text names makes a bare mention later in it ("the gun is unplugged" after
+# "the glue gun") that same thing, so the bare word goes too before the check.
+REFERS_BACK = (
+    (re.compile(TOOL_GUNS, re.IGNORECASE), re.compile(r"\b(?:a|the|my|this|that)\s+guns?\b|\bguns\b",
+                                                       re.IGNORECASE)),
+    (re.compile(r"\bbath\s+bombs?\b", re.IGNORECASE),
+     re.compile(r"\b(?:a|the|this|that)\s+bombs?\b", re.IGNORECASE)),
+    (re.compile(r"\b(?:toy|tin|lego|plastic)\s+soldiers?\b", re.IGNORECASE),
+     re.compile(r"\bsoldiers?\b", re.IGNORECASE)),
+)
 # Object names that contain a person word; removed before the word lists are checked.
 # "child lock" stays a phrase only before a word break, so "the child locks the door" counts.
 OBJECT_PHRASES = re.compile(r"\b(?:child[ -]?lock|child[ -]?proof|baby (?:bottle|food|"
@@ -348,6 +367,9 @@ def topic_check(text: str) -> str | None:
         return REFUSALS["health"]
     if SPORTS_FORM.search(text) or _has_word(text, SPORTS_WORDS):
         return REFUSALS["sports"]
+    for compound, back in REFERS_BACK:
+        if compound.search(text):
+            text = back.sub(" ", text)
     text = ARMS_LOOKALIKES.sub(" ", text)
     if POLITICS_FORM.search(text) or _has_word(text, POLITICS_WORDS):
         return REFUSALS["politics"]

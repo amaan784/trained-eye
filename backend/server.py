@@ -97,6 +97,7 @@ def taught_skills(data_dir: Path) -> list[dict]:
 
     statuses = runs.all_status(data_dir)
     served = runs.serving(data_dir)
+    known = runs.serving_known(data_dir)  # no record yet: served is unknown (null)
     out = []
     for spec_file in sorted((Path(data_dir) / "skills").glob("*/spec.json")):
         try:
@@ -115,7 +116,8 @@ def taught_skills(data_dir: Path) -> list[dict]:
                     "dataset": (folder / "dataset" / f"{spec.name}-teach.jsonl").is_file(),
                     "calibrated": calibrated, "threshold": threshold if calibrated else None,
                     "training": runs.skill_training(statuses, spec.name),
-                    "served": served is not None and spec.name in served["skills"]})
+                    "served": (served is not None and spec.name in served["skills"])
+                    if known else None})
     return out
 
 

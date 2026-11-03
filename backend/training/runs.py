@@ -153,7 +153,15 @@ def write_serving(data_dir: Path, run: str) -> dict:
 
 
 def clear_serving(data_dir: Path) -> None:
-    serving_path(data_dir).unlink(missing_ok=True)
+    """Record that nothing is served now (te serve-student --stop). The file stays, holding
+    no run, so GET /skills can tell "stopped" (served: false) from "never recorded"
+    (served: null, where the app falls back to calibrated alone)."""
+    _write(serving_path(data_dir), {"run": None, "stopped": now_iso()})
+
+
+def serving_known(data_dir: Path) -> bool:
+    """Whether te serve-student has recorded a deploy or a stop on this Mac."""
+    return serving_path(data_dir).is_file()
 
 
 def serving(data_dir: Path) -> dict | None:

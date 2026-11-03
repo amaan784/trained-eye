@@ -103,6 +103,8 @@ def test_te_eval_writes_a_gallery_page_per_run_reading_each_clip_once(tmp_path, 
         "exp1-real": {"page": "galleries/exp1-real/index.html", "false_alarms": 1,
                       "misses": 1}}  # exp1-synthetic is pending: no gallery
     assert not stale.exists()  # galleries/ is written afresh
+    ignore = tmp_path / "eval/galleries/.gitignore"  # frames of footage, wherever --out is
+    assert ignore.read_text().splitlines()[-1] == "*"
     folder = tmp_path / "eval/galleries/exp1-mixed"
     thumbs = sorted(p.name for p in folder.glob("*.jpg"))
     assert thumbs == ["exp1-mixed-washer_done-session3_test_a-fa-01.jpg",

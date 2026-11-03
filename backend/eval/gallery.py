@@ -18,8 +18,8 @@ frames without pictures. Each clip is read once per te eval (however many evalua
 replayed it), keeping only the frames shown.
 
 The thumbnails are frames of the recorded clips, which may show faces: the galleries stay
-on this Mac (eval/galleries/ is gitignored), are never logged to W&B, and the page says to
-run te blur on any frame before it is published.
+on this Mac (galleries/ holds a .gitignore of its own, wherever --out points), are never
+logged to W&B, and the page says to run te blur on any frame before it is published.
 """
 
 from __future__ import annotations
@@ -230,6 +230,9 @@ def write_galleries(results: dict, base: Path, out_dir: Path, size: int = 6) -> 
     frames = {key: _frames(clip, key[1], indexes) for key, (clip, indexes) in wanted.items()}
     out = {}
     shutil.rmtree(Path(out_dir) / FOLDER, ignore_errors=True)  # only this function writes here
+    if by_run:  # frames of real footage: git ignores them wherever --out points
+        (Path(out_dir) / FOLDER).mkdir(parents=True)
+        (Path(out_dir) / FOLDER / ".gitignore").write_text("# may show faces: never commit\n*\n")
     for run, evals in by_run.items():
         folder = Path(out_dir) / FOLDER / run
         folder.mkdir(parents=True)

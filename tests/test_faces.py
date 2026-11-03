@@ -198,3 +198,21 @@ def test_a_manual_box_on_no_frame_is_refused_before_anything_is_written(tmp_path
         blur_video(src, dst, fps=10, detector=lambda data: [], extra=late)
     assert calls == ["-i", "-framerate", "-i"]  # decoded, never encoded
     assert Path(f"{dst}.blur.json").read_text() == before  # the earlier output keeps its record
+
+
+def test_a_manual_box_off_the_picture_is_refused_before_anything_is_written(tmp_path,
+                                                                           monkeypatch):
+    src = tmp_path / "keyframes"
+    src.mkdir()
+    (src / "kf_00.png").write_bytes(noise())  # 64x48
+    with pytest.raises(ValueError, match="outside the 64x48 picture"):
+        blur_folder(src, tmp_path / "out", detector=lambda data: [],
+                    extra=image_boxes({"kf_00.png": [[100, 10, 140, 30]]}))
+    assert not (tmp_path / "out").exists()
+    fake_ffmpeg(monkeypatch, frames=10)  # 32x24 frames
+    clip, dst = tmp_path / "clip.mp4", tmp_path / "out.mp4"
+    clip.write_bytes(b"original")
+    off = [{"start_s": 0.0, "end_s": 0.5, "box": [40, 0, 60, 20]}]
+    with pytest.raises(ValueError, match="outside the 32x24 frame"):
+        blur_video(clip, dst, fps=10, detector=lambda data: [], extra=off)
+    assert not dst.exists() and not Path(f"{dst}.blur.json").exists()

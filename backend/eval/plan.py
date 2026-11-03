@@ -45,7 +45,12 @@ from pathlib import Path
 
 from backend import config
 from backend.cli import EXPORT_MAX_HOURS, GPU, train_estimate
-from backend.config import ASK_ABOVE_USD, MODAL_GPU_USD_PER_HOUR, Settings
+from backend.config import (
+    ASK_ABOVE_USD,
+    MODAL_CREDIT_USD,
+    MODAL_GPU_USD_PER_HOUR,
+    Settings,
+)
 from backend.dataengine import labels
 from backend.dataengine.realclips import find_clips, labels_path
 from backend.eval.spark_scorer import default_log, sent_summary
@@ -62,7 +67,6 @@ from backend.training.prepare import (
 )
 
 EXP3_IMAGES = (25, 50, 100, 200, 300)
-MODAL_CREDIT_USD = 150.0  # HANDOVER, M2: stop and ask if the runs would pass this
 ARMS = (  # run, experiment, arm, bundle variant, dataset folder, images per skill
     ("exp1-real", 1, "real", "real", "dataset", None),
     ("exp1-synthetic", 1, "synthetic", "synthetic", "dataset", None),

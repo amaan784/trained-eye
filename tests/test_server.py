@@ -244,7 +244,7 @@ def test_skills_lists_taught_skills_for_the_app(tmp_path):
     taught("hot_pan", threshold="NaN")  # JSON reads NaN; it cannot be sent back
     with TestClient(create_app(data_dir=lambda: tmp_path)) as c:
         listed = c.get("/skills").json()["skills"]
-    untrained = {"training": None, "served": False}
+    untrained = {"training": None, "served": None}  # no deploy recorded: unknown
     assert listed == [
         {"name": "hot_pan", "alert": "Laundry's done.", "cooldown_s": 600, "dataset": False,
          "calibrated": False, "threshold": None, **untrained},
@@ -395,7 +395,7 @@ def test_skills_report_training_runs_and_what_is_served(tmp_path, monkeypatch):
         "finished": None}
     assert skills["hot_pan"]["training"] is None  # a finished smoke leaves no adapter
     assert skills["door_open"]["training"]["state"] == "failed"  # running, but te train died
-    assert not any(s["served"] for s in skills.values())
+    assert all(s["served"] is None for s in skills.values())  # nothing recorded: unknown
 
     runs.write_serving(tmp_path, "exp1-mixed")
     run_file = tmp_path / "watch/exp1-mixed/washer_done/threshold.json"
@@ -405,8 +405,10 @@ def test_skills_report_training_runs_and_what_is_served(tmp_path, monkeypatch):
     assert {n for n, s in skills.items() if s["served"]} == {"washer_done", "pot_boils"}
     assert (skills["washer_done"]["calibrated"], skills["washer_done"]["threshold"]) == (
         True, 0.75)  # the served run's own threshold, as watch mode uses it
-    runs.clear_serving(tmp_path)
-    assert listed()["washer_done"]["threshold"] == 0.6
+    runs.clear_serving(tmp_path)  # te serve-student --stop
+    skills = listed()
+    assert skills["washer_done"]["threshold"] == 0.6
+    assert not any(s["served"] for s in skills.values()) and skills["washer_done"]["served"] is False
 
 
 def test_the_default_watcher_follows_the_served_run_and_the_settings(tmp_path, monkeypatch):

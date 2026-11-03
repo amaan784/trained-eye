@@ -191,6 +191,11 @@ def _images(src: Path) -> list[Path]:
             and p.suffix.lower() in IMAGE_SUFFIXES]
 
 
+def outside(boxes: Iterable[Box], size: tuple[int, int]) -> list[Box]:
+    """The manual boxes that miss the picture entirely (blur_boxes would skip them)."""
+    return [box for box in boxes if _clip(box, size) is None]
+
+
 def blur_folder(src: Path, dst: Path, strength: float = STRENGTH,
                 detector: Detector = detect_faces,
                 extra: Mapping[str, Iterable[Box]] | None = None) -> dict:
@@ -206,6 +211,13 @@ def blur_folder(src: Path, dst: Path, strength: float = STRENGTH,
     if unknown := sorted(set(extra) - {p.name for p in images}):
         raise ValueError(f"the boxes name files that are not images in {src}: "
                          f"{', '.join(unknown[:5])}")
+    for path in images:  # a box off the picture would be counted but blur nothing
+        if boxes := list(extra.get(path.name, ())):
+            size = _open(path.read_bytes())[0].size
+            if missed := outside(boxes, size):
+                raise ValueError(f"{path.name}: box {list(missed[0])} is outside the "
+                                 f"{size[0]}x{size[1]} picture (measured on a rotated view?); "
+                                 "nothing written")
     dst.mkdir(parents=True, exist_ok=True)
     faces, sources, manual = {}, {}, 0
     for path in images:
@@ -255,6 +267,11 @@ def blur_video(src: Path, dst: Path, strength: float = STRENGTH, fps: float = 30
             raise ValueError(f"{len(unused)} manual boxes fall on no frame (the first from "
                              f"{unused[0]['start_s']:g} s to {unused[0]['end_s']:g} s; the "
                              f"video has {len(frames)} frames at {fps:g} fps): nothing written")
+        if spans and frames:
+            size = _open(frames[0].read_bytes())[0].size
+            if missed := outside([s["box"] for s in spans], size):
+                raise ValueError(f"box {list(missed[0])} is outside the {size[0]}x{size[1]} "
+                                 "frame (measured on a rotated view?): nothing written")
         dst.parent.mkdir(parents=True, exist_ok=True)
         record_path.unlink(missing_ok=True)  # an older record never vouches for this output
         found = []

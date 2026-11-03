@@ -196,3 +196,20 @@ def test_clips_from_another_spec_or_tampered_ones_are_refused(tmp_path):
     with pytest.raises(ValueError, match="dataset-clips does not match its manifest; run te "
                        "clips --skill washer_done again"):
         bundle([skill], tmp_path / "out", "/vol/b")
+
+
+def test_experiment_2s_arms_must_share_one_prompt_layout(tmp_path):
+    from backend.dataengine.dataset import Example, write_dataset
+
+    skill = teach_dataset(tmp_path / "skills", "washer_done", system_in_user=True)
+    examples = [Example(f"washer_done-synt-{i:03d}", png(i), "yes" if i % 2 else "no",
+                        "synthetic", "washer_done", "the display shows End", ["display off"])
+                for i in range(20)]
+    write_dataset(examples, skill / "dataset-unfiltered", "washer_done-teach",
+                  system_in_user=False)  # te unfiltered ran before TE_SYSTEM_IN_USER=1
+    with pytest.raises(ValueError, match="run te unfiltered --skill washer_done again"):
+        bundle([skill], tmp_path / "out", "/vol/b", dataset_dir="dataset-unfiltered")
+    write_dataset(examples, skill / "dataset-unfiltered", "washer_done-teach",
+                  system_in_user=True)
+    assert bundle([skill], tmp_path / "out", "/vol/b",
+                  dataset_dir="dataset-unfiltered")["system_in_user"] is True

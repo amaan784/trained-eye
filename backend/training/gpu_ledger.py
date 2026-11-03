@@ -1,6 +1,6 @@
 """Modal GPU spend on this Mac: data/modal_ledger.jsonl, one JSON line per job, so te spend
 can print the Modal total and te train and te export can ask before the runs pass the
-Modal credit (backend/eval/plan.py's MODAL_CREDIT_USD).
+Modal credit (config.MODAL_CREDIT_USD).
 
     {"t": "2026-11-03T14:03:00Z", "kind": "train", "name": "exp1-mixed", "gpu": "H100",
      "seconds": 912.4, "usd": 1.0011, "upper_bound": false, "key": "train:exp1-mixed:..."}
@@ -24,7 +24,7 @@ import math
 from datetime import UTC, datetime
 from pathlib import Path
 
-from backend.config import MODAL_GPU_USD_PER_HOUR
+from backend.config import MODAL_CREDIT_USD, MODAL_GPU_USD_PER_HOUR
 
 LEDGER_FILE = "modal_ledger.jsonl"
 JOBS = ("train", "export", "serve")
@@ -128,8 +128,6 @@ def spent_usd(data_dir: Path) -> float:
 
 
 def credit_usd() -> float:
-    from backend.eval.plan import MODAL_CREDIT_USD  # here: plan.py imports backend.cli
-
     return MODAL_CREDIT_USD
 
 

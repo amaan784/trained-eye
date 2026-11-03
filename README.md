@@ -11,30 +11,31 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v80 (M4): The release folder and its upload
+## Build stage v81 (M4): Regeneration and fetching the weights
 
-backend/release/package.py assembles and publishes the Hugging Face release.
-prepare_release writes the folder and uploads nothing: the model card, the run's
-top-level weight and config files (no pickles, checkpoints or trainer README), the
-prompt manifests of the skills with generated images, the base model's license as
-LICENSE (backend/release/BASE_LICENSE.txt, the Apache-2.0 text) and release.json with
-every file's SHA-256. Given a blur_folder output per skill, it also ships that skill's
-face-blurred keyframes: only those its sources.json lists whose originals the
-manifest's edits start from, and a generated image among them or a missing keyframe
-stops it. upload() refuses without the author's yes, without LICENSE or weights, with
-any other image or video in the folder, and when an existing repo has another
-visibility than the one asked for; huggingface_hub is imported only then, and the
-token never shows in an error. make_collection groups model and dataset repos into a
-collection, again only with the author's yes and only when every repo has the
-visibility asked for. The test that te regenerate finds the shipped keyframes comes in
-stage v81.
+Generated images are never published, so backend/regenerate.py ships what rebuilds
+them. export_manifests copies each skill's synthetic/manifest.jsonl into a committed
+folder with only the fields that remake an image and check its provenance (no image
+bytes, file names or costs), sorted so reruns give the same file. regenerate runs the
+same edits again through MetaClient, so every call is cached, capped and in the
+ledger, and free where the images were made. It finds the keyframes by SHA-256, or
+face-blurred copies through the sources.json blur_folder writes, hands the plan and
+the estimate to a confirm callback before any call, so a no spends nothing, and counts
+how many images match the manifest's hashes, never failing on a difference.
+backend/release/weights.py downloads a run's adapter or merged build from the Modal
+volume trained-eye: only the top-level weight and config files, each checked against
+the size the volume lists, into a hidden folder first, so the result is always
+complete. The release test of the blurred keyframes, held back in v80, comes back
+here.
 
 Files added or changed in this stage:
 
-- `backend/release/BASE_LICENSE.txt` (new):
-- `backend/release/package.py` (new): the release folder (base license, blurred
-  keyframes), the upload and the collection
-- `tests/test_release_package.py` (new): tests
+- `backend/regenerate.py` (new): the prompt manifests and regenerating images from
+  them
+- `backend/release/weights.py` (new):
+- `tests/test_regenerate.py` (new): tests
+- `tests/test_release_package.py` (changed): tests
+- `tests/test_release_weights.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -53,18 +54,19 @@ set and no network to Meta); the output under each is what they printed.
     $ python -m pytest
     ........................................................................ [  7%]
     ........................................................................ [ 15%]
-    ........................................................................ [ 23%]
+    ........................................................................ [ 22%]
     ........................................................................ [ 30%]
     ....................................s................................... [ 38%]
-    ........................................................................ [ 46%]
-    ........................................................................ [ 54%]
+    ........................................................................ [ 45%]
+    ........................................................................ [ 53%]
     ........................................................................ [ 61%]
-    ........................................................................ [ 69%]
-    ........................................................................ [ 77%]
-    ........................................................................ [ 85%]
-    ........................................................................ [ 92%]
-    ...................................................................      [100%]
-    930 passed, 1 skipped in 63.45s (0:01:03)
+    ........................................................................ [ 68%]
+    ........................................................................ [ 76%]
+    ........................................................................ [ 84%]
+    ........................................................................ [ 91%]
+    ........................................................................ [ 99%]
+    ....                                                                     [100%]
+    939 passed, 1 skipped in 57.16s
 
     $ ruff check .
     All checks passed!
@@ -148,6 +150,7 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   its price.
 - `backend/eval/plan_file.py`: eval/plan.json: the runs, clips and logs make eval
   reads.
+- `backend/regenerate.py`: the prompt manifests and regenerating images from them.
 - `backend/release/model_card.py`: the Hugging Face model card.
 - `backend/release/package.py`: the release folder (base license, blurred keyframes),
   the upload and the collection.
@@ -164,13 +167,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 930 tests, all offline; none calls a paid API.
+- `tests/`: 939 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v81 adds regeneration from the prompt manifests (copied out of data/ without
-images, then the edits run again) and the download of a run's weights from the Modal
-volume.
+Stage v82 adds the human-labelled session 3 test clips as a Hugging Face dataset
+folder: only blurred videos with a matching blur record, under the license the author
+chooses.
 
 ## Privacy and policy
 

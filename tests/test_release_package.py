@@ -120,6 +120,48 @@ def keyframe_inputs(tmp_path):
     return bundle, manifests, weights, blurred, generated
 
 
+def test_the_release_ships_the_blurred_keyframes_te_regenerate_needs(tmp_path, monkeypatch):
+    from backend.regenerate import find_keyframes
+
+    bundle, manifests, weights, blurred, generated = keyframe_inputs(tmp_path)
+    (blurred / "notes.png").write_bytes(b"not listed in sources.json")
+    folder = tmp_path / "release"
+    release = prepare_release(folder, run="final", bundle_manifest=bundle,
+                              manifests_dir=manifests, weights_dir=weights,
+                              keyframes={"washer_done": blurred})
+    shipped = folder / "keyframes" / "washer_done"
+    assert sorted(p.name for p in shipped.iterdir()) == ["kf_00.png", "kf_01.jpg",
+                                                         "sources.json"]
+    assert release["keyframes"] == {"washer_done": 2}
+    assert "keyframes/washer_done/kf_00.png" in {f["path"] for f in release["files"]}
+    needed = {json.loads(line)["keyframe_sha256"]
+              for line in (folder / "manifests/washer_done.jsonl").read_text().splitlines()}
+    found, mapped = find_keyframes(shipped, needed)  # what the card's te regenerate reads
+    assert set(found) == needed and mapped == 2
+    card = (folder / "README.md").read_text()
+    assert ("te regenerate --skill <skill> --manifest manifests/<skill>.jsonl --keyframes "
+            "keyframes/<skill>") in card and "blurred pixels" in card
+    assert "(for washer_done)" in card and "which are not published" not in card
+    calls = []
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hub(calls))
+    monkeypatch.setenv("HF_TOKEN", "hf_good")
+    assert upload(folder, REPO, confirmed=True) == f"https://huggingface.co/{REPO}"
+    (shipped / "kf_02.png").write_bytes(generated)  # a generated image slipped in, listed
+    sources = json.loads((shipped / "sources.json").read_text())
+    (shipped / "sources.json").write_text(json.dumps({**sources, "f" * 64: "kf_02.png"}))
+    with pytest.raises(ValueError, match="never published"):
+        upload(folder, REPO, confirmed=True)
+    (shipped / "sources.json").write_text(json.dumps(sources))  # listed no more
+    with pytest.raises(ValueError, match="kf_02.png"):
+        upload(folder, REPO, confirmed=True)
+    (shipped / "kf_02.png").unlink()
+    (folder / "keyframes" / "bus_m4").mkdir()  # no manifest, so no keyframes may ship
+    (folder / "keyframes" / "bus_m4" / "kf_00.png").write_bytes(b"")
+    with pytest.raises(ValueError, match="bus_m4/kf_00.png"):
+        upload(folder, REPO, confirmed=True)
+    assert [c for c in calls if c[0] == "upload"] == [("upload", REPO)]
+
+
 def test_keyframes_are_refused_unless_te_blur_made_all_of_them_from_real_frames(tmp_path):
     bundle, manifests, weights, blurred, generated = keyframe_inputs(tmp_path)
     folder = tmp_path / "release"

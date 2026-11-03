@@ -11,26 +11,25 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v57 (M2): iOS: the teach client and flow
+## Build stage v58 (M2): iOS: the app model
 
-ios/TrainedEye/Network/TeachClient.swift calls the teach routes: POST /teach/start
-with the skill, the request (a WAV recording or typed text) and the captured JPEGs as
-a multipart form built in memory, with a 120 second timeout since the server checks
-every frame first; GET /teach/status for one skill, or for the latest session; and
-POST /teach/answer. ios/TrainedEye/Teach/TeachFlow.swift runs the Teach screen's
-steps: a skill name the backend accepts (snake_case, 2 to 40 characters), hold to talk
-or type the request, then a 3 second countdown and a 10 second capture that keeps
-three frames a second in memory. After the upload it sends the user's answers to the
-server's two questions (spend the estimate, and is the read-back right, with an
-optional correction) and polls the status once a second until the run ends. Frames are
-dropped once the Mac has them and kept for another try when the upload fails. A
-session still running on the Mac can be picked up again at launch, when the server
-token is set. The flow uses the app model of the next stage.
+ios/TrainedEye/App/AppModel.swift ties the parts together. It starts the camera the
+setting asks for (by default the glasses when they are available, else the iPhone,
+with DAT's mock glasses standing in for the glasses in Debug builds) and sends its
+frames to the WebSocket while watching, or to the teach flow while capturing; a teach
+capture is refused while watching. Watching uses one frame a second and the glasses'
+low resolution; the teach capture asks for medium resolution and three frames a
+second, and waits up to 20 seconds for the first frame, not counting the permission
+step. An alert is spoken on the glasses and shown. The last 10 frames are held in
+memory for Save clip, and nothing is written unless the user taps it. Each stay in the
+background while watching is counted (frames from the camera, sent, acked and repeats
+skipped) for the screen-locked check on the glasses. Changing the watched skills says
+hello again, and the skills list comes from GET /skills. Save clip uses ClipStore,
+which comes in v63.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Network/TeachClient.swift` (new):
-- `ios/TrainedEye/Teach/TeachFlow.swift` (new):
+- `ios/TrainedEye/App/AppModel.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -58,7 +57,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 31.33s
+    755 passed in 31.29s
 
     $ ruff check .
     All checks passed!
@@ -143,8 +142,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v58 adds the app model that ties the parts together: which camera runs, where
-its frames go, what an alert does, and what went out while the screen was locked.
+Stage v59 adds the app's look: a dark, minimal theme with one accent colour in Inter
+4.1, and the cards, buttons and rows every screen uses.
 
 ## Privacy and policy
 

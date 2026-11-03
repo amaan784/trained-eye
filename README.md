@@ -11,27 +11,26 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v68 (M3): Regression check and Spark as scorer
+## Build stage v69 (M3): The results write-up
 
-backend/eval/regression.py asks whether fine-tuning on yes or no frames costs general
-visual skill. It reads a JSON-lines file of questions written by hand, each with an
-optional image, an answer and a match rule (exact, contains or choice), asks the base
-and the fine-tuned model each one through an OpenAI-compatible endpoint, at
-temperature 0 by default, and grades the replies, ignoring case, spaces and end
-punctuation. A failed request counts as wrong and is listed, and the report gives
-accuracy with and without images, the questions whose result changed and a markdown
-table. backend/eval/spark_scorer.py makes Muse Spark a per-frame judge with the
-student's shape, so the watcher uses it unchanged: yes is 1.0, no 0.0 and unsure 0.5,
-and each request is cached and billed to the skill. A latency log keeps the seconds of
-the frames actually sent, so a cached frame reports the latency measured when it was
-sent, and one cached by another caller is marked as having none.
+backend/eval/writeup.py turns the scored evaluations into the charts and results.md
+that run_eval, in v71, writes. write_charts() saves the SVG charts: grouped bars for
+Experiments 1 and 2, a line chart per skill for Experiment 3, the cost scatter for
+Experiment 4 and a live timeline for each clip that asks for one. render() returns the
+text of results.md: one section per experiment with its charts, a table of accuracy
+(precision, recall, F1, events caught, false alarms per hour, time to alert, and the
+threshold with where it came from) and one of speed and cost. An experiment with no
+evaluations says so, and evaluations waiting for clips are listed as pending.
+Experiment 2 also gets Muse Spark's error rate against the hand labels and the
+filter's agreement, Experiment 4 its judges pooled over the skills, and after the
+experiments come the regression check, or a note that it has not run, and links to the
+failure galleries, each when run_eval passes it in. Every number comes from the
+computation passed in; n/a means there was nothing to compute it from.
 
 Files added or changed in this stage:
 
-- `backend/eval/regression.py` (new):
-- `backend/eval/spark_scorer.py` (new):
-- `tests/test_regression.py` (new): tests
-- `tests/test_spark_scorer.py` (new): tests
+- `backend/eval/writeup.py` (new):
+- `tests/test_eval_writeup.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -51,16 +50,16 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [  8%]
     ........................................................................ [ 17%]
     ........................................................................ [ 26%]
-    ........................................................................ [ 35%]
+    ........................................................................ [ 34%]
     ........................................................................ [ 43%]
     ........................................................................ [ 52%]
-    ........................................................................ [ 61%]
-    ........................................................................ [ 70%]
+    ........................................................................ [ 60%]
+    ........................................................................ [ 69%]
     ........................................................................ [ 78%]
-    ........................................................................ [ 87%]
-    ........................................................................ [ 96%]
-    ..............................                                           [100%]
-    822 passed in 35.19s
+    ........................................................................ [ 86%]
+    ........................................................................ [ 95%]
+    ....................................                                     [100%]
+    828 passed in 31.84s
 
     $ ruff check .
     All checks passed!
@@ -147,12 +146,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 822 tests, all offline; none calls a paid API.
+- `tests/`: 828 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v69 adds the results write-up: the SVG charts and results.md, one section per
-experiment with its tables of accuracy, speed and cost.
+Stage v70 adds the failure galleries of Experiment 1: each run's worst false alarms
+and misses as small frames of the recorded clips, on a page that stays on this Mac.
 
 ## Privacy and policy
 

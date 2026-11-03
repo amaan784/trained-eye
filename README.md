@@ -11,27 +11,24 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v88 (M4): Playground: the page and its style
+## Build stage v89 (M4): Playground: the timeline and the wall
 
-The playground's page arrives in backend/playground/static/. index.html has a section
-for each part: the recorded clips, with the video, the skill picker and the timeline;
-how each skill was built, with the keyframes, what SAM looks at and the training wall;
-teach it yourself, a form with a condition of at most 300 characters and a keyframe
-picker; the results; and the privacy notes (faces blurred, frames not stored, Muse
-Image provenance kept, no skills about specific people, nothing loaded from other
-sites, the address kept only as a salted hash). The clips, skills, teach and results
-sections each say whether they are precomputed or live. style.css follows the system's
-dark or light setting and styles the timeline, the wall's tiles and the yes and no
-tags. The Inter 4.1 variable font is bundled in fonts/ with its SIL Open Font License,
-so the page fetches nothing from a CDN. The scripts come in the next two stages, and
-the app's tests in v91 check the page.
+Two scripts for the page, in backend/playground/static/. timeline.js draws one skill's
+timeline for a clip as SVG: the student's yes-probability for each scored frame as a
+line, broken where the student gave no score, the threshold dashed, the true ranges
+shaded, and each alert marked with its spoken text, on two rows to keep the labels
+apart. A playhead follows the video, hovering shows a frame's score, a click seeks, a
+sentence below reads the score against the threshold, and a banner shows what was
+spoken for 5 seconds after each alert. wall.js draws the training wall: generated
+variations flip in one after another, each tagged with Muse Spark's label; the ones
+Spark disagreed with fade and are marked rejected, and each image's alt text says what
+it was made to show. Wall.add adds tiles one at a time for a live run, and
+Wall.summary counts them in a sentence. The page's script uses both in the next stage.
 
 Files added or changed in this stage:
 
-- `backend/playground/static/fonts/InterVariable.woff2` (new):
-- `backend/playground/static/fonts/LICENSE.txt` (new):
-- `backend/playground/static/index.html` (new):
-- `backend/playground/static/style.css` (new):
+- `backend/playground/static/timeline.js` (new):
+- `backend/playground/static/wall.js` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -62,7 +59,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 87%]
     ........................................................................ [ 94%]
     .....................................................                    [100%]
-    988 passed, 1 skipped in 75.27s (0:01:15)
+    988 passed, 1 skipped in 78.16s (0:01:18)
 
     $ ruff check .
     All checks passed!
@@ -168,9 +165,9 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v89 adds the playground's two drawings: the live timeline of a clip's scores
-against the threshold with its spoken alerts, and the training wall of labelled
-variations.
+Stage v90 adds the page script that ties the playground together: the clip and skill
+pickers, SAM's outline, a live teach run followed as it goes, the cost and the caps,
+and the results.
 
 ## Privacy and policy
 

@@ -11,26 +11,26 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v62 (M2): iOS: Skills and Watch screens
+## Build stage v63 (M2): iOS: saved clips and the build guide
 
-ios/TrainedEye/UI/SkillsView.swift lists the taught skills from GET /skills, fetched
-when the screen opens, on a pull or with Refresh. Each has a switch for watch mode,
-its alert text, its status (training on Modal, trained, ready with its threshold, else
-how far the teach flow got), the newest run's time and its quiet time after an alert
-in minutes. Changing a switch while watching says hello again.
-ios/TrainedEye/UI/WatchView.swift starts and stops watching and shows which camera is
-on and the newest frame; the last alert, with its probability, whether Muse Spark
-agreed and whether it was spoken on the glasses; each watched skill's latest score
-next to its threshold; the connection with frames sent and acked; the last stay in the
-background with what the camera gave, what went out and what came back acked; and the
-glasses' camera state, frame size, recoveries and battery. The Save the last 10
-seconds button is on only while watching, and the screen says frames are stored only
-that way.
+ios/TrainedEye/Clips/ClipStore.swift keeps the clips the user saved from the Watch
+screen, and nothing else: one folder per clip under Documents/Clips, named by the time
+it was saved, with the frames as f000.jpg, f001.jpg and so on and a clip.json (when,
+which camera, the watched skills, the last alert). A folder of frames is what te watch
+--clip and te teach --clip read, so a clip copied to the Mac can be replayed there.
+Nothing is written without the tap, and a clip goes only when the user deletes it.
+ios/TrainedEye/UI/ClipsView.swift lists them newest first, opens one to its frames and
+deletes it after a confirmation. With these the app's files are all there.
+ios/README.md says how to build it in Xcode (the project, DAT 1.0.1 as an exact
+version, the build settings, the Info.plist and capabilities), how to point it at te
+serve, the mock device, the privacy rules, the files table and the checks still to do
+on the glasses. The code has still not been compiled.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/UI/SkillsView.swift` (new):
-- `ios/TrainedEye/UI/WatchView.swift` (new):
+- `ios/README.md` (new): how to build the iPhone app in Xcode (not compiled yet)
+- `ios/TrainedEye/Clips/ClipStore.swift` (new):
+- `ios/TrainedEye/UI/ClipsView.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -58,7 +58,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 36.80s
+    755 passed in 35.69s
 
     $ ruff check .
     All checks passed!
@@ -139,12 +139,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
+- `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
 - `tests/`: 755 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v63 adds the clips the user saves, as frame folders te watch can replay, and
-ios/README.md: how to build the app in Xcode and what to check on the glasses.
+Stage v64 adds the local page for hand-labelling generated training images, which
+shows each image with the question Muse Spark was asked and never Spark's answer.
 
 ## Privacy and policy
 

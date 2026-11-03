@@ -11,28 +11,28 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v45 (M2): Watch mode and teaching on the server
+## Build stage v46 (M2): Replaying clips and calibrating thresholds
 
-In backend/server.py, a hello whose "watch" lists skill names starts watch mode for
-that session: the student scores every frame, each ack carries the scores, and an
-alert goes to the phone as a message of its own, to be spoken through the glasses; a
-watch request that cannot be met gets an error. The default watcher reads the student
-endpoint from the settings and takes thresholds and the prompt layout from the served
-run in serving.json; every session shares one cooldown book, saved in
-data/watch/cooldowns.json, so a reconnect or a second phone does not announce a
-condition again too soon. GET /skills lists the taught skills for the Skills screen,
-with their threshold, training run and whether the served run has them. The teach
-routes are mounted, and on shutdown a teach run stops before its next paid call. te
-serve prints this Mac's address on the local network and the /health check, says
-whether teaching from the phone is on, and keeps the server's log lines.
+backend/cli_watch.py adds te watch and te calibrate. te watch replays a clip, a video
+or a folder of frames, through watch mode: the student on TE_STUDENT_URL scores each
+frame for the named skills, each alert is printed with its time, probability and the
+Muse Spark check (skipped with --no-cloud), and every scored frame goes to a frame
+log. --run uses that run's threshold before the skill's and names the run in the log,
+--threshold overrides both, and the student is asked with the prompt laid out as its
+training data was written. te calibrate reads frame logs, each with a labels file of
+the clip's true ranges, picks the threshold with the trigger's calibration and writes
+it for the skill or, with --run, for that run alone. It says when no threshold keeps
+false alarms under one an hour. pyproject.toml names backend and tests as first-party
+for ruff, so imports sort the same in a stage folder that lacks some backend packages.
+--scorer spark, Muse Spark on every frame, needs v74's experiment plan, as do its
+tests.
 
 Files added or changed in this stage:
 
 - `backend/cli.py` (changed): the te command line
-- `backend/server.py` (changed): the backend the iPhone app talks to: JPEG frames
-  arrive over a WebSocket at /ws and each one is acknowledged; frames stay in memory
-- `tests/test_cli.py` (changed): tests
-- `tests/test_server.py` (changed): tests
+- `backend/cli_watch.py` (new): te watch and te calibrate
+- `pyproject.toml` (changed): requirements and tool settings
+- `tests/test_cli_watch.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -53,25 +53,59 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 19%]
     ........................................................................ [ 29%]
     ........................................................................ [ 39%]
-    ........................................................................ [ 49%]
-    ........................................................................ [ 59%]
-    ........................................................................ [ 69%]
+    ........................................................................ [ 48%]
+    ........................................................................ [ 58%]
+    ........................................................................ [ 68%]
     ........................................................................ [ 78%]
     ........................................................................ [ 88%]
-    ........................................................................ [ 98%]
-    ..........                                                               [100%]
-    730 passed in 32.41s
+    ........................................................................ [ 97%]
+    ................                                                         [100%]
+    736 passed in 36.08s
 
     $ ruff check .
     All checks passed!
 
-    $ python -m backend.cli serve --help
-    usage: te serve [-h] [--host HOST] [--port PORT]
+    $ python -m backend.cli watch --help
+    usage: te watch [-h] --skills SKILLS --clip CLIP [--fps FPS] [--no-cloud]
+                    [--scorer {student,spark}] [--log LOG] [--run RUN]
+                    [--threshold THRESHOLD] [--max-tokens MAX_TOKENS] [--yes]
 
     options:
-      -h, --help   show this help message and exit
-      --host HOST
-      --port PORT
+      -h, --help            show this help message and exit
+      --skills SKILLS       comma-separated, e.g. washer_done
+      --clip CLIP           video file or folder of frames
+      --fps FPS             frames scored per second
+      --no-cloud            skip the Muse Spark check
+      --scorer {student,spark}
+                            who scores each frame: the trained model, or Muse
+                            Spark (paid)
+      --log LOG             frame log path (the evaluation plan names one per
+                            clip)
+      --run RUN             the trained run TE_STUDENT_URL serves, e.g.
+                            exp1-mixed: its threshold (te calibrate --run) comes
+                            before the skill's, and the frame log names it
+      --threshold THRESHOLD
+                            one threshold for every skill, over the run's and the
+                            skill's
+      --max-tokens MAX_TOKENS
+                            the student's reply budget (default
+                            TE_STUDENT_MAX_TOKENS, 512); base Glimmer may need
+                            more
+      --yes                 with --scorer spark: no question (not over $15)
+
+    $ python -m backend.cli calibrate --help
+    usage: te calibrate [-h] --skill SKILL --log LOG --labels LABELS [--run RUN]
+
+    options:
+      -h, --help       show this help message and exit
+      --skill SKILL
+      --log LOG        a frame log from te watch (data/watch/replay-*.jsonl);
+                       repeatable
+      --labels LABELS  JSON {"true": [[start_s, end_s], ...]} for the clip of that
+                       log
+      --run RUN        the run these logs replayed (te watch --run): writes
+                       data/watch/<run>/<skill>/threshold.json, not the skill-wide
+                       file
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 
@@ -87,6 +121,7 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `backend/cli.py`: the te command line.
 - `backend/cli_train.py`: te train: the smoke, the priced run, detach and collect, the
   preflight.
+- `backend/cli_watch.py`: te watch and te calibrate.
 - `backend/meta/client.py`: MetaClient, the only way the code calls Meta's API: cache
   first, then cap check, retries with backoff for 429, 5xx and timeouts, and spend
   recorded from the reported usage.
@@ -143,13 +178,12 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 730 tests, all offline; none calls a paid API.
+- `tests/`: 736 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v46 adds te watch, which replays a clip through watch mode with the trained
-model, and te calibrate, which sets a skill's or a run's threshold from labelled frame
-logs.
+Stage v47 adds the export: a run's adapter merged into the bf16 base on Modal, then
+the merged model compared with base plus adapter on up to 50 bundle examples.
 
 ## Privacy and policy
 

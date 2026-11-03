@@ -11,6 +11,9 @@ named below.
   te teach          teach a skill: request + 10 s clip -> spec, generated data, labels, dataset
   te train          bundle taught skills and train the student on Modal (asks first)
                     (backend/cli_train.py)
+  te watch          replay a clip through watch mode: scores, alerts and the frame log
+  te calibrate      set a skill's threshold from replayed, labelled validation clips
+                    (backend/cli_watch.py)
 """
 
 from __future__ import annotations
@@ -371,6 +374,22 @@ def modal_ready() -> bool:
     return True
 
 
+def positive(text: str) -> int:
+    """An argparse type: a whole number, 1 or more."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be 1 or more, got {value}")
+    return value
+
+
+def fraction(text: str) -> float:
+    """An argparse type: a number from 0 to 1."""
+    value = float(text)
+    if not 0.0 <= value <= 1.0:  # also false for nan
+        raise argparse.ArgumentTypeError(f"must be from 0 to 1, got {text}")
+    return value
+
+
 def count(text: str) -> int:
     """An argparse type: a whole number, 0 or more."""
     value = int(text)
@@ -421,6 +440,10 @@ def build_parser() -> argparse.ArgumentParser:
     from backend.cli_train import add_parsers as train_parsers
 
     train_parsers(sub)
+
+    from backend.cli_watch import add_parsers as watch_parsers
+
+    watch_parsers(sub)
     return parser
 
 

@@ -11,29 +11,24 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v52 (M2): iOS: glasses connection and the mock device
+## Build stage v53 (M2): iOS: the glasses camera
 
-ios/TrainedEye/Glasses/GlassesConnection.swift registers the app with the Meta AI app,
-which calls back through the app's URL scheme, and follows the paired glasses as
-Meta's CameraAccess and BirdSpotter samples do: it listens to each device's link,
-compatibility and state, and reports the first connected pair (else the first paired
-one) with its name, link and battery, which stays unknown while DAT reports 0. It says
-when the glasses need a firmware update and can open that update, or the update of the
-DAT app on the glasses. ios/TrainedEye/Glasses/MockGlasses.swift, in Debug builds
-only, drives DAT's Mock Device Kit: it pairs the "Meta Glasses" model, powers it on,
-unfolds and dons it, and sets its camera feed before any stream starts, to
-Resources/mock_feed.mp4 when the app has it, else the iPhone's back camera. Fold,
-unfold and a touchpad tap let the simulator check that watching comes back after a
-fold and is left alone while paused. ios/make_mock_feed.py makes that clip with Pillow
-and ffmpeg: a drawn washer display counting down to "End", HEVC tagged hvc1, 360x640,
-10 fps, 16 seconds.
+ios/TrainedEye/Glasses/GlassesCamera.swift runs the glasses' camera through Meta's DAT
+SDK, with the lifecycle of the CameraAccess sample: a session from the auto device
+selector, the camera permission, then the camera and its stream. Meta AI is opened for
+the camera permission only after the user confirms, and after a refusal no stream
+starts. Unlike CameraAccess, the session is not ended when the app goes to the
+background. While the camera is wanted it comes back by itself: after a fold or a link
+drop, a new session starts when the device selector reports the glasses again, never
+while a session is paused, and at most 3 times without a frame in between. A change of
+stream size stops the camera and adds it again at the new size once its stream has
+stopped, keeping the session. The class also holds the status and interruption lines
+that the Connect and Watch screens show. Nothing here touches the capture LED. The
+stream half, which this file needs, comes in the next stage.
 
 Files added or changed in this stage:
 
-- `ios/TrainedEye/Glasses/GlassesConnection.swift` (new):
-- `ios/TrainedEye/Glasses/MockGlasses.swift` (new):
-- `ios/TrainedEye/Resources/mock_feed.mp4` (new):
-- `ios/make_mock_feed.py` (new):
+- `ios/TrainedEye/Glasses/GlassesCamera.swift` (new):
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -61,7 +56,7 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 85%]
     ........................................................................ [ 95%]
     ...................................                                      [100%]
-    755 passed in 34.79s
+    755 passed in 35.24s
 
     $ ruff check .
     All checks passed!
@@ -146,8 +141,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 
 ## Next
 
-Stage v53 adds the glasses camera: a DAT session that comes back by itself after a
-fold or a link drop, the camera permission asked first, and a change of stream size.
+Stage v54 adds the glasses stream (HEVC at 7 fps, a stopped stream added again,
+repeated images skipped) and the throttle that turns frames into one JPEG a second.
 
 ## Privacy and policy
 

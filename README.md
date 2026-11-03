@@ -11,26 +11,26 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v85 (M4): Playground: how each skill was built
+## Build stage v86 (M4): Playground: spend caps and metered runs
 
-backend/playground/skills.py reads each taught skill from data/skills/<skill>/ as the
-teach flow left it, skipping refused skills, and links images where they are without
-copying them. skill_detail gives the read-back, the keyframes with Spark's and the
-human labels, SAM's box on the first teaching frame that has one (read again from
-SAM's stored text, at no cost, for a skill taught before the parser existed), and the
-training wall: up to 48 generated variations spread over all of them, each with what
-it was made to show and what Spark said. examples() picks, per skill, the first 6
-positives and 6 near-misses Spark labelled, for teach it yourself, and
-provided_keyframes offers the keyframes a visitor may pick: a curated set in
-data/playground/keyframes/, else 3 of each skill's own. The public copy shows no
-generated image (an empty wall with a note, and no examples) and only face-blurred
-keyframes, whose sources.json gives each one its original's SHA-256, so SAM's box is
-still found.
+Two pieces keep the playground's live Meta calls within limits.
+backend/playground/budget.py caps spend per visitor and per day (UTC). A visitor
+counts by their visitor id and by their address (an IPv6 address by its /64), the
+address kept only as a salted hash; each counts against the cap on its own, so a new
+id does not reset it. A run's estimate is reserved first and may grow while the caps
+allow; when the run ends, the recorded spend replaces it, and the totals of the last 7
+days are saved in a JSON file meant for a single process. backend/playground/runs.py
+prices a run before cache hits (one compile, then an image edit and a label for each
+of 6 positives and 6 near-misses), wraps the client's ledger so each call must fit in
+the run's reservation together with its other calls in flight, and holds the Job the
+page polls. A call that would pass a cap is never sent.
 
 Files added or changed in this stage:
 
-- `backend/playground/skills.py` (new):
-- `tests/test_playground_skills.py` (new): tests
+- `backend/playground/budget.py` (new):
+- `backend/playground/runs.py` (new):
+- `tests/test_playground_budget.py` (new): tests
+- `tests/test_playground_runs.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -49,19 +49,19 @@ set and no network to Meta); the output under each is what they printed.
     $ python -m pytest
     ........................................................................ [  7%]
     ........................................................................ [ 14%]
-    ........................................................................ [ 22%]
+    ........................................................................ [ 21%]
     ........................................................................ [ 29%]
-    ............................................s........................... [ 37%]
-    ........................................................................ [ 44%]
-    ........................................................................ [ 52%]
-    ........................................................................ [ 59%]
-    ........................................................................ [ 66%]
-    ........................................................................ [ 74%]
-    ........................................................................ [ 81%]
-    ........................................................................ [ 89%]
-    ........................................................................ [ 96%]
-    ................................                                         [100%]
-    967 passed, 1 skipped in 72.61s (0:01:12)
+    ............................................s........................... [ 36%]
+    ........................................................................ [ 43%]
+    ........................................................................ [ 51%]
+    ........................................................................ [ 58%]
+    ........................................................................ [ 65%]
+    ........................................................................ [ 73%]
+    ........................................................................ [ 80%]
+    ........................................................................ [ 87%]
+    ........................................................................ [ 95%]
+    ...............................................                          [100%]
+    982 passed, 1 skipped in 71.13s (0:01:11)
 
     $ ruff check .
     All checks passed!
@@ -163,12 +163,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
-- `tests/`: 967 tests, all offline; none calls a paid API.
+- `tests/`: 982 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v86 adds the playground's spend caps per visitor and per day, and the metered
-ledger that holds each live call to its run's reservation.
+Stage v87 adds teach it yourself: a visitor's condition checked by the local policy
+for free, then compiled, with 6 edits of a provided keyframe that show it and 6
+near-misses, labelled live within the caps.
 
 ## Privacy and policy
 

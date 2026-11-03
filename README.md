@@ -11,27 +11,30 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v43 (M2): Teach sessions from the phone
+## Build stage v44 (M2): The phone's teach API
 
-backend/teach_session.py runs one teach started from the phone:
-backend.teach.run_teach in a background thread, with its questions answered later over
-HTTP. The spend question comes first, here, because run_teach's first paid step, the
-transcription, comes before its only question, the read-back. A no to the read-back
-that carries a correction, at most 300 characters, compiles the spec again with it
-from the cached transcript, and each correction replaces the one before, as with te
-teach --correct. A question nobody answers within 600 seconds counts as no. status()
-gives the state (waiting for the spend, running, waiting for the read-back, then done,
-stopped or failed), the open question, the progress lines, what was spent and, at the
-end, a summary of the dataset and the labels. stop(), for when the server shuts down,
-refuses the next paid call, cuts a retry's wait short, answers an open question no and
-waits for the call in flight, so the ledger records it. Failed calls and spend caps
-end the run with what to do next. Its HTTP routes come in v44.
+backend/teach_api.py has the routes the phone teaches through: POST /teach/start with
+the skill, the spoken request or its text, and the JPEG frames of the 10 second
+capture as multipart form data, GET /teach/status, and POST /teach/answer for the two
+questions. Every route needs SERVER_TOKEN from .env as a Bearer token: without it the
+answer is 401, and with no token set on the Mac, 503. One session runs at a time, and
+a body over 200 MB or an answer over 64 KB is refused. backend/teach_upload.py parses
+the multipart body itself (Starlette's parser needs python-multipart) and checks the
+upload the way te teach checks its inputs: audio or text but not both, the request's
+length and the policy, 1 to 600 camera frames. It saves the capture under
+data/teach/<skill>/ so te teach can repeat the run on the Mac, and a run that needs
+your own labels or could cost over $15 is refused with the te teach command to run
+instead. Nothing is spent before the spend answer; the server mounts the routes in
+v45.
 
 Files added or changed in this stage:
 
-- `backend/teach_session.py` (new): a phone teach session: the spend question before
-  any paid call, the read-back, progress lines and timeouts
-- `tests/test_teach_session.py` (new): tests
+- `backend/teach_api.py` (new): the teach routes for the phone: /teach/start,
+  /teach/status and /teach/answer, behind SERVER_TOKEN
+- `backend/teach_upload.py` (new): the phone's teach upload: a multipart parser, the
+  input checks, the saved capture and the estimate
+- `tests/test_teach_api.py` (new): tests
+- `tests/test_teach_upload.py` (new): tests
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -50,15 +53,15 @@ set and no network to Meta); the output under each is what they printed.
     $ python -m pytest
     ........................................................................ [ 10%]
     ........................................................................ [ 20%]
-    ........................................................................ [ 31%]
-    ........................................................................ [ 41%]
-    ........................................................................ [ 52%]
-    ........................................................................ [ 62%]
-    ........................................................................ [ 73%]
-    ........................................................................ [ 83%]
-    ........................................................................ [ 94%]
-    .........................................                                [100%]
-    689 passed in 27.06s
+    ........................................................................ [ 30%]
+    ........................................................................ [ 40%]
+    ........................................................................ [ 50%]
+    ........................................................................ [ 60%]
+    ........................................................................ [ 70%]
+    ........................................................................ [ 80%]
+    ........................................................................ [ 90%]
+    ...................................................................      [100%]
+    715 passed in 29.20s
 
     $ ruff check .
     All checks passed!
@@ -84,6 +87,10 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   WebSocket at /ws and each one is acknowledged; frames stay in memory.
 - `backend/teach_session.py`: a phone teach session: the spend question before any
   paid call, the read-back, progress lines and timeouts.
+- `backend/teach_upload.py`: the phone's teach upload: a multipart parser, the input
+  checks, the saved capture and the estimate.
+- `backend/teach_api.py`: the teach routes for the phone: /teach/start, /teach/status
+  and /teach/answer, behind SERVER_TOKEN.
 - `backend/training/wandb_smoke.py`: a Modal app that logs one Weights & Biases run,
   with the key coming only from a Modal Secret.
 - `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
@@ -129,13 +136,13 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `tests/`: 689 tests, all offline; none calls a paid API.
+- `tests/`: 715 tests, all offline; none calls a paid API.
 
 ## Next
 
-Stage v44 adds the phone's teach API: the capture uploaded, checked and priced, then
-the spend and read-back questions answered over HTTP, each request with the server
-token.
+Stage v45 adds the server's watch mode (scores in each ack, alerts as messages, one
+cooldown book for every session), GET /skills, the teach routes, and a te serve that
+prints the address the phone uses.
 
 ## Privacy and policy
 

@@ -2,7 +2,8 @@
 
 `blur_boxes` blurs given boxes with Pillow alone. `detect_faces` finds faces with the Haar
 cascades OpenCV ships (frontal, and profile facing either way); OpenCV is imported only
-then: `pip install opencv-python-headless` (on the approved list). Haar cascades miss
+then: `pip install "opencv-python-headless<5"` (on the approved list; OpenCV 5's headless
+build has no CascadeClassifier, found on Nov 4). Haar cascades miss
 small, dark, tilted or covered faces, so look at every published image as well: this is
 a first pass, not a guarantee.
 
@@ -43,7 +44,7 @@ STRENGTH = 0.25  # Gaussian radius as a share of the box's shorter side
 BLOCK_PX = 8  # a box is first reduced to this many pixels across its shorter side
 MARGIN = 0.2  # a detected face box grows by this share on every side (hair, ears, chin)
 CASCADES = ("haarcascade_frontalface_default.xml", "haarcascade_profileface.xml")
-INSTALL = "pip install opencv-python-headless"
+INSTALL = 'pip install "opencv-python-headless<5"'
 Detector = Callable[[bytes], list[Box]]
 SPAN_KEYS = ("start_s", "end_s", "box")  # one manual box over a stretch of a video
 
@@ -151,6 +152,9 @@ def _cv2():
     except ImportError:
         raise RuntimeError(f"face detection needs OpenCV: {INSTALL} (on the approved list), "
                            "then run this again") from None
+    if not hasattr(cv2, "CascadeClassifier"):  # OpenCV 5 dropped it from the headless build
+        raise RuntimeError(f"OpenCV {getattr(cv2, '__version__', '?')} has no Haar cascade "
+                           f"face detector: {INSTALL}, then run this again")
     return cv2
 
 

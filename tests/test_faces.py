@@ -88,10 +88,21 @@ def test_blur_folder_writes_blurred_copies_and_the_source_hashes(tmp_path):
 
 def test_detection_without_opencv_says_how_to_install(monkeypatch):
     monkeypatch.setitem(sys.modules, "cv2", None)  # import cv2 fails
-    with pytest.raises(RuntimeError, match="pip install opencv-python-headless"):
+    with pytest.raises(RuntimeError, match='pip install "opencv-python-headless<5"'):
         detect_faces(noise())
     with pytest.raises(RuntimeError, match="opencv-python-headless"):
         blur_image(noise())
+
+
+def test_an_opencv_without_the_haar_detector_says_which_to_install(monkeypatch):
+    # OpenCV 5.0's headless build (Nov 4) has no CascadeClassifier: te blur failed with an
+    # AttributeError inside detect_faces.
+    import types
+
+    monkeypatch.setitem(sys.modules, "cv2", types.SimpleNamespace(__version__="5.0.0"))
+    with pytest.raises(RuntimeError, match=r'OpenCV 5\.0\.0 has no Haar cascade.*"opencv-'
+                                           r'python-headless<5"'):
+        detect_faces(noise())
 
 
 def test_detection_finds_nothing_in_a_plain_scene():

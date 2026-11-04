@@ -1,18 +1,20 @@
 # Progress
 
 The source of truth between sessions. Updated at the end of every milestone.
-Last update: 2026-11-02, the code for M2 to M4 (v50 to v105), tested offline only.
+Last update: 2026-11-03, the code for M2 to M4 (stages v31 to v92), tested offline only;
+v1 to v93 are on main.
 
 ## Status
 
 M0 and M1 code are done and tested offline. M2 to M4 are written and tested offline too
-(stages v50 to v105; 707 tests in all, none calls a paid API, one skips without OpenCV);
+(stages v31 to v92; 1012 tests pass and one skips without OpenCV, none calls a paid API);
 none of it has run against Meta, Modal or a phone yet, and the iOS app has never been
 compiled. A full review after M1 (bugs, version compatibility, functionality against
 SPEC.md, the UI) found 27 confirmed problems in F1 to F29, fixed in stages v23 to v30. The
-rest, F30 to F62, and a second check of those fixes are fixed in stages v31 to v38, and a
-review of those in v39, v40 and v49 (see "Review after M1" below). The parts of M2 that
-need neither the Mac nor Modal are stages v41 to v48.
+rest, F30 to F62, and a second check of those fixes are fixed in the stages that hold that
+code (v31 to v34, v41 and v45; the docs in v73 and v92), and so is a review of those (see
+"Review after M1" below). M2 is stages v31 to v63 (v31 to v40 the foundations, the iOS
+app v49 to v63), M3 v64 to v77 and M4 v78 to v92.
 HANDOVER.md explains how to pick the project up; SETUP.md covers setup. What is still
 open needs the Mac, the keys, the glasses or new footage:
 
@@ -44,7 +46,8 @@ open needs the Mac, the keys, the glasses or new footage:
 
 - [x] voice to skill spec (Voice Transcribe, Wonder), with policy refusals and read-back
 - [x] keyframe selection (sharpness and near-duplicate filtering)
-- [x] SAM region of interest on keyframes (raw output stored; parsing pending, see Open issues)
+- [x] SAM region of interest on keyframes (raw output stored; boxes are read, masks not
+  decoded yet, see Open issues)
 - [x] Muse Image synthetic set with prompt manifest
 - [x] Muse Spark labels and filtering, with agreement stats
 - [x] Axolotl dataset in the cookbook's format
@@ -73,39 +76,40 @@ open needs the Mac, the keys, the glasses or new footage:
   exclusive; `te api-smoke` never caches a failed check
 - [x] Docs: the glasses check tests reachability while streaming; HANDOVER has SPEC.md's
   visual design rules
-- [x] Client (v31): Ctrl+C during a call is charged; an empty transcript is billed, not
+- [x] Client (v33): Ctrl+C during a call is charged; an empty transcript is billed, not
   cached; a cached reply that today's checks reject is fetched again; a failed image
   download is a skippable output error; every failed call carries its charge; a label cut
   off mid-answer is asked again; a cache-only lookup
-- [x] Settings and spend report (v32): `~` in `TE_DATA_DIR`; long skill names line up
-- [x] Policy and compiler (v33): plurals and more relatives; hiding the capture light,
+- [x] Settings and spend report (v31): `~` in `TE_DATA_DIR`; long skill names line up
+- [x] Policy and compiler (v32): plurals and more relatives; hiding the capture light,
   covert, nutrition and more sports phrasings; named people with "gets ready" or a
   possessive refused again (a v25 regression); corrections that rule something out
   ("not the bathroom light") are allowed, and a refused one says so; requests over 500
   characters stop before the call; read-back wording; duplicate near-misses; the topic
   rules over all of the model's wording
-- [x] Keyframes and images (v34): macOS `._` files skipped, WebP read, clear errors for
-  HEIC and unreadable frames, EXIF turns without rewriting EXIF; the image manifest is
-  written even when generation stops
-- [x] Labels and SAM (v35): a label that needed the larger budget is free on a rerun; SAM
-  skips a rejected frame like the other steps; progress counts failed attempts' cost
-- [x] Teach and CLI (v36): the estimate gives a worst case; a one-answer dataset stops
-  the run; fallback labels need both answers; a new spec removes the old dataset; the
-  clip folder is never the output folder; contradicting labels; labels saved when a run
-  stops; inputs and the key checked before the spend question; the failures hint; closed
-  stdin; `te serve` prints the phone address and keeps the server's log lines
-- [x] CI and setup (v37): CI installs ffmpeg, so the video tests run there; Mac setup
-  with python3.12 and ffmpeg; the `.env.example` W&B note
-- [x] Docs (v38): estimator figures for a real clip, the recording protocol (both states
-  in the teaching clip), M2 and M4 notes, open questions
-- [x] A review of v31 to v38 (v39 and v40): a reported cost of NaN or below zero is
+- [x] Keyframes and images (v33 and v34): macOS `._` files skipped, WebP read, clear
+  errors for HEIC and unreadable frames, EXIF turns without rewriting EXIF; the image
+  manifest is written even when generation stops
+- [x] Labels and SAM (v33 and v34): a label that needed the larger budget is free on a
+  rerun; SAM skips a rejected frame like the other steps; progress counts failed
+  attempts' cost
+- [x] Teach and CLI (v41 and v45): the estimate gives a worst case; a one-answer dataset
+  stops the run; fallback labels need both answers; a new spec removes the old dataset;
+  the clip folder is never the output folder; contradicting labels; labels saved when a
+  run stops; inputs and the key checked before the spend question; the failures hint;
+  closed stdin; `te serve` prints the phone address and keeps the server's log lines
+- [x] CI and setup (v31 and v92): CI installs ffmpeg, so the video tests run there; Mac
+  setup with python3.12 and ffmpeg; the `.env.example` W&B note
+- [x] Docs (v73 and v92): estimator figures for a real clip, the recording protocol (both
+  states in the teaching clip), M2 and M4 notes, open questions
+- [x] A review of those fixes (v31 to v33): a reported cost of NaN or below zero is
   charged at the estimate instead (it would have switched the caps off); an unknown
   `~user` in `TE_DATA_DIR` is a settings error; the policy check refuses two names ("Sam
   and Jake arrive"), titles with brand names, "Sam's at the door" and more ways to hide
   the glasses' light, and no longer refuses brand readings, "my lift", "discreet" alerts,
   object counts or other devices' recording lights; a correction's "not" covers at most
   five words; the model's trigger is checked with its "when"
-- [x] The same review's small `te teach` fixes (v49): a blank `--request` and negative
+- [x] The same review's small `te teach` fixes (v41): a blank `--request` and negative
   counts are refused before the estimate, the failure reason prints before the hint, and
   a repeated label with a bad value gets the right message
 
@@ -160,7 +164,7 @@ open needs the Mac, the keys, the glasses or new footage:
 
 Three reviews (the teach API, the iOS code, the playground) reproduced each defect with
 fakes, and a second round with a skeptic per finding checked those fixes and the stage
-cut; the fixes are in the stages that add that code (v50 to v105).
+cut; the fixes are in the stages that add that code (now v33 to v92).
 
 - [x] Teach API: the routes need `SERVER_TOKEN`; a frame longer than 4:1 is refused (it
   would take gigabytes once scaled); answers have a 64 KB limit; odd `step` and endless
@@ -228,7 +232,7 @@ served run's threshold.
   to the OpenAI-compatible endpoints directly gives exact control over retries, caching
   and usage logging. Only `api.meta.ai` ever gets the key.
 - **Starlette instead of FastAPI for the backend.** FastAPI is built on Starlette and could
-  not be installed in the sandbox; the backend needs one WebSocket and a health route.
+  not be installed in the sandbox; the backend needs one WebSocket and a few HTTP routes.
   Moving to FastAPI later is a small change if it is ever needed.
 - **Structured output uses Chat Completions with a `json_schema` response format**, as all
   of Meta's cookbook recipes do. SAM uses the Responses API as SPEC.md describes.
@@ -242,8 +246,10 @@ served run's threshold.
   letter case.
 - **Packages under `backend/` have no `__init__.py`** (namespace packages), which keeps
   each version stage small.
-- **Version stages** go on the `build-stages` branch as folders v1 to vN; the author
-  commits them to main one at a time.
+- **Version stages** go on the `build-stages` branch as folders v1 to vN. They go to main
+  only when the author asks: one commit per stage, made from its folder, with the author
+  as author and committer, the stage's text from VERSIONS.md as the message and no
+  trailers. v1 to v93 are on main now.
 - **Policy is checked three times.** A local rule check (`te policy`) refuses clear cases
   (named or described people, health, covert watching, sensitive places, sports coaching)
   before any call, at no cost. Muse Wonder can refuse, including through a filled-in
@@ -309,7 +315,7 @@ served run's threshold.
   repeated from the Mac; watch frames are still never stored.
 - **The teach routes need a token** (`SERVER_TOKEN` in `.env`, typed once into the app):
   `te serve` listens on the whole network, and without it anyone there could agree to a
-  phone run's spend. `/ws` and `/skills` stay open, as in M1.
+  phone run's spend. `/ws` stays open, as in M1, and so does `/skills`.
 - **Session clips:** session 1 is training data, session 2 validation (never trained on;
   every run calibrates its threshold on it, so the arms stay comparable), session 3 the
   test set only. Experiment 1's real arm is the keyframes, their SAM crops and session 1.
@@ -386,7 +392,7 @@ sources disagree with SPEC.md, the sources win.
   multi-adapter serving), the W&B report's API calls, and every iOS change (not compiled;
   `ios/README.md` lists the checks on the glasses).
 - The teach flow takes keyframes from a video file or a folder of frames; the iOS Teach
-  screen (M2) will send the 10 s capture as frames.
+  screen (M2) sends the 10 s capture as frames, three a second (not compiled yet).
 
 ## Spend
 
@@ -394,4 +400,7 @@ sources disagree with SPEC.md, the sources win.
 |---|---|---|---|
 | M0 | $0.00 | $0.00 | no paid call or Modal job has run yet (`te spend` shows 0 calls) |
 | M1 | $0.00 | $0.00 | built and tested offline; the first teach run happens on the Mac |
+| M2 | $0.00 | $0.00 | built and tested offline by Nov 3; no Modal job has run yet |
+| M3 | $0.00 | $0.00 | built and tested offline by Nov 3; the experiment runs need footage |
+| M4 | $0.00 | $0.00 | built and tested offline by Nov 3; nothing deployed or published |
 | Total | $0.00 of $150 credit (cap $120) | $0.00 of about $200 credit | |

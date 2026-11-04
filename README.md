@@ -11,36 +11,34 @@ fine-tuned on them, and from then on the glasses speak up when it happens.
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026).
 All code here was written during the event.
 
-## Build stage v92 (M4): Playground commands, Modal app and notes
+## Build stage v93 (M4): Notes brought up to date
 
-This is the last stage. backend/cli_playground.py adds te playground, which serves the
-playground on 127.0.0.1 port 8100 by default (--public for the public copy) and
-refuses --forwarded-allow-ips "*", which would let a visitor reset their cap, and te
-playground-clip, which blurs a test clip, or copies one te blur already blurred, and
-checks that its frame log and labels fit the video's length before it adds the clip's
-folder. te playground --deploy lists what the public copy may hold, asks first (even
-with --yes when the total cap is over $15), clears the published folders on a private
-Modal Volume, copies the files and deploys backend/playground/modal_app.py: one
-container, the Modal Secret meta for the key, the caps baked into the image, and the
-budget and ledger committed to the Volume every 30 seconds while they change.
-CLAUDE.md, HANDOVER.md and PROGRESS.md take their final form, and CONTRIBUTIONS.md
-gives the credits and licenses: Meta's cookbook recipe, the copied DAT sample files,
-the SAM 3 protocol, Inter, Axolotl and the Meta models.
+This is the last stage, and it changes no code, so by the author's choice it is
+outside the 200 to 400 line rule. HANDOVER.md and PROGRESS.md give the stage numbers
+after the re-cut (M2 is v31 to v63, M3 v64 to v77, M4 v78 to v92), the line rule from
+v31, the test count, the rule that stages go to main only when the author asks, a
+session log entry for Nov 3 and the spend through M4, and they no longer list as still
+to build what is built: the SAM box reader, the phone's teach route, te manifests and
+te regenerate, the release license and the student key kept off the vLLM command line.
+SETUP.md lists every Modal Secret the jobs attach (huggingface before the first te
+train, student, meta) and the two values you make up (STUDENT_API_KEY, SERVER_TOKEN),
+and says how a stage goes to main. CLAUDE.md names the four Modal Secrets and adds te
+replay. ios/README.md and docs/glasses-check.md point at the right step of the glasses
+check.
 
 Files added or changed in this stage:
 
 - `CLAUDE.md` (changed): short setup, commands and conventions
-- `CONTRIBUTIONS.md` (new): credits, licenses and the copied Meta sample files
 - `HANDOVER.md` (changed): how to pick the project up in a new session: state, the
   author's rules, open items with exact commands, and the plan for M2 to M5 with the
   facts from the docs
 - `PROGRESS.md` (changed): milestone checklist, decisions, docs-vs-spec differences,
   open issues and spend
-- `backend/cli.py` (changed): the te command line
-- `backend/cli_playground.py` (new): te playground and te playground-clip
-- `backend/playground/modal_app.py` (new):
-- `tests/test_cli_playground.py` (new): tests
-- `tests/test_playground_modal.py` (new): tests
+- `SETUP.md` (changed): accounts and keys, setting up the Mac, setting up a cloud
+  session, and git on the stage branch
+- `docs/glasses-check.md` (changed): how to check, with Meta's own sample app, that
+  the glasses stream camera frames, deliver the mic and play audio
+- `ios/README.md` (changed): how to build the iPhone app in Xcode (not compiled yet)
 - `README.md` (changed): this file: what the stage adds and how to try it
 
 ## Setup
@@ -72,49 +70,10 @@ set and no network to Meta); the output under each is what they printed.
     ........................................................................ [ 92%]
     ........................................................................ [ 99%]
     .....                                                                    [100%]
-    1012 passed, 1 skipped in 78.54s (0:01:18)
+    1012 passed, 1 skipped in 61.98s (0:01:01)
 
     $ ruff check .
     All checks passed!
-
-    $ python -m backend.cli playground --help
-    usage: te playground [-h] [--host HOST] [--port PORT] [--eval-dir EVAL_DIR]
-                         [--public] [--deploy] [--total-cap TOTAL_CAP] [--yes]
-                         [--visitor-cap VISITOR_CAP] [--daily-cap DAILY_CAP]
-                         [--forwarded-allow-ips FORWARDED_ALLOW_IPS]
-
-    options:
-      -h, --help            show this help message and exit
-      --host HOST
-      --port PORT
-      --eval-dir EVAL_DIR   *.svg and results.md from te eval
-      --public              the public copy: no generated images, only blurred
-                            keyframes
-      --deploy              publish the public copy on Modal (asks first)
-      --total-cap TOTAL_CAP
-                            --deploy: USD in all for live teaching (default
-                            TE_SKILL_CAP_USD's $10)
-      --yes                 --deploy: the author's OK
-      --visitor-cap VISITOR_CAP
-                            USD per visitor a day
-      --daily-cap DAILY_CAP
-                            USD a day for everyone
-      --forwarded-allow-ips FORWARDED_ALLOW_IPS
-                            the proxies trusted to give the visitor's address,
-                            comma separated (never "*")
-
-    $ python -m backend.cli playground-clip --help
-    usage: te playground-clip [-h] --clip CLIP --log LOG [--labels LABELS]
-                              --name NAME [--blurred] [--fps FPS]
-
-    options:
-      -h, --help       show this help message and exit
-      --clip CLIP      the test clip (a video)
-      --log LOG        its frame log from te watch
-      --labels LABELS  its labels from te label (<clip>.labels.json)
-      --name NAME      the clip's name on the page
-      --blurred        the clip is a te blur output with its blur record: copy it
-      --fps FPS        frames per second, blurred
 
 After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <command>`.
 

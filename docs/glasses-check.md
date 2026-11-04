@@ -1,6 +1,6 @@
 # Glasses check (M0)
 
-Before any Trained Eye iOS code exists, this confirms with Meta's own sample app that
+Before you build the Trained Eye iOS app, this confirms with Meta's own sample app that
 your Meta Adventurer glasses and your iPhone can do the three things the project needs:
 
 1. stream camera frames from the glasses to the phone (Meta's Device Access Toolkit, DAT)

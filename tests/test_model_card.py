@@ -55,6 +55,29 @@ def test_the_card_says_only_what_its_files_say(tmp_path):
             model_card(tmp_path / "README.md", run="final", bundle_manifest=bundle, **bad)
 
 
+def test_the_card_shows_this_run_and_its_judges_names_the_footage_and_its_models(tmp_path):
+    bundle, _, _ = inputs(tmp_path)
+
+    def ev(name, run, experiment, variant):
+        return {"name": name, "run": run, "experiment": experiment, "skill": "burner_left_on",
+                "variant": variant, "status": "scored", "metrics": {"f1": 0.9},
+                "cost_per_hour": {"total_usd": 3.95}}
+
+    (tmp_path / "results.json").write_text(json.dumps({
+        "footage": "other kitchens (EPIC-KITCHENS-100, head-mounted camera)",
+        "threshold_objective": "frames",
+        "evaluations": [ev("epic-exp4-finetuned", "final", 4, "finetuned"),
+                        ev("epic-exp4-base", "exp4-base", 4, "base"),
+                        ev("epic-exp4-spark", "exp4-spark", 4, "spark"),
+                        ev("epic-exp1-epic", "exp1-epic", 1, "real, EPIC")]}))
+    card = model_card(tmp_path / "README.md", run="final", bundle_manifest=bundle,
+                      results=tmp_path / "results.json", spoken=False).read_text()
+    assert "epic-exp4-finetuned" in card and "epic-exp4-base" in card and "epic-exp4-spark" in card
+    assert "epic-exp1-epic" not in card  # another trained model: not this card's
+    assert "Test footage: other kitchens (EPIC-KITCHENS-100, head-mounted camera)." in card
+    assert "CC BY-NC 4.0" in card and "never trained on it" in card
+    assert "calibrated for frame F1" in card
+    assert "transcribe" not in card.split("## Training data")[0]  # typed requests only
 
 def test_the_card_states_fixed_steps_and_a_real_only_bundle(tmp_path):
     bundle = tmp_path / "real.json"

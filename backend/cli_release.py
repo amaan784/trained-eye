@@ -167,6 +167,24 @@ def cmd_fetch_weights(args) -> int:
     return 0
 
 
+def spoken_requests(settings, run: str) -> bool:
+    """Whether any skill in the run's bundle was taught from a spoken request (request.json
+    from te teach), so Voice Transcribe made part of its data."""
+    try:
+        skills = json.loads((settings.data_dir / "train" / run / "manifest.json").read_text())[
+            "skills"]
+    except (OSError, ValueError, KeyError):
+        return True  # unknown: list it, as before
+    for skill in skills:
+        try:
+            if json.loads((settings.data_dir / "skills" / skill / "request.json").read_text())[
+                    "from_audio"]:
+                return True
+        except (OSError, ValueError, KeyError):
+            return True
+    return False
+
+
 def cmd_release(args) -> int:
     from backend.release.package import prepare_release, upload
     from backend.release.weights import default_dir
@@ -188,7 +206,7 @@ def cmd_release(args) -> int:
             manifests_dir=Path(args.manifests or config.PROJECT_ROOT / "manifests"),
             weights_dir=weights, keyframes=pairs(args.keyframes, "--keyframes"), kind=args.kind,
             results=Path(args.results) if args.results else None, license_id=args.license,
-            models=settings.models, max_steps=steps)
+            models=settings.models, max_steps=steps, spoken=spoken_requests(settings, args.run))
     except (OSError, ValueError) as err:
         print(f"te: {err}", file=sys.stderr)
         return 2

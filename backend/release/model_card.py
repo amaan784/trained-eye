@@ -91,7 +91,7 @@ or coaching, and anything where a missed or false alert could put someone at ris
   evaluation above. {mix}
 - It answers per frame: alerts need the watcher's smoothing, each skill's hold, a
   calibrated threshold and a cooldown. The vision tower stayed frozen, so small, distant or glary targets stay hard.
-- Glimmer reasons before it answers: scoring needs the server's top logprobs for yes and no.
+- Scoring reads the server's top logprobs for the yes or no token, so the server must return them.
 
 ## Privacy and provenance
 
@@ -177,12 +177,22 @@ def generated_text(real: int, synthetic: int, skills: Iterable[str] = (),
     return about, limit
 
 
-def results_section(results: Path | None) -> str:
-    """The scored evaluations of `te eval`'s results.json, its numbers copied as they are."""
+EPIC_CREDIT = ("EPIC-KITCHENS-100 (Damen et al., \"Rescaling Egocentric Vision\", IJCV 2022, "
+               "epic-kitchens.github.io) is under CC BY-NC 4.0; it was used to test this model "
+               "only, and the model was never trained on it.")
+
+
+def results_section(results: Path | None, run: str | None = None) -> str:
+    """The scored evaluations of `te eval`'s results.json, its numbers copied as they are:
+    this run's, and the judges it is compared with (Experiment 4's base Glimmer and Muse
+    Spark), not other trained runs. The test footage is named, and credited if it is
+    EPIC-KITCHENS-100."""
     if results is None:
         return "Not evaluated yet: no results from the eval harness were given."
     body = Path(results).read_bytes()
-    evaluations = json.loads(body)["evaluations"]
+    data = json.loads(body)
+    evaluations = [e for e in data["evaluations"] if run is None or e.get("run") in (None, run)
+                   or (e.get("experiment") == 4 and e.get("variant") in ("base", "spark"))]
     scored = [e for e in evaluations if e["status"] == "scored"]
     if not scored:
         return f"Not evaluated yet: `{Path(results).name}` has no scored evaluation."
@@ -194,6 +204,13 @@ def results_section(results: Path | None) -> str:
               "event_recall_in_window counts an alert within the skill's window after the hold "
               "ends, and time_to_alert_median_s is counted from the end of the hold. Holds and "
               f"windows: {on_time}")
+    if footage := data.get("footage"):
+        source = f"Test footage: {footage}. " + source
+        if "EPIC-KITCHENS" in footage:
+            source += " " + EPIC_CREDIT
+    if data.get("threshold_objective") == "frames":
+        source += (" Thresholds were calibrated for frame F1 (this footage has too few events "
+                   "past the hold to judge alerts).")
     columns = ("evaluation", "experiment", "skill", "variant", *METRICS, "usd_per_hour")
     rows = [[e["name"], e["experiment"], e["skill"], e["variant"],
              *(e["metrics"].get(k) for k in METRICS), e["cost_per_hour"].get("total_usd")]
@@ -205,10 +222,11 @@ def results_section(results: Path | None) -> str:
 def model_card(out_path: Path, *, run: str, bundle_manifest: Path, kind: str = "adapter",
                results: Path | None = None, license_id: str = BASE_LICENSE,
                models: Mapping[str, str] = DEFAULT_MODELS, max_steps: int | None = None,
-               keyframes: Iterable[str] = ()) -> Path:
+               keyframes: Iterable[str] = (), spoken: bool = True) -> Path:
     """Write the model card (README.md with YAML front matter) to out_path. `max_steps` is
     the run's fixed step count (te train --max-steps), if it had one; `keyframes` are the
-    skills whose face-blurred keyframes the release holds."""
+    skills whose face-blurred keyframes the release holds; `spoken` False leaves Voice
+    Transcribe out of the models that made the data (every request was typed)."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
     if not LICENSE_ID.fullmatch(license_id or ""):
@@ -228,9 +246,10 @@ def model_card(out_path: Path, *, run: str, bundle_manifest: Path, kind: str = "
         base=base, relation=relation, title=title, what=what,
         front=front + f"license: {license_id}\n",
         revision=STUDENT_BASE_REVISION, run=run, skills=", ".join(sorted(manifest["skills"])),
-        batch=GLOBAL_BATCH, models=", ".join(f"{job} `{models[job]}`" for job in DATA_JOBS),
+        batch=GLOBAL_BATCH, models=", ".join(f"{job} `{models[job]}`" for job in DATA_JOBS
+                                             if spoken or job != "transcribe"),
         recipe="\n".join(rows), steps=steps, generated=generated, mix=mix,
-        data=data_section(manifest), results=results_section(results),
+        data=data_section(manifest), results=results_section(results, run),
         license=license_text(license_id, base)),
         encoding="utf-8")
     return Path(out_path)

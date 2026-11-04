@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Trained Eye Works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; the four diagrams break out wider and scroll sideways on phones. */
+:root {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --fg: #18202d;
+  --muted: #586378;
+  --line: #c6cdd9;
+  --accent: #2356d1;      /* the burner's blue flame: the path an alert takes */
+  --alert: #b65f00;       /* the spoken alert and the cooldown */
+  --z-device: #e6ecfb;    /* glasses and iPhone */
+  --z-mac: #e7f1e6;       /* your Mac */
+  --z-cloud: #f1eafa;     /* Meta Model API */
+  --z-gpu: #fbeee0;       /* Modal GPUs */
+  --z-other: #eceff3;     /* W&B, Hugging Face */
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f131a; --surface: #161c26; --fg: #e5e9f0; --muted: #9aa4b6; --line: #303a4b;
+    --accent: #7ea4ff; --alert: #f2a54a;
+    --z-device: #1b2640; --z-mac: #1a2a1e; --z-cloud: #2a2038; --z-gpu: #33251a; --z-other: #222833;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f131a; --surface: #161c26; --fg: #e5e9f0; --muted: #9aa4b6; --line: #303a4b;
+  --accent: #7ea4ff; --alert: #f2a54a;
+  --z-device: #1b2640; --z-mac: #1a2a1e; --z-cloud: #2a2038; --z-gpu: #33251a; --z-other: #222833;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.6 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+main { max-width: 1040px; margin: 0 auto; padding-block: 40px 72px; display: grid; gap: 56px; }
+.prose { max-width: 680px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2rem, 4.6vw, 3.1rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.65rem; font-weight: 700; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+p { margin: 0; }
+section { display: grid; gap: 18px; }
+.eyebrow { font: 500 0.78rem var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.15rem; color: var(--fg); max-width: 640px; }
+.muted { color: var(--muted); }
+code, .mono { font-family: var(--font-mono); font-size: 0.9em; }
+code { background: var(--z-other); padding: 1px 5px; border-radius: 4px; }
+
+.request {
+  font-family: var(--font-display); font-weight: 600; font-size: 1.35rem;
+  border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; max-width: 640px;
+}
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend i { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line); display: inline-block; }
+
+figure { margin: 0; display: grid; gap: 10px; }
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.scroll svg { display: block; width: 100%; min-width: 780px; height: auto; }
+figcaption { font-size: 0.92rem; color: var(--muted); max-width: 720px; }
+
+/* the diagrams' shared marks */
+.diagram { color: var(--fg); }
+.box { stroke: var(--line); stroke-width: 1; }
+.zd { fill: var(--z-device); } .zm { fill: var(--z-mac); } .zc { fill: var(--z-cloud); }
+.zg { fill: var(--z-gpu); } .zo { fill: var(--z-other); } .zs { fill: var(--surface); }
+.t { font: 600 13px var(--font-body); fill: var(--fg); }
+.s { font: 11px var(--font-mono); fill: var(--muted); }
+.l { font: 11px var(--font-body); fill: var(--muted); }
+.edge { stroke: currentColor; stroke-width: 1.4; fill: none; }
+.hot { stroke: var(--accent); color: var(--accent); }
+.dash { stroke-dasharray: 5 4; }
+.bar-on { fill: var(--accent); } .bar-off { fill: var(--line); }
+.thr { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 6 4; }
+.cool { fill: var(--alert); opacity: 0.12; }
+.alertline { stroke: var(--alert); stroke-width: 2; }
+.at { font: 600 12px var(--font-body); fill: var(--alert); }
+.tick { stroke: var(--muted); stroke-width: 1; }
+
+/* the sample evening */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: step; }
+.steps li {
+  counter-increment: step; display: grid; grid-template-columns: 2.2rem 1fr; gap: 4px 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
+}
+.steps li::before {
+  content: counter(step); grid-row: span 2; font: 700 1.25rem var(--font-display); color: var(--accent);
+}
+.steps li > * { min-width: 0; }
+.steps .what { font-weight: 500; }
+.steps .how { font-size: 0.88rem; color: var(--muted); }
+.steps .how b { font-weight: 500; color: var(--fg); }
+.phase { font: 500 0.72rem var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 0.9rem; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 500 0.76rem var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td .mono { color: var(--fg); }
+.where { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.where i { width: 10px; height: 10px; border-radius: 3px; border: 1px solid var(--line); display: inline-block; }
+
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; }
+.note > * { min-width: 0; }
+</style>
+
+</head>
+<body>
+<main>
+  <header class="prose" style="display:grid; gap:16px">
+    <p class="eyebrow">Trained Eye · system walkthrough</p>
+    <h1>How Trained Eye works</h1>
+    <p class="lede">You look at something for ten seconds and say what to watch for. Meta's models turn that
+      into a few hundred labelled training images, a small open model is fine-tuned on them, and from then on
+      your glasses speak up when it happens. This page follows one request through every device and model.</p>
+    <p class="request">"Tell me if I leave the burner on."</p>
+    <p class="muted">The skill this becomes is <code>burner_left_on</code>. It waits until the burner has been
+      on for 10 seconds before it alerts, so lighting it to cook never triggers it.</p>
+  </header>
+
+  <section>
+    <div class="prose" style="display:grid; gap:10px">
+      <p class="eyebrow">The map</p>
+      <h2>Five places do the work</h2>
+      <p>Your glasses only see, hear and speak. Your iPhone carries frames to your Mac, and your Mac runs the
+        whole project: it calls Meta's models while teaching, sends training to a rented GPU on Modal, and
+        decides when to alert while watching.</p>
+    </div>
+    <div class="legend" aria-label="Colour key">
+      <span><i style="background:var(--z-device)"></i>On you: glasses and iPhone</span>
+      <span><i style="background:var(--z-mac)"></i>Your Mac</span>
+      <span><i style="background:var(--z-cloud)"></i>Meta Model API</span>
+      <span><i style="background:var(--z-gpu)"></i>Modal GPU</span>
+      <span><i style="background:var(--z-other)"></i>Other services</span>
+    </div>
+    <figure>
+      <div class="scroll">
+        <svg class="diagram" viewBox="0 0 1000 390" role="img" aria-label="The glasses send camera frames to the iPhone, which sends one frame a second to the Mac; the Mac calls the Meta Model API while teaching and checking alerts, runs training and the student model on Modal, and sends alert text back through the iPhone to the glasses' speakers.">
+          <defs>
+            <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+          </defs>
+          <!-- glasses -->
+          <rect class="box zd" x="20" y="110" width="160" height="120" rx="10"/>
+          <text class="t" x="100" y="140" text-anchor="middle">Meta glasses</text>
+          <text class="s" x="100" y="162" text-anchor="middle">camera · mic · speakers</text>
+          <text class="s" x="100" y="180" text-anchor="middle">Meta DAT SDK 1.0.1</text>
+          <text class="s" x="100" y="198" text-anchor="middle">capture light stays on</text>
+          <!-- iPhone -->
+          <rect class="box zd" x="280" y="110" width="170" height="120" rx="10"/>
+          <text class="t" x="365" y="140" text-anchor="middle">iPhone</text>
+          <text class="s" x="365" y="162" text-anchor="middle">Trained Eye app</text>
+          <text class="s" x="365" y="180" text-anchor="middle">SwiftUI · decodes HEVC</text>
+          <text class="s" x="365" y="198" text-anchor="middle">speaks the alerts</text>
+          <!-- Mac -->
+          <rect class="box zm" x="540" y="24" width="200" height="290" rx="12"/>
+          <text class="t" x="640" y="52" text-anchor="middle">Your Mac</text>
+          <rect class="box zs" x="556" y="68" width="168" height="38" rx="7"/>
+          <text class="s" x="640" y="92" text-anchor="middle">te serve · port 8765</text>
+          <rect class="box zs" x="556" y="114" width="168" height="38" rx="7"/>
+          <text class="s" x="640" y="138" text-anchor="middle">teach flow (te teach)</text>
+          <rect class="box zs" x="556" y="160" width="168" height="38" rx="7"/>
+          <text class="s" x="640" y="184" text-anchor="middle">watcher</text>
+          <rect class="box zs" x="556" y="206" width="168" height="38" rx="7"/>
+          <text class="s" x="640" y="230" text-anchor="middle">trigger: 3 of 4 + hold</text>
+          <rect class="box zs" x="556" y="252" width="168" height="38" rx="7"/>
+          <text class="s" x="640" y="276" text-anchor="middle">data/: logs, cache, ledger</text>
+          <!-- Meta Model API -->
+          <rect class="box zc" x="820" y="24" width="160" height="118" rx="10"/>
+          <text class="t" x="900" y="52" text-anchor="middle">Meta Model API</text>
+          <text class="s" x="900" y="74" text-anchor="middle">Voice Transcribe</text>
+          <text class="s" x="900" y="92" text-anchor="middle">Muse Wonder · SAM 3.1</text>
+          <text class="s" x="900" y="110" text-anchor="middle">Muse Image</text>
+          <text class="s" x="900" y="128" text-anchor="middle">Muse Spark</text>
+          <!-- Modal -->
+          <rect class="box zg" x="820" y="170" width="160" height="110" rx="10"/>
+          <text class="t" x="900" y="198" text-anchor="middle">Modal</text>
+          <text class="s" x="900" y="220" text-anchor="middle">1 × H100 GPU</text>
+          <text class="s" x="900" y="238" text-anchor="middle">fine-tuning (Axolotl)</text>
+          <text class="s" x="900" y="256" text-anchor="middle">student on vLLM</text>
+          <!-- W&B / HF -->
+          <rect class="box zo" x="820" y="316" width="160" height="56" rx="10"/>
+          <text class="t" x="900" y="340" text-anchor="middle">W&amp;B · Hugging Face</text>
+          <text class="s" x="900" y="358" text-anchor="middle">logs · base model</text>
+
+          <!-- glasses <-> iPhone -->
+          <line class="edge hot" x1="180" y1="150" x2="278" y2="150" marker-end="url(#a1)"/>
+          <text class="l" x="230" y="142" text-anchor="middle">camera frames</text>
+          <line class="edge" x1="280" y1="192" x2="182" y2="192" marker-end="url(#a1)"/>
+          <text class="l" x="230" y="210" text-anchor="middle">spoken alert</text>
+          <!-- iPhone <-> Mac -->
+          <line class="edge hot" x1="450" y1="150" x2="538" y2="150" marker-end="url(#a1)"/>
+          <text class="l" x="495" y="142" text-anchor="middle">1 frame / s</text>
+          <line class="edge" x1="540" y1="192" x2="452" y2="192" marker-end="url(#a1)"/>
+          <text class="l" x="495" y="210" text-anchor="middle">alert text</text>
+          <!-- Mac <-> Meta API -->
+          <line class="edge" x1="740" y1="64" x2="818" y2="64" marker-end="url(#a1)"/>
+          <text class="l" x="780" y="56" text-anchor="middle">teach calls</text>
+          <line class="edge" x1="820" y1="104" x2="742" y2="104" marker-end="url(#a1)"/>
+          <text class="l" x="780" y="122" text-anchor="middle">answers</text>
+          <!-- Mac <-> Modal -->
+          <line class="edge" x1="740" y1="200" x2="818" y2="200" marker-end="url(#a1)"/>
+          <text class="l" x="780" y="192" text-anchor="middle">train · serve</text>
+          <line class="edge hot" x1="820" y1="246" x2="742" y2="246" marker-end="url(#a1)"/>
+          <text class="l" x="780" y="264" text-anchor="middle">p(yes)</text>
+          <!-- Modal <-> W&B/HF -->
+          <line class="edge dash" x1="900" y1="280" x2="900" y2="314" marker-end="url(#a1)"/>
+          <text class="l" x="892" y="302" text-anchor="end">logs</text>
+        </svg>
+      </div>
+      <figcaption>The blue arrows are the live path while watching: glasses to iPhone to Mac, the frame scored by the
+        fine-tuned model on Modal, and the probability back to your Mac, which decides whether to speak. The iPhone and
+        the Mac talk over your home Wi-Fi (a WebSocket on port 8765); the glasses and the iPhone over Bluetooth and
+        Wi-Fi through Meta's Wearables SDK.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="prose" style="display:grid; gap:10px">
+      <p class="eyebrow">Step 1 · Teach</p>
+      <h2>Ten seconds of looking becomes a training set</h2>
+      <p>Two things come in: your words and your view. The words become a precise skill spec, and the view
+        becomes a few hundred training images. Every call goes through one client on your Mac that caches
+        answers and keeps a spend ledger, so a rerun never pays twice.</p>
+    </div>
+    <figure>
+      <div class="scroll">
+        <svg class="diagram" viewBox="0 0 1000 370" role="img" aria-label="Teaching: the spoken request is transcribed, policy-checked and compiled by Muse Wonder into a skill spec; the 10 second look becomes keyframes, which Muse Image edits into burner-on and burner-off variations that Muse Spark labels into a training set, with SAM 3.1 adding crops of the burner.">
+          <defs>
+            <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+          </defs>
+          <text class="l" x="20" y="24">YOUR WORDS</text>
+          <text class="l" x="20" y="194">YOUR VIEW</text>
+          <!-- lane A -->
+          <rect class="box zd" x="20" y="36" width="160" height="64" rx="9"/>
+          <text class="t" x="100" y="62" text-anchor="middle">Spoken request</text>
+          <text class="s" x="100" y="82" text-anchor="middle">glasses mic</text>
+          <rect class="box zc" x="215" y="36" width="160" height="64" rx="9"/>
+          <text class="t" x="295" y="62" text-anchor="middle">Voice Transcribe</text>
+          <text class="s" x="295" y="82" text-anchor="middle">speech to text</text>
+          <rect class="box zm" x="410" y="36" width="160" height="64" rx="9"/>
+          <text class="t" x="490" y="62" text-anchor="middle">Policy check</text>
+          <text class="s" x="490" y="82" text-anchor="middle">on the Mac, free</text>
+          <rect class="box zc" x="605" y="36" width="160" height="64" rx="9"/>
+          <text class="t" x="685" y="62" text-anchor="middle">Muse Wonder</text>
+          <text class="s" x="685" y="82" text-anchor="middle">writes the skill spec</text>
+          <rect class="box zm" x="800" y="36" width="180" height="64" rx="9"/>
+          <text class="t" x="890" y="62" text-anchor="middle">Skill spec</text>
+          <text class="s" x="890" y="82" text-anchor="middle">read back, you confirm</text>
+          <line class="edge" x1="180" y1="68" x2="213" y2="68" marker-end="url(#a2)"/>
+          <line class="edge" x1="375" y1="68" x2="408" y2="68" marker-end="url(#a2)"/>
+          <line class="edge" x1="570" y1="68" x2="603" y2="68" marker-end="url(#a2)"/>
+          <line class="edge" x1="765" y1="68" x2="798" y2="68" marker-end="url(#a2)"/>
+          <!-- lane B -->
+          <rect class="box zd" x="20" y="206" width="160" height="64" rx="9"/>
+          <text class="t" x="100" y="232" text-anchor="middle">10 s look</text>
+          <text class="s" x="100" y="252" text-anchor="middle">glasses camera</text>
+          <rect class="box zm" x="215" y="206" width="160" height="64" rx="9"/>
+          <text class="t" x="295" y="232" text-anchor="middle">Keyframes</text>
+          <text class="s" x="295" y="252" text-anchor="middle">20 to 24 sharp frames</text>
+          <rect class="box zc" x="410" y="206" width="160" height="64" rx="9"/>
+          <text class="t" x="490" y="232" text-anchor="middle">Muse Image</text>
+          <text class="s" x="490" y="252" text-anchor="middle">edits: lit and not</text>
+          <rect class="box zc" x="605" y="206" width="160" height="64" rx="9"/>
+          <text class="t" x="685" y="232" text-anchor="middle">Muse Spark</text>
+          <text class="s" x="685" y="252" text-anchor="middle">labels, keeps agreeing</text>
+          <rect class="box zm" x="800" y="206" width="180" height="64" rx="9"/>
+          <text class="t" x="890" y="232" text-anchor="middle">Training set</text>
+          <text class="s" x="890" y="252" text-anchor="middle">Axolotl JSONL, 512×512</text>
+          <line class="edge" x1="180" y1="238" x2="213" y2="238" marker-end="url(#a2)"/>
+          <line class="edge" x1="375" y1="238" x2="408" y2="238" marker-end="url(#a2)"/>
+          <line class="edge" x1="570" y1="238" x2="603" y2="238" marker-end="url(#a2)"/>
+          <line class="edge" x1="765" y1="238" x2="798" y2="238" marker-end="url(#a2)"/>
+          <!-- SAM branch -->
+          <rect class="box zc" x="410" y="296" width="160" height="58" rx="9"/>
+          <text class="t" x="490" y="320" text-anchor="middle">SAM 3.1</text>
+          <text class="s" x="490" y="340" text-anchor="middle">box around the burner</text>
+          <polyline class="edge" points="295,270 295,325 408,325" marker-end="url(#a2)"/>
+          <polyline class="edge" points="570,325 890,325 890,272" marker-end="url(#a2)"/>
+          <text class="l" x="730" y="317" text-anchor="middle">crops of the burner</text>
+          <!-- cross-lane -->
+          <line class="edge dash" x1="330" y1="206" x2="645" y2="102" marker-end="url(#a2)"/>
+          <text class="l" x="455" y="150" text-anchor="middle">3 keyframes</text>
+          <line class="edge hot" x1="830" y1="100" x2="500" y2="204" marker-end="url(#a2)"/>
+          <text class="l" x="640" y="176" text-anchor="end">what to draw</text>
+          <line class="edge hot" x1="900" y1="100" x2="700" y2="204" marker-end="url(#a2)"/>
+          <text class="l" x="812" y="150" text-anchor="start">what to ask</text>
+        </svg>
+      </div>
+      <figcaption>The spec is the hinge. Muse Wonder reads your words and three keyframes and writes what to watch
+        ("the stove burner"), when to alert ("the burner is lit with no pan on it"), near-misses that must not count,
+        the sentence to speak, a cooldown and the 10 second hold. Muse Image then edits your own keyframes into
+        about 150 burner-on and 150 burner-off pictures under different light, angles and blur, with no people.
+        Muse Spark labels each one, and a picture stays only when Spark agrees with what it was meant to show.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="prose" style="display:grid; gap:10px">
+      <p class="eyebrow">Step 2 · Train</p>
+      <h2>A small open model learns the one question</h2>
+      <p>The model that ends up watching is Muse Glimmer 30B, an open-weight Meta model, fine-tuned with
+        Meta's own QLoRA recipe on one H100 GPU rented from Modal. Only adapter weights train; the vision tower
+        stays frozen. A two-step smoke run comes first, and its timing prices the real run before you agree to it.</p>
+    </div>
+    <figure>
+      <div class="scroll">
+        <svg class="diagram" viewBox="0 0 1000 250" role="img" aria-label="Training: the Mac uploads the training set and session 1 clips to a Modal volume; Muse Glimmer 30B is fine-tuned there with QLoRA on one H100, merged and checked, then served with vLLM; session 2 clips replayed through that endpoint set the alert threshold back on the Mac.">
+          <defs>
+            <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+          </defs>
+          <rect class="box zm" x="20" y="60" width="160" height="76" rx="9"/>
+          <text class="t" x="100" y="88" text-anchor="middle">Training bundle</text>
+          <text class="s" x="100" y="108" text-anchor="middle">set + session 1 clips</text>
+          <text class="s" x="100" y="124" text-anchor="middle">te train</text>
+          <rect class="box zg" x="215" y="60" width="160" height="76" rx="9"/>
+          <text class="t" x="295" y="88" text-anchor="middle">Modal volume</text>
+          <text class="s" x="295" y="108" text-anchor="middle">data + base weights</text>
+          <text class="s" x="295" y="124" text-anchor="middle">from Hugging Face</text>
+          <rect class="box zg" x="410" y="60" width="180" height="76" rx="9"/>
+          <text class="t" x="500" y="88" text-anchor="middle">Fine-tune</text>
+          <text class="s" x="500" y="108" text-anchor="middle">QLoRA · Muse Glimmer 30B</text>
+          <text class="s" x="500" y="124" text-anchor="middle">1 × H100 · Axolotl</text>
+          <rect class="box zg" x="625" y="60" width="160" height="76" rx="9"/>
+          <text class="t" x="705" y="88" text-anchor="middle">Export</text>
+          <text class="s" x="705" y="108" text-anchor="middle">merge the adapter</text>
+          <text class="s" x="705" y="124" text-anchor="middle">same answers on 50</text>
+          <rect class="box zg" x="820" y="60" width="160" height="76" rx="9"/>
+          <text class="t" x="900" y="88" text-anchor="middle">Student endpoint</text>
+          <text class="s" x="900" y="108" text-anchor="middle">vLLM on an H100</text>
+          <text class="s" x="900" y="124" text-anchor="middle">te serve-student</text>
+          <line class="edge" x1="180" y1="98" x2="213" y2="98" marker-end="url(#a3)"/>
+          <line class="edge" x1="375" y1="98" x2="408" y2="98" marker-end="url(#a3)"/>
+          <line class="edge" x1="590" y1="98" x2="623" y2="98" marker-end="url(#a3)"/>
+          <line class="edge" x1="785" y1="98" x2="818" y2="98" marker-end="url(#a3)"/>
+          <!-- smoke and logs -->
+          <line class="edge dash" x1="500" y1="60" x2="500" y2="30"/>
+          <text class="l" x="508" y="26" text-anchor="start">smoke run first (2 steps) prices it · logs to W&amp;B</text>
+          <!-- calibrate loop -->
+          <polyline class="edge hot" points="900,136 900,196 100,196 100,138" marker-end="url(#a3)"/>
+          <text class="l" x="500" y="216" text-anchor="middle">te calibrate: session 2 clips scored by the student set the threshold (at most 1 false alarm an hour)</text>
+        </svg>
+      </div>
+      <figcaption>Session 1 clips join the synthetic set for the "mixed" run; session 2 is never trained on, only
+        used to calibrate the threshold; session 3 is the test set for the evaluation. The endpoint is protected by a
+        key only your Mac holds, and it is billed only while a container is up.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="prose" style="display:grid; gap:10px">
+      <p class="eyebrow">Step 3 · Watch</p>
+      <h2>One alert, second by second</h2>
+      <p>While you wear the glasses, every frame of the burner gets a probability from the student. Your Mac only
+        speaks when three of the last four frames agree, the burner has stayed on through its 10 second hold, and
+        Muse Spark confirms the frame.</p>
+    </div>
+    <figure>
+      <div class="scroll">
+        <svg class="diagram" viewBox="0 0 1000 320" role="img" aria-label="A timeline at one frame a second: the student's probability goes over the threshold from 0 seconds; the condition counts as on at 2 seconds; one frame under at 5 seconds does not reset it; at 10 seconds the hold ends, Muse Spark confirms, the glasses say the burner is still on, and the cooldown starts.">
+          <!-- cooldown band -->
+          <rect class="cool" x="500" y="40" width="440" height="210"/>
+          <!-- threshold -->
+          <line class="thr" x1="70" y1="175" x2="940" y2="175"/>
+          <text class="l" x="936" y="168" text-anchor="end">threshold</text>
+          <!-- bars: x = 80 + 42t, width 24, baseline 250, height = p * 150 -->
+          <rect class="bar-on" x="68" y="157" width="24" height="93"/>
+          <rect class="bar-on" x="110" y="139" width="24" height="111"/>
+          <rect class="bar-on" x="152" y="128" width="24" height="122"/>
+          <rect class="bar-on" x="194" y="121" width="24" height="129"/>
+          <rect class="bar-on" x="236" y="118" width="24" height="132"/>
+          <rect class="bar-off" x="278" y="188" width="24" height="62"/>
+          <rect class="bar-on" x="320" y="122" width="24" height="128"/>
+          <rect class="bar-on" x="362" y="115" width="24" height="135"/>
+          <rect class="bar-on" x="404" y="114" width="24" height="136"/>
+          <rect class="bar-on" x="446" y="116" width="24" height="134"/>
+          <rect class="bar-on" x="488" y="112" width="24" height="138"/>
+          <rect class="bar-on" x="530" y="115" width="24" height="135"/>
+          <rect class="bar-on" x="572" y="110" width="24" height="140"/>
+          <rect class="bar-on" x="614" y="114" width="24" height="136"/>
+          <rect class="bar-on" x="656" y="115" width="24" height="135"/>
+          <rect class="bar-on" x="698" y="112" width="24" height="138"/>
+          <rect class="bar-on" x="740" y="115" width="24" height="135"/>
+          <rect class="bar-on" x="782" y="114" width="24" height="136"/>
+          <rect class="bar-on" x="824" y="110" width="24" height="140"/>
+          <rect class="bar-on" x="866" y="112" width="24" height="138"/>
+          <rect class="bar-on" x="908" y="115" width="24" height="135"/>
+          <!-- axis -->
+          <line class="tick" x1="60" y1="250" x2="940" y2="250"/>
+          <text class="l" x="80" y="268" text-anchor="middle">0 s</text>
+          <text class="l" x="164" y="268" text-anchor="middle">2</text>
+          <text class="l" x="248" y="268" text-anchor="middle">4</text>
+          <text class="l" x="332" y="268" text-anchor="middle">6</text>
+          <text class="l" x="416" y="268" text-anchor="middle">8</text>
+          <text class="l" x="500" y="268" text-anchor="middle">10</text>
+          <text class="l" x="584" y="268" text-anchor="middle">12</text>
+          <text class="l" x="668" y="268" text-anchor="middle">14</text>
+          <text class="l" x="752" y="268" text-anchor="middle">16</text>
+          <text class="l" x="836" y="268" text-anchor="middle">18</text>
+          <text class="l" x="920" y="268" text-anchor="middle">20</text>
+          <text class="l" x="20" y="200" text-anchor="start">p(yes)</text>
+          <!-- hold bracket -->
+          <line class="edge hot" x1="80" y1="70" x2="500" y2="70"/>
+          <line class="edge hot" x1="80" y1="63" x2="80" y2="77"/>
+          <line class="edge hot" x1="500" y1="63" x2="500" y2="77"/>
+          <text class="l" x="290" y="60" text-anchor="middle">hold: 10 s, from the first frame over</text>
+          <!-- on at 2 s -->
+          <line class="tick" x1="164" y1="84" x2="164" y2="124"/>
+          <text class="l" x="170" y="96" text-anchor="start">2 s: 3 of the last 4 over, so it is on</text>
+          <!-- dip -->
+          <text class="l" x="290" y="210" text-anchor="middle">5 s: one under,</text>
+          <text class="l" x="290" y="224" text-anchor="middle">still on</text>
+          <!-- alert -->
+          <line class="alertline" x1="500" y1="40" x2="500" y2="250"/>
+          <text class="at" x="512" y="58">10 s: Spark checks the frame: yes</text>
+          <text class="at" x="512" y="76">glasses say "The burner is still on."</text>
+          <text class="l" x="720" y="296" text-anchor="middle">cooldown: no repeat until it ends</text>
+          <line class="tick" x1="500" y1="290" x2="940" y2="290"/>
+        </svg>
+      </div>
+      <figcaption>Each bar is one frame (the iPhone sends one a second). A frame under the threshold never fires
+        an alert, but a single dip does not restart the hold either. Had you turned the burner off at 7 seconds, nothing
+        would have been said. The fridge works the same way with a 30 second hold and the tap with 20, so opening the
+        fridge to grab milk stays silent. If Spark says no, the skill waits a minute and the hold starts again.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="prose" style="display:grid; gap:10px">
+      <p class="eyebrow">Sample flow</p>
+      <h2>One evening with the burner skill</h2>
+    </div>
+    <ol class="steps">
+      <li><p class="what">Amaan opens Trained Eye on the iPhone, connects to the Mac and the glasses.</p>
+        <p class="how"><b>iPhone + glasses:</b> the app registers with the Meta AI app through Meta's Wearables SDK; the Mac runs <code>te serve</code> and the app checks it over Wi-Fi.</p></li>
+      <li><p class="what">On the Teach screen, he holds to talk: "Tell me if I leave the burner on," then looks at the stove for ten seconds as it goes from off to lit.</p>
+        <p class="how"><b>Glasses mic and camera, iPhone:</b> the request is recorded over Bluetooth; the capture goes to the Mac at three frames a second, with the audio.</p></li>
+      <li><p class="what">The phone shows the price of teaching it; he taps yes.</p>
+        <p class="how"><b>Mac:</b> nothing is paid before that yes. Anything over $15 always asks again.</p></li>
+      <li><p class="what">The phone reads back "I'll watch the front burner of the stove and tell you when the burner is lit with no pan on it. I'll say: The burner is still on." He confirms.</p>
+        <p class="how"><b>Meta Model API:</b> Voice Transcribe, then Muse Wonder writes the spec; the local policy check ran first, for free.</p></li>
+      <li><p class="what">The Mac builds the training set while he records a few minutes of normal cooking for testing.</p>
+        <p class="how"><b>Meta Model API:</b> SAM 3.1, Muse Image and Muse Spark. <b>Mac:</b> keyframes, crops and the dataset in <code>data/skills/burner_left_on/</code>.</p></li>
+      <li><p class="what">He starts training and goes back to his evening.</p>
+        <p class="how"><b>Modal:</b> <code>te train</code> fine-tunes Muse Glimmer 30B on one H100, then <code>te serve-student</code> puts it online. <b>Mac:</b> <code>te calibrate</code> sets the threshold from his session 2 clips.</p></li>
+      <li><p class="what">Days later he lights the burner for tea and walks off to answer the door.</p>
+        <p class="how"><b>Glasses to iPhone to Mac:</b> frames stream in; the student scores each one on Modal; the trigger waits out the 10 second hold.</p></li>
+      <li><p class="what">He hears "The burner is still on." in his glasses.</p>
+        <p class="how"><b>Meta Model API:</b> Muse Spark confirmed the last frame. <b>iPhone:</b> speaks it through the glasses' speakers over Bluetooth. The cooldown keeps it from repeating every second.</p></li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="prose" style="display:grid; gap:10px">
+      <p class="eyebrow">Who runs what</p>
+      <h2>Every model and device in one table</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Job</th><th>Runs on</th><th>Model or tech</th></tr></thead>
+        <tbody>
+          <tr><td>See, hear and speak</td><td><span class="where"><i style="background:var(--z-device)"></i>Meta glasses</span></td><td>Meta Wearables DAT SDK 1.0.1; camera stream in HEVC; audio over Bluetooth</td></tr>
+          <tr><td>Carry frames, teach, speak alerts</td><td><span class="where"><i style="background:var(--z-device)"></i>iPhone</span></td><td>Trained Eye app: SwiftUI, VideoToolbox decoding, a WebSocket to the Mac, speech synthesis</td></tr>
+          <tr><td>Backend, teach flow, watcher, trigger</td><td><span class="where"><i style="background:var(--z-mac)"></i>Your Mac</span></td><td>Python 3.12 <code>te</code> command; Starlette server on port 8765; cache and spend ledger</td></tr>
+          <tr><td>Speech to text</td><td><span class="where"><i style="background:var(--z-cloud)"></i>Meta Model API</span></td><td><span class="mono">muse-voice-transcribe-1.0</span></td></tr>
+          <tr><td>Write the skill spec</td><td><span class="where"><i style="background:var(--z-cloud)"></i>Meta Model API</span></td><td><span class="mono">muse-wonder-1.0</span>, structured output</td></tr>
+          <tr><td>Find the burner in each keyframe</td><td><span class="where"><i style="background:var(--z-cloud)"></i>Meta Model API</span></td><td><span class="mono">sam-3.1</span></td></tr>
+          <tr><td>Generate training variations</td><td><span class="where"><i style="background:var(--z-cloud)"></i>Meta Model API</span></td><td><span class="mono">muse-image-1.0</span> edits of your keyframes</td></tr>
+          <tr><td>Label images, confirm alerts</td><td><span class="where"><i style="background:var(--z-cloud)"></i>Meta Model API</span></td><td><span class="mono">muse-spark-1.3</span></td></tr>
+          <tr><td>Fine-tune the student</td><td><span class="where"><i style="background:var(--z-gpu)"></i>Modal, 1 × H100</span></td><td><span class="mono">meta-models/Muse-Glimmer-30B</span> with Axolotl QLoRA (Meta's recipe)</td></tr>
+          <tr><td>Score frames while watching</td><td><span class="where"><i style="background:var(--z-gpu)"></i>Modal, H100</span></td><td>Your fine-tuned Glimmer on vLLM; the answer token's probability</td></tr>
+          <tr><td>Training logs, base weights, release</td><td><span class="where"><i style="background:var(--z-other)"></i>W&amp;B, Hugging Face</span></td><td>Private W&amp;B project; uploads only after you decide to publish</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose" style="display:grid; gap:10px">
+      <p class="eyebrow">Step 4 · Prove it</p>
+      <h2>Evaluation and the guard rails</h2>
+    </div>
+    <div class="cols">
+      <div class="note"><h3>How it is measured</h3>
+        <p class="muted"><code>te replay</code> runs your labelled test clips through watch mode, and <code>make eval</code>
+          scores them: frame accuracy, events caught on time (within the skill's window after its hold), false alarms
+          per hour and dollars per hour. Experiment 1 compares real, synthetic and mixed training; Experiment 4 compares
+          the fine-tuned student with base Glimmer and with Spark on every frame.</p></div>
+      <div class="note"><h3>Privacy</h3>
+        <p class="muted">Watch mode never stores frames, only times and scores. The glasses' capture light is never
+          hidden. Generated images are never published, and faces are blurred in anything that is.</p></div>
+      <div class="note"><h3>What it will not learn</h3>
+        <p class="muted">No skills about specific people, bodies or health, covert watching, politics or war. The policy
+          check refuses those on your Mac before any paid call. And the burner skill is a reminder, never a smoke alarm.</p></div>
+    </div>
+  </section>
+</main>
+</body>
+</html>

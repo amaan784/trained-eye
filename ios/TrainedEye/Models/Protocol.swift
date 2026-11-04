@@ -35,6 +35,13 @@ struct ServerMessage: Decodable {
   let height: Int?
   /// skill name to yes-probability, or nil when the student failed on that frame.
   let scores: [String: Double?]?
+  /// skill name to the seconds its condition has held so far, or nil while it is off (shown
+  /// against the skill's hold on the Watch screen); absent from older backends.
+  let held: [String: Double?]?
+  /// "waking" while the backend wakes the model (frames are not scored yet), then "ready",
+  /// or "failed" if it never answered; with "expected", the usual wait in seconds.
+  let model: String?
+  let expected: Double?
   let error: String?
   let skill: String?
   let text: String?

@@ -24,7 +24,11 @@ GET /skills lists the taught skills for the app's Skills screen:
 
 Watch mode: a hello with "watch": ["burner_left_on", ...] scores every frame for those taught
 skills (backend/watch/watcher.py). The welcome then lists them under "watching", each ack
-carries "scores" ({skill: probability, or null if the student failed}), and an alert is
+carries "scores" ({skill: probability, or null if the student failed}) and "held" ({skill:
+seconds the condition has held so far, or null while it is off}, to show against the
+skill's hold_s from /skills), and "model": "ready" (or "failed" if it never answered).
+Each session first wakes the model (a cold Modal endpoint takes about 3 minutes): until it
+answers, acks carry "model": "waking" and "expected" (seconds) and no scores. An alert is
 
   server -> phone  text    {"type": "alert", "skill": "burner_left_on", "text": "...",
                             "t": ..., "p": 0.93, "confirmed": true}
@@ -38,11 +42,13 @@ logged here, and the watcher logs only scores and decisions.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import io
 import itertools
 import json
 import logging
+import threading
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -62,6 +68,34 @@ MAX_FRAME_PIXELS = 4096 * 4096  # DAT streams at most 720x1280
 SOURCES = ("glasses", "mock", "phone")
 
 log = logging.getLogger("trained_eye.server")
+# A cold Modal endpoint answered its first frame after 133 to 204 s on Nov 4: the phone shows
+# the wait against this, and the server stops trying after WAKE_GIVE_UP_S.
+WAKE_EXPECTED_S = 180
+WAKE_GIVE_UP_S = 900
+WAKE_RETRY_S = 2.0
+
+
+def _tiny_jpeg() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (64, 64), (128, 128, 128)).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def wake_student(watcher, stop: threading.Event, give_up_s: float = WAKE_GIVE_UP_S) -> bool:
+    """Ask the watcher's student once with a tiny frame, again and again until it answers
+    (True), `stop` is set or `give_up_s` passes (False). A cold endpoint times out a few
+    times while its container starts; frames are not scored meanwhile."""
+    from backend.inference.student import StudentError
+
+    spec = next(iter(watcher.skills.values())).spec
+    image, deadline = _tiny_jpeg(), time.monotonic() + give_up_s
+    while not stop.is_set() and time.monotonic() < deadline:
+        try:
+            watcher.scorer.score(image, spec)
+            return True
+        except StudentError:
+            stop.wait(WAKE_RETRY_S)
+    return False
 
 
 def inspect_jpeg(data: bytes) -> tuple[int, int]:
@@ -234,6 +268,22 @@ def create_app(watcher_factory: Callable[[list[str], str, CooldownBook], object]
                 log.info("session %s watching %s", session, ", ".join(welcome["watching"]))
         await ws.send_json(welcome)
 
+        # wake the model first: until it answers, frames are acked as "waking", unscored
+        model = {"state": "ready"}
+        stop_waking = threading.Event()
+        if watcher is not None and getattr(watcher, "scorer", None) is not None:
+            model["state"] = "waking"
+            started = time.monotonic()
+
+            async def wake() -> None:
+                ok = await run_in_threadpool(wake_student, watcher, stop_waking)
+                model["state"] = "ready" if ok else "failed"
+                log.info("session %s: the model %s after %.0f s", session,
+                         "answered" if ok else "did not answer", time.monotonic() - started)
+
+            waking = asyncio.create_task(wake())  # stopped with stop_waking
+            waking.add_done_callback(lambda _: None)
+
         seq = 0
         try:
             while True:
@@ -253,8 +303,12 @@ def create_app(watcher_factory: Callable[[list[str], str, CooldownBook], object]
                     ack = {"type": "ack", "seq": seq, "bytes": len(data),
                            "width": width, "height": height}
                     alerts = []
-                    if watcher is not None:
+                    if watcher is not None and model["state"] == "waking":
+                        ack.update(model="waking", expected=WAKE_EXPECTED_S)
+                    elif watcher is not None:
                         ack["scores"], alerts = await run_in_threadpool(watcher.on_frame, data)
+                        ack["held"] = dict(watcher.held)
+                        ack["model"] = model["state"]
                     await ws.send_json(ack)
                     for alert in alerts:
                         log.info("session %s alert %s (confirmed: %s)", session, alert.skill,
@@ -273,6 +327,8 @@ def create_app(watcher_factory: Callable[[list[str], str, CooldownBook], object]
                 await ws.send_json({"type": "error", "error": "unknown message"})
         except WebSocketDisconnect:
             pass
+        finally:
+            stop_waking.set()  # the wake-up thread ends at its next try
         log.info("session %s closed after %d frames", session, seq)
 
     return Starlette(routes=[Route("/health", health), Route("/skills", skills),

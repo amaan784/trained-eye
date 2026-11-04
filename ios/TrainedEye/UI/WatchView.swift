@@ -23,8 +23,16 @@ struct WatchView: View {
           .padding(.horizontal, -Theme.gutter)
         Text(stripCaption).font(Theme.caption).foregroundStyle(Theme.secondary)
 
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+          if app.isWatching, let since = app.socket.wakingSince {
+            WakingModel(since: since, expected: app.socket.wakeExpected)
+          }
           ForEach(skillLines, id: \.self) { line in Text(line).font(Theme.body) }
+          ForEach(holdBars, id: \.name) { bar in
+            HoldBar(fraction: bar.fraction)
+              .accessibilityLabel("\(plain(bar.name)) hold")
+              .accessibilityValue("\(Int(bar.fraction * 100)) percent")
+          }
         }
         .padding(.top, 4)
 
@@ -98,10 +106,37 @@ struct WatchView: View {
     return names.map { "\(plain($0)): \(state($0))" }
   }
 
+  /// For each skill whose condition is on: how far through its hold it is.
+  private var holdBars: [(name: String, fraction: Double)] {
+    guard app.isWatching, app.socket.status == .live else { return [] }
+    return app.socket.watching.compactMap { name in
+      guard let heldFor = app.socket.held[name] ?? nil,
+        let hold = app.skills.first(where: { $0.name == name })?.holdSeconds, hold > 0
+      else { return nil }
+      return (name, min(1, heldFor / Double(hold)))
+    }
+  }
+
+  /// Watching, connecting, or how far the condition is through its hold before it speaks.
   private func state(_ name: String) -> String {
     guard app.isWatching else { return "not watching" }
-    guard let entry = app.socket.scores[name] else { return "watching" }
+    switch app.socket.status {
+    case .live: break
+    case .connecting, .off: return "connecting to the Mac"
+    case .retrying: return app.socket.status.label.lowercased()
+    }
+    if app.socket.modelState == "waking" { return "waiting for the model" }
+    if app.socket.modelState == "failed" {
+      return "the model did not answer; check te serve-student on the Mac"
+    }
+    guard let entry = app.socket.scores[name] else { return "watching, waiting for the first score" }
     guard entry != nil else { return "the model did not answer" }
+    if let heldFor = app.socket.held[name] ?? nil,
+      let hold = app.skills.first(where: { $0.name == name })?.holdSeconds, hold > 0
+    {
+      let soFar = min(Int(heldFor.rounded()), hold)
+      return "on for \(soFar) of \(hold) s, then it speaks"
+    }
     return "watching"
   }
 
@@ -142,7 +177,9 @@ struct WatchView: View {
 
   @ViewBuilder private var details: some View {
     VStack(alignment: .leading, spacing: 8) {
-      InfoRow(label: "Backend", value: app.socket.status.label)
+      InfoRow(
+        label: "Backend",
+        value: app.isWatching ? app.socket.status.label : "Connects when you start watching")
       if let session = app.socket.session { InfoRow(label: "Session", value: session) }
       InfoRow(label: "Frames sent", value: "\(app.socket.framesSent)")
       InfoRow(label: "Frames acked", value: "\(app.socket.framesAcked)")
@@ -173,6 +210,47 @@ struct WatchView: View {
   private func durationText(_ seconds: TimeInterval) -> String {
     let whole = max(0, Int(seconds))
     return whole < 60 ? "\(whole) s" : "\(whole / 60) min \(whole % 60) s"
+  }
+}
+
+/// The wait while the backend wakes the model on Modal: the time so far, against the usual
+/// wait, on a bar that fills to 95% and holds there until the model answers.
+private struct WakingModel: View {
+  let since: Date
+  let expected: Double
+
+  var body: some View {
+    TimelineView(.periodic(from: .now, by: 1)) { context in
+      let elapsed = max(0, context.date.timeIntervalSince(since))
+      VStack(alignment: .leading, spacing: 6) {
+        Text("Waking the model on Modal: \(clock(elapsed)) so far. The first time takes "
+          + "about \(Int((expected / 60).rounded())) minutes; frames are scored once it answers.")
+          .font(Theme.body)
+        HoldBar(fraction: min(0.95, elapsed / max(1, expected)))
+      }
+    }
+    .accessibilityElement(children: .combine)
+  }
+
+  private func clock(_ seconds: TimeInterval) -> String {
+    let whole = Int(seconds)
+    return String(format: "%d:%02d", whole / 60, whole % 60)
+  }
+}
+
+/// A thin bar filling as the condition holds: Ink on a hairline track.
+private struct HoldBar: View {
+  let fraction: Double
+
+  var body: some View {
+    GeometryReader { geo in
+      ZStack(alignment: .leading) {
+        Rectangle().fill(Theme.rule)
+        Rectangle().fill(Theme.text).frame(width: geo.size.width * fraction)
+      }
+    }
+    .frame(height: 4)
+    .animation(.linear(duration: 0.9), value: fraction)
   }
 }
 

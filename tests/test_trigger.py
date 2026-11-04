@@ -123,3 +123,14 @@ def test_a_confident_model_gets_the_middle_of_its_tied_thresholds_not_1():
     result = calibrate_frames([clip], cooldown_s=60.0)
     assert 0.4 < result["threshold"] < 0.6 and result["frame_f1"] == 1.0
     assert 0.9999 >= result["threshold"]  # a test frame at 0.9999 says yes
+
+
+def test_held_says_how_long_the_condition_has_been_on():
+    t = Trigger(threshold=0.5, cooldown_s=60, hold_s=30)
+    assert t.held() is None
+    for second in range(4):
+        t.update(0.9, float(second))
+    assert t.held() == 3.0  # counted from the first frame over the threshold
+    for second in range(4, 6):
+        t.update(0.1, float(second))
+    assert t.held() is None  # off again: the hold starts afresh

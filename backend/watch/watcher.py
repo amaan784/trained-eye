@@ -236,9 +236,13 @@ class Watcher:
         self.clock = clock
         self.cloud_no_snooze_s = cloud_no_snooze_s
         self.cooldowns = cooldowns
+        # after each frame: {skill: seconds the condition has held so far, or None when it
+        # is off}, which the server sends in the ack with the scores
+        self.held: dict[str, float | None] = {}
 
     def on_frame(self, image: bytes, t: float | None = None) -> tuple[dict, list[Alert]]:
-        """Score one frame for every skill. Returns ({skill: p or None}, alerts)."""
+        """Score one frame for every skill. Returns ({skill: p or None}, alerts); the hold
+        so far per skill is in self.held."""
         t = self.clock() if t is None else t
         scores, fired = {}, []
         for name, skill in self.skills.items():
@@ -256,6 +260,8 @@ class Watcher:
                        latency_s=(round(score.latency_s, 3)
                                   if getattr(score, "latency_measured", True) else None))
             fires = self._update(skill, score.p, t)
+            held = skill.trigger.held()
+            self.held[name] = None if held is None else round(held, 1)
             row["fires"] = fires
             if fires:
                 alert, row["cloud"] = self._check(image, skill, t, score.p)

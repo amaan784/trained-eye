@@ -69,6 +69,14 @@ class Trigger:
         self.clear()
         return True
 
+    def held(self) -> float | None:
+        """How long the condition has been on, as of the last frame (counted from the
+        first of its frames over the threshold); None while it is off. The phone shows it
+        against the hold, so the wait for an alert can be seen."""
+        if self.since is None or self.last_t is None:
+            return None
+        return max(0.0, self.last_t - self.since)
+
     def clear(self) -> None:
         """Forget the recent frames: the 3-of-4 count and the hold start again."""
         self.recent.clear()

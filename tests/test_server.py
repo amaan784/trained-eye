@@ -145,11 +145,13 @@ class FakeWatcher:
     def __init__(self, names):
         self.skills = dict.fromkeys(names)
         self.frames = 0
+        self.held = {}
 
     def on_frame(self, data):
         from backend.watch.watcher import Alert
 
         self.frames += 1
+        self.held = dict.fromkeys(self.skills, float(self.frames - 1))
         alerts = [Alert(name, "The burner is still on.", float(self.frames), 0.9, True)
                   for name in self.skills] if self.frames == 3 else []
         return dict.fromkeys(self.skills, 0.9), alerts
@@ -169,6 +171,8 @@ def test_watch_mode_scores_frames_and_sends_alerts():
         for i in range(3):
             ack = (ws.send_bytes(synthetic_jpeg(i, size=(320, 240))), ws.receive_json())[1]
             assert ack["type"] == "ack" and ack["scores"] == {"burner_left_on": 0.9}
+            assert ack["held"] == {"burner_left_on": float(i)}  # the hold so far, for the phone
+            assert ack["model"] == "ready"  # nothing to wake: the fake has no student
         assert ws.receive_json() == {"type": "alert", "skill": "burner_left_on",
                                      "text": "The burner is still on.", "t": 3.0, "p": 0.9,
                                      "confirmed": True}
@@ -442,3 +446,36 @@ def test_the_default_watcher_follows_the_served_run_and_the_settings(tmp_path, m
     assert (skill.trigger.threshold, skill.threshold_source) == (0.8, "run")
     assert watcher.scorer.system_in_user is False  # what the served run trained on
     assert watcher.log.fields == {"run": "exp1-mixed"}
+
+
+def test_waking_the_model_retries_until_it_answers_and_stops_when_asked(monkeypatch):
+    import threading
+
+    from backend import server
+    from backend.inference.student import StudentError
+
+    monkeypatch.setattr(server, "WAKE_RETRY_S", 0)
+
+    class Cold:
+        calls = 0
+
+        def score(self, image, spec):
+            Cold.calls += 1
+            if Cold.calls < 3:  # a cold endpoint times out while its container starts
+                raise StudentError("student endpoint failed: ReadTimeout")
+            return 0.1
+
+    class Skill:
+        spec = "spec"
+
+    class Watching:
+        def __init__(self):
+            self.skills = {"burner_left_on": Skill()}
+            self.scorer = Cold()
+
+    assert server.wake_student(Watching(), threading.Event()) is True and Cold.calls == 3
+    stop = threading.Event()
+    stop.set()  # the phone left: no more tries
+    Cold.calls = -100
+    assert server.wake_student(Watching(), stop) is False and Cold.calls == -100
+    assert server.wake_student(Watching(), threading.Event(), give_up_s=0) is False

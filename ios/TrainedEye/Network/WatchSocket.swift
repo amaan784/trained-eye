@@ -42,6 +42,13 @@ final class WatchSocket {
   private(set) var watching: [String] = []
   /// The latest score per skill, from the latest ack.
   private(set) var scores: [String: Double?] = [:]
+  /// How long each skill's condition has held so far, from the latest ack.
+  private(set) var held: [String: Double?] = [:]
+  /// The model behind the backend: "waking", "ready" or "failed" (nil before the first ack).
+  private(set) var modelState: String?
+  /// When the backend first said it was waking the model, and how long that usually takes.
+  private(set) var wakingSince: Date?
+  private(set) var wakeExpected: Double = 180
   private(set) var framesSent = 0
   private(set) var framesAcked = 0
   private(set) var lastError: String?
@@ -97,6 +104,9 @@ final class WatchSocket {
     session = nil
     watching = []
     scores = [:]
+    held = [:]
+    modelState = nil
+    wakingSince = nil
     isSending = false
     awaitingAckSince = nil
   }
@@ -178,6 +188,16 @@ final class WatchSocket {
       framesAcked += 1
       awaitingAckSince = nil
       if let scores = message.scores { self.scores = scores }
+      if let held = message.held { self.held = held }
+      if let model = message.model {
+        if model == "waking" {
+          if wakingSince == nil { wakingSince = Date() }
+          wakeExpected = message.expected ?? wakeExpected
+        } else {
+          wakingSince = nil
+        }
+        modelState = model
+      }
       onScores?(message.scores ?? [:])
     case "alert":
       onAlert?(message)

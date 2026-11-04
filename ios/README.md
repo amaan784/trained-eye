@@ -55,8 +55,22 @@ the Mac when the app was closed is picked up again at the next launch.
 
 ## 1. Create the Xcode project
 
-Xcode would replace an existing `TrainedEye` folder, so make the project somewhere else
-first and move it in:
+The quick way: `ios/project.yml` describes the project with every setting below (sections
+1 to 3), and XcodeGen writes it.
+
+    brew install xcodegen
+    xcodegen generate --spec ios/project.yml     # writes ios/TrainedEye.xcodeproj
+    open ios/TrainedEye.xcodeproj
+
+Then set your Team and your own bundle identifier (it starts as `com.example.trainedeye`)
+in Signing & Capabilities, and go on with section 6. To check that it compiles without a
+phone or signing:
+
+    xcodebuild -project ios/TrainedEye.xcodeproj -scheme TrainedEye -sdk iphonesimulator \
+      -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+
+By hand instead: Xcode would replace an existing `TrainedEye` folder, so make the project
+somewhere else first and move it in:
 
 1. In Xcode, choose File, New, Project, iOS, App. Product Name `TrainedEye`, Interface
    SwiftUI, Language Swift, Testing System None, Storage None. Save it on the Desktop and

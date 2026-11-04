@@ -150,6 +150,42 @@ def skill_facts(data_dir: Path, skill: str, run: str) -> SkillFacts:
         val_examples=int(bundle.get("val_examples") or 0), gpu=training_gpu(data_dir, run))
 
 
+def teach_steps(sk: SkillFacts) -> list[dict]:
+    """How it learned, in four steps with the teach run's numbers: each a bold lead, an
+    optional quote and the rest of the sentence (the README strip and the playground)."""
+    said = any(m.job == "transcribe" for m in sk.models)
+    stop = "" if sk.request[-1:] in ".?!" else "."
+    return [
+        {"lead": "You say what to watch for:" if said else "You tell it what to watch for:",
+         "quote": sk.request,
+         "rest": f"{stop} Muse Wonder turns that into a skill: what counts, and what doesn't."},
+        {"lead": "You film it for a few seconds.", "quote": None,
+         "rest": (f" Trained Eye keeps {sk.keyframes} sharp, different frames, and SAM 3.1 "
+                  f"finds the {sk.sam_prompt} in {sk.frames_with_box} of them.")},
+        {"lead": f"Muse Image makes {sk.made} variations", "quote": None,
+         "rest": (" of those frames: the condition and near-misses, in other light and "
+                  f"angles. Muse Spark checks each one and keeps {sk.kept}.")},
+        {"lead": f"Glimmer trains on {sk.train_examples} examples", "quote": None,
+         "rest": (f", with {sk.val_examples} held back to check it, for {epochs_text()} on "
+                  f"one {sk.gpu} on Modal.")},
+    ]
+
+
+def trained_run(data_dir: Path, skill: str) -> str | None:
+    """The latest finished training run (not a smoke) whose bundle holds the skill."""
+    found = []
+    for result in sorted((Path(data_dir) / "train").glob("*.result.json")):
+        run = result.name.removesuffix(".result.json")
+        try:
+            r = json.loads(result.read_text(encoding="utf-8"))
+            bundle = json.loads((result.parent / run / "manifest.json").read_text("utf-8"))
+        except (OSError, ValueError):
+            continue
+        if r.get("ok") is True and not r.get("smoke") and skill in (bundle.get("skills") or {}):
+            found.append((str(r.get("finished") or ""), run))
+    return max(found)[1] if found else None
+
+
 def epochs_text() -> str:
     from backend.training.axolotl import RECIPE
 

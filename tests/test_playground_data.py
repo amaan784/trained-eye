@@ -92,9 +92,21 @@ def test_results(tmp_path):
     (tmp_path / "results.md").write_text("# Results\n\nF1 0.9\n")
     out = data.results(tmp_path)
     assert out["charts"] == [
-        {"name": "cost vs accuracy", "url": "media/results/cost_vs_accuracy.svg"},
-        {"name": "exp1 mix", "url": "media/results/exp1-mix.svg"}]
+        {"name": "cost vs accuracy", "url": "media/results/cost_vs_accuracy.svg",
+         "caption": None},
+        {"name": "exp1 mix", "url": "media/results/exp1-mix.svg",
+         "caption": "Frame F1 and events caught on time for each mix of training data."}]
     assert out["results_md"].startswith("# Results")
+    # Experiment 4's sentence is te eval's summary, numbers from results.json
+    (tmp_path / "exp4_cost.svg").write_text("<svg/>")
+    judges = [{"variant": v, "metrics": {"f1": f1, "latency_median_s": lat}, "usd_per_hour": usd}
+              for v, f1, lat, usd in (("finetuned", 0.88, 0.98, 3.95), ("base", 0.89, 2.07, 3.95),
+                                      ("spark", 0.86, 11.16, 16.53))]
+    (tmp_path / "results.json").write_text(json.dumps(
+        {"footage": "other kitchens (EPIC)", "experiment4": judges}))
+    exp4 = data.results(tmp_path)["charts"][-1]
+    assert exp4["caption"].startswith("On other kitchens, the fine-tuned model") and "0.98 s" in \
+        exp4["caption"]
 
 
 def test_media_path_serves_only_linked_files(tmp_path):

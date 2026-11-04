@@ -105,22 +105,9 @@ def strip(sk: F.SkillFacts, frames: list[F.TeachFrame], out: Path, work: Path) -
     geo = {"fw": 96, "fh": 128, "gap": 8, "rebate": 26}  # room for the edge print
     rows = (film.strip(cells[:half], left=64, top=132, sam=True, **geo)
             + film.strip(cells[half:], left=64, top=132 + 180 + 18, sam=True, **geo))
-    stop = "" if sk.request[-1:] in ".?!" else "."
-    target = html.escape(sk.sam_prompt)
-    said = any(m.job == "transcribe" for m in sk.models)
-    first = ("<b>You say what to watch for:</b>" if said
-             else "<b>You tell it what to watch for:</b>")
-    steps = [
-        (f"{first} <q>{html.escape(sk.request)}</q>{stop} Muse Wonder turns that into a "
-         "skill: what counts, and what doesn't."),
-        (f"<b>You film it for a few seconds.</b> Trained Eye keeps {sk.keyframes} sharp, "
-        f"different frames, and SAM 3.1 finds the {target} in {sk.frames_with_box} of them."),
-        (f"<b>Muse Image makes {sk.made} variations</b> of those frames: the condition and "
-        "near-misses, in other light and angles. Muse Spark checks each one and "
-        f"keeps {sk.kept}."),
-        (f"<b>Glimmer trains on {sk.train_examples} examples</b>, with {sk.val_examples} held "
-        f"back to check it, for {F.epochs_text()} on one {html.escape(sk.gpu)} on Modal."),
-    ]
+    steps = [f"<b>{html.escape(x['lead'])}</b>"
+             + (f" <q>{html.escape(x['quote'])}</q>" if x["quote"] else "")
+             + html.escape(x["rest"]) for x in F.teach_steps(sk)]
     page = fill("strip.html", {
         "css": css(), "title": f"How it learned this {sk.skill.split('_')[0]}",
         "strips": rows, "steps": "".join(f"<li>{x}</li>" for x in steps),

@@ -3,124 +3,109 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark light">
+<meta name="color-scheme" content="light dark">
 <title>Trained Eye playground</title>
 <link rel="stylesheet" href="static/style.css">
-<script src="static/timeline.js" defer></script>
+<script src="static/film.js" defer></script>
 <script src="static/wall.js" defer></script>
 <script src="static/app.js" defer></script>
 </head>
 <body>
-<header class="top">
-  <div><b>Trained Eye</b> <span class="muted">Teach your glasses to notice anything.</span></div>
-  <nav>
-    <a href="#clips">Clips</a><a href="#skills">How it was built</a>
+<div class="page">
+<header class="masthead">
+  <h1>Trained Eye</h1>
+  <p class="promise">Teach your glasses to notice anything.</p>
+  <nav aria-label="On this page">
+    <a href="#watch">Watch a clip</a><a href="#learned">How it learned</a>
     <a href="#teach">Teach it yourself</a><a href="#results">Results</a>
     <a href="#privacy">Privacy</a>
   </nav>
 </header>
 <main>
-<section id="clips">
-  <h2>Recorded clips</h2>
-  <p class="note">Precomputed. Each timeline is replayed from the frame log that watch mode
-    wrote for the clip: the student's yes-probability for every scored frame, the
-    threshold, and the alerts it spoke. Play the video or click the timeline to move.</p>
-  <div id="clip-list" class="chips"></div>
+<section id="watch">
+  <h2>Watch a clip</h2>
+  <p class="measure soft">A recorded clip, replayed with what watching it wrote down: the
+    film advances with the video, each frame printed with its time and the model's score,
+    and the frame where it spoke is circled.</p>
+  <div id="clip-list" class="choices"></div>
   <div id="clip-view" hidden>
-    <div class="player">
-      <video id="clip-video" controls playsinline preload="metadata"></video>
-      <p id="clip-novideo" class="empty" hidden>No video for this clip; the timeline is
-        from its log.</p>
-      <div id="clip-alert" class="spoken" hidden></div>
+    <div class="stage">
+      <video id="clip-video" controls playsinline muted preload="auto"></video>
+      <div id="spoken" class="spoken" hidden><q id="spoken-line"></q><span id="spoken-when"></span></div>
     </div>
-    <div id="clip-skills" class="chips"></div>
-    <div id="timeline" class="timeline"></div>
-    <p id="clip-readout" class="muted"></p>
+    <div id="hero-film" class="bleed"></div>
+    <p id="clip-readout" class="small soft" aria-live="polite"></p>
   </div>
-  <p id="clips-empty" class="empty" hidden>No recorded clips yet.</p>
+  <p id="clips-empty" class="empty" hidden>No recorded clips here yet.</p>
 </section>
 
-<section id="skills">
-  <h2>How each skill was built</h2>
-  <p class="note">Precomputed. Read from what the teach flow saved for each skill: the
-    keyframes from a 10 second look, where SAM 3.1 found the target, and the Muse Image
-    variations that Muse Spark labelled for training.</p>
-  <div id="skill-list" class="chips"></div>
+<section id="learned">
+  <h2 id="learned-title">How it learned</h2>
+  <div id="skill-list" class="choices"></div>
   <div id="skill-view" hidden>
-    <p id="skill-readback" class="readback"></p>
-    <h3>Keyframes</h3>
-    <div id="keyframes" class="strip"></div>
-    <h3>What it looks at</h3>
-    <div id="outline"></div>
-    <h3>The training wall</h3>
-    <p id="wall-note" class="note" hidden></p>
-    <p id="wall-summary" class="muted"></p>
-    <div id="wall-block">
-      <div class="row"><button id="wall-replay" type="button">Play again</button></div>
-      <div id="wall" class="wall"></div>
-    </div>
+    <div id="sheet" class="sheet"></div>
+    <p id="sheet-note" class="small soft"></p>
+    <ol id="steps" class="steps measure"></ol>
   </div>
-  <p id="skills-empty" class="empty" hidden>No taught skills yet.</p>
+  <p id="skills-empty" class="empty" hidden>No taught skills here yet.</p>
 </section>
 
 <section id="teach">
   <h2>Teach it yourself</h2>
-  <p class="note">Live. Your condition is checked against the policy here first, for free.
-    Then Muse Wonder writes the skill, Muse Image makes 12 variations of the keyframe you
-    pick (6 where the condition holds, 6 near-misses) and Muse Spark labels each one.
-    <span id="teach-cost"></span></p>
+  <p class="measure soft">Say what to watch for and pick a frame. Muse Wonder writes the
+    skill, Muse Image makes 12 variations of your frame (6 where it holds, 6 near-misses)
+    and Muse Spark says yes or no to each. <span id="teach-cost"></span></p>
   <form id="teach-form">
-    <label for="condition">Tell me when</label>
-    <input id="condition" name="condition" maxlength="300" autocomplete="off"
-           placeholder="the kettle light turns off">
-    <fieldset>
-      <legend>Pick a keyframe</legend>
-      <div id="teach-keyframes" class="picker"></div>
-    </fieldset>
-    <div class="row">
+    <label class="ask" for="condition">What should it watch for?</label>
+    <input id="condition" name="condition" type="text" maxlength="300" autocomplete="off"
+           placeholder="Tell me when the kettle light turns off">
+    <p class="small soft pick-note">Pick a frame to start from.</p>
+    <div id="teach-keyframes" class="pick"></div>
+    <div class="actions">
       <button id="teach-go" class="primary" type="submit">Teach it</button>
-      <span id="teach-budget" class="muted"></span>
+      <span id="teach-budget" class="small soft"></span>
     </div>
   </form>
-  <p id="teach-status" class="status" role="status" aria-live="polite"></p>
+  <p id="teach-status" class="status measure" role="status" aria-live="polite"></p>
   <div id="teach-result" hidden>
-    <p id="teach-readback" class="readback"></p>
-    <dl id="teach-spec" class="spec"></dl>
-    <p id="teach-summary" class="muted"></p>
-    <div id="teach-wall" class="wall"></div>
+    <p id="teach-readback" class="readback measure"></p>
+    <div id="teach-sheet"></div>
+    <p id="teach-summary" class="small soft measure"></p>
   </div>
   <div id="teach-examples" hidden>
-    <h3>Precomputed examples</h3>
-    <p class="note">Not from your request: these were made when each skill was taught.</p>
+    <p class="measure soft">Made when each skill was taught, not from your request:</p>
     <div id="examples"></div>
   </div>
 </section>
 
 <section id="results">
   <h2>Results</h2>
-  <p class="note">Precomputed by the evaluation scripts; every number comes from them.</p>
-  <div id="charts" class="charts"></div>
-  <pre id="results-md" hidden></pre>
-  <p id="results-empty" class="empty" hidden>No results yet: the evaluation has not been
-    run for this copy of the playground.</p>
+  <p class="measure soft">Every number here comes from the evaluation scripts.</p>
+  <div id="charts"></div>
+  <details id="results-all" hidden><summary>All the numbers</summary><pre id="results-md"></pre></details>
+  <p id="results-empty" class="empty" hidden>No results yet: the evaluation has not been run
+    for this copy of the playground.</p>
 </section>
 
 <section id="privacy">
   <h2>Privacy</h2>
-  <ul class="plain">
-    <li>Faces are blurred in anything published, this page included.</li>
-    <li>Frames are not stored. Watch mode scores frames in memory and logs only the
-      scores; the clips here were saved on purpose.</li>
-    <li>Generated images keep Muse Image's provenance: they are shown exactly as Muse
-      Image made them. Images made for you go to your browser; the server keeps them only
-      in its call cache, so the same request is not paid for twice.</li>
-    <li>Skills cover objects, states, text, displays, signs and vehicles. They never
-      watch for specific people, bodies or health, and the glasses' capture light is
-      never hidden.</li>
-    <li>This page loads nothing from other sites. A cookie with a random id, and your
-      address, count your live spend; the address is stored only as a salted hash.</li>
-  </ul>
+  <div class="measure">
+    <p>While watching, frames go from the glasses to your phone, then to your Mac and the
+      model that scores them; before an alert is spoken, Muse Spark looks at that one frame
+      to confirm it. Only the scores are written down. Frames are not stored unless you save
+      a clip on purpose, and the clips here were saved that way.</p>
+    <p>Faces are blurred in everything published, this page included.</p>
+    <p>Images made for you go to your browser. The server keeps them only in its call cache,
+      so the same request is not paid for twice, and they keep Muse Image's provenance,
+      exactly as made.</p>
+    <p>Skills watch objects, states, text, displays, signs and vehicles. They never watch
+      for a particular person, for bodies or for health, and the glasses' capture light is
+      never hidden.</p>
+    <p>This page loads nothing from other sites. A cookie with a random id, and your address
+      stored only as a salted hash, count what you spend live.</p>
+  </div>
 </section>
 </main>
+</div>
 </body>
 </html>

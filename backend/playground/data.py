@@ -25,6 +25,8 @@ import math
 import re
 from pathlib import Path
 
+from backend.skills.spec import SKILL_HOLDS
+
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}")
 FILE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,159}")
 VIDEOS = {"clip.mp4": "video/mp4", "clip.webm": "video/webm", "clip.mov": "video/quicktime"}
@@ -192,7 +194,8 @@ def clip_timeline(data_dir: Path, name: str, *, public: bool = False) -> dict | 
     rows = frame_rows(folder / "log.jsonl")
     skills: dict[str, dict] = {}
     for r in rows:
-        s = skills.setdefault(r["skill"], {"threshold": None, "points": [], "alerts": []})
+        s = skills.setdefault(r["skill"], {"threshold": None, "points": [], "alerts": [],
+                                            "hold_s": SKILL_HOLDS.get(r["skill"])})
         s["points"].append([r["t"], r["p"]])
         if r["threshold"] is not None:
             s["threshold"] = r["threshold"]
@@ -205,11 +208,35 @@ def clip_timeline(data_dir: Path, name: str, *, public: bool = False) -> dict | 
             "true_ranges": true_ranges(read_json(folder / "labels.json"))}
 
 
+CAPTIONS = {  # what each chart shows, in one sentence; Experiment 4's comes from te eval
+    "exp1": "Frame F1 and events caught on time for each mix of training data.",
+    "exp2": "Frame F1 with the generated images Spark agreed with, and with all of them.",
+    "exp3": "Frame F1 as the number of generated images grows.",
+    "exp4": "Accuracy against dollars per hour for the three models judging every frame.",
+    "timeline": "One clip as it was watched: the score of every frame, and the alert.",
+}
+
+
+def caption(stem: str, results: dict | None) -> str | None:
+    """One plain sentence under a chart. Experiment 4's is te eval's summary, with the
+    numbers from results.json."""
+    if stem.startswith("exp4") and results:
+        from backend.eval.readme import summary
+
+        line = summary(results)
+        if line:
+            return line[0].upper() + line[1:]
+    return next((words for key, words in CAPTIONS.items() if stem.startswith(key)), None)
+
+
 def results(eval_dir: Path) -> dict:
-    """The SVG charts the evaluation wrote into eval_dir, and results.md as text."""
+    """The SVG charts the evaluation wrote into eval_dir, each with a sentence, and
+    results.md as text."""
     root = Path(eval_dir)
+    scored = read_json(root / "results.json")
+    scored = scored if isinstance(scored, dict) else None
     charts = [{"name": p.stem.replace("_", " ").replace("-", " "),
-               "url": f"media/results/{p.name}"}
+               "url": f"media/results/{p.name}", "caption": caption(p.stem, scored)}
               for p in sorted(root.glob("*.svg")) if FILE.fullmatch(p.name) and p.is_file()]
     md = root / "results.md"
     text = md.read_text(encoding="utf-8") if md.is_file() else None

@@ -1,61 +1,46 @@
-// The training wall (signature visual 1): generated variations flip in one after
-// another, each tagged with Muse Spark's label (green yes, red no); the ones Spark
-// disagreed with, which are left out of training, fade out.
+// Generated variations as a contact sheet: each frame on film with Muse Spark's yes or no
+// in edge print under it. The ones Spark disagreed with, which are left out of training,
+// are dimmed.
 (function () {
   "use strict";
-
-  function node(tag, cls, words) {
-    const n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (words != null) n.textContent = words;
-    return n;
-  }
 
   function describe(t) {
     const made = t.kind === "positive" ? "Made to show the condition" : "Made as a near-miss";
     let words = made + (t.condition ? ": " + t.condition : "") +
       (t.nuisance ? ", " + t.nuisance : "") + ".";
     if (!t.spark_label) return words + " Not labelled yet.";
-    words += " Spark said " + t.spark_label + (t.kept ? "." : ", so it was rejected.");
+    words += " Spark said " + t.spark_label + (t.kept ? "." : ", so it was left out.");
     return t.reason ? words + " " + t.reason : words;
   }
 
-  function tile(t, delayMs) {
-    const fig = node("figure", "tile");
-    fig.style.setProperty("--delay", delayMs + "ms");
+  function cellOf(t) {
     const src = t.image || t.url;
-    if (t.error || !src) {
-      fig.classList.add("failed");
-      fig.textContent = t.error || "No image";
-      return fig;
-    }
-    const img = node("img");
-    img.src = src;
-    img.loading = "lazy";
-    img.alt = describe(t);
-    fig.title = describe(t);
-    fig.appendChild(img);
-    if (t.spark_label) {
-      const cls = t.spark_label === "yes" ? "yes" : t.spark_label === "no" ? "no" : "unsure";
-      fig.appendChild(node("span", "tag " + cls, t.spark_label));
-      if (!t.kept) {
-        fig.classList.add("rejected");
-        fig.appendChild(node("span", "dropped", "rejected"));
-      }
-    }
-    return fig;
+    if (t.error || !src) return Film.cell({ edge: "", title: t.error || "No image" });
+    const c = Film.cell({ src, edge: t.spark_label || "", alt: describe(t), title: describe(t) });
+    if (t.spark_label && !t.kept) c.classList.add("dim");
+    return c;
   }
 
-  // The whole wall at once, staggered so the tiles flip in one by one.
-  function render(box, tiles, stepMs) {
-    const step = stepMs != null ? stepMs
-      : Math.max(25, Math.min(90, 2400 / Math.max(1, tiles.length)));
+  function track(box) {
+    const found = box.querySelector(".track");
+    if (found) return found;
+    const s = Film.strip([], {});
+    box.appendChild(s.film);
+    return s.track;
+  }
+
+  function render(box, tiles) {
     box.textContent = "";
-    tiles.forEach((t, i) => box.appendChild(tile(t, Math.round(i * step))));
+    const t = track(box);
+    tiles.forEach((tile) => t.appendChild(cellOf(tile)));
+    requestAnimationFrame(() => Film.holes(t));
   }
 
-  // One tile as it arrives (a live run).
-  function add(box, t) { box.appendChild(tile(t, 0)); }
+  function add(box, tile) {
+    const t = track(box);
+    t.appendChild(cellOf(tile));
+    requestAnimationFrame(() => Film.holes(t));
+  }
 
   function summary(tiles) {
     const labelled = tiles.filter((t) => t.spark_label);
@@ -66,9 +51,8 @@
     const parts = [`yes to ${yes}`, `no to ${no}`];
     if (unsure) parts.push(`unsure to ${unsure}`);
     return `Spark said ${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]} ` +
-      `of these ${labelled.length}; ` +
-      `${kept} agree with what they were made to show and are kept, ` +
-      `${labelled.length - kept} are rejected.`;
+      `of these ${labelled.length}; ${kept} agree with what they were made to show and ` +
+      `are kept, ${labelled.length - kept} are left out.`;
   }
 
   window.Wall = { render, add, summary };

@@ -116,13 +116,53 @@ def skill_detail(data_dir: Path, name: str, *, public: bool = False) -> dict | N
                  for f in keyframe_files(folder, public)]
     rows = variations(folder, need_files=not public)
     originals = blurred_files(folder / BLURRED_KEYFRAMES) if public else None
+    mark_keyframes(folder, keyframes, originals)
     return {"name": name, "request": spec.request, "read_back": read_back(spec),
             "target": spec.target.sam_prompt, "positive": spec.positive,
             "negatives": spec.negatives, "alert": spec.alert, "keyframes": keyframes,
+            "steps": steps(data_dir, name),
             "roi": outline(folder, keyframes, spec.target.sam_prompt, originals),
             "wall": [] if public else [tile(name, r) for r in spread(rows, WALL_TILES)],
             "wall_total": len(rows), "wall_note": WALL_NOTE if public else None,
             "label_stats": read_json(folder / "label_stats.json")}
+
+
+def mark_keyframes(folder: Path, keyframes: list[dict],
+                   originals: dict[str, str] | None = None) -> None:
+    """Give each keyframe its time in the teaching clip (keyframes.json, from te teach) and
+    SAM's box with the frame's size (roi.json, keyed by the original's SHA-256; for blurred
+    keyframes `originals` gives it). Either is None where it is not known."""
+    times = {k.get("name"): number(k.get("t_s"))
+             for k in (read_json(folder / "keyframes.json", {}) or {}).get("keyframes") or []
+             if isinstance(k, dict)}
+    raw = read_json(folder / "roi.json", [])
+    rois = {r.get("keyframe_sha256"): reparsed(r) for r in raw if isinstance(r, dict)} \
+        if isinstance(raw, list) else {}
+    for kf in keyframes:
+        kf["t"] = times.get(kf["file"])
+        if originals is not None:
+            sha = originals.get(kf["file"])
+        else:
+            path = child(folder, "keyframes", kf["file"])
+            sha = sha256_hex(path.read_bytes()) if path else None
+        roi = rois.get(sha) or {}
+        kf["box"] = box_of(roi)
+        kf["size"] = ([roi["width"], roi["height"]]
+                      if number(roi.get("width")) and number(roi.get("height")) else None)
+
+
+def steps(data_dir: Path, name: str) -> list[dict] | None:
+    """How it learned, in four steps with the numbers of the skill's latest training run
+    (backend/art/facts.py, as the README strip); None until a run has finished."""
+    from backend.art import facts
+
+    run = facts.trained_run(Path(data_dir), name)
+    if run is None:
+        return None
+    try:
+        return facts.teach_steps(facts.skill_facts(Path(data_dir), name, run))
+    except facts.MissingFact:
+        return None
 
 
 def box_of(roi: dict) -> list[float] | None:

@@ -57,6 +57,16 @@ def test_skill_detail_wall_and_keyframes(tmp_path):
         assert skills.skill_detail(data_dir, name) is None
 
 
+def test_keyframes_carry_their_time_and_box_and_steps_wait_for_a_run(tmp_path):
+    data_dir = make_skill(tmp_path)
+    folder = data_dir / "skills" / "burner_left_on"
+    detail = skills.skill_detail(data_dir, "burner_left_on")
+    times = json.loads((folder / "keyframes.json").read_text())["keyframes"]  # te teach's
+    assert [k["t"] for k in detail["keyframes"]] == [k["t_s"] for k in times]
+    assert all(k["box"] is None for k in detail["keyframes"])  # the fake SAM found nothing
+    assert detail["steps"] is None  # no finished training run holds this skill yet
+
+
 def test_wall_is_spread_over_all_variations(tmp_path, monkeypatch):
     data_dir = make_skill(tmp_path)
     monkeypatch.setattr(skills, "WALL_TILES", 5)

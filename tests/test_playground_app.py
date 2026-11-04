@@ -55,10 +55,10 @@ def test_page_and_static_files_load(tmp_path):
     assert page.headers["content-type"].startswith("text/html") and COOKIE in page.cookies
     assert "default-src 'self'" in page.headers["content-security-policy"]
     html = page.text
-    for words in ("Precomputed", "Faces are blurred", "Frames are not stored", "provenance"):
+    for words in ("Watch a clip", "Faces are blurred", "Frames are not stored", "provenance"):
         assert words in html
     linked = re.findall(r'(?:src|href)="(static/[^"]+)"', html)
-    assert sorted(linked) == ["static/app.js", "static/style.css", "static/timeline.js",
+    assert sorted(linked) == ["static/app.js", "static/film.js", "static/style.css",
                               "static/wall.js"]
     for path in linked:
         r = client.get("/" + path)
@@ -68,9 +68,9 @@ def test_page_and_static_files_load(tmp_path):
             continue
         text = f.read_text(encoding="utf-8")
         assert "—" not in text and "–" not in text and "https://" not in text
-    font = client.get("/static/fonts/InterVariable.woff2")  # bundled, not fetched from a CDN
+    font = client.get("/static/fonts/archivo-latin-wdth-normal.woff2")  # bundled, no CDN
     assert font.status_code == 200 and font.content[:4] == b"wOF2"
-    assert client.get("/static/fonts/LICENSE.txt").text.count("SIL Open Font License") >= 1
+    assert client.get("/static/fonts/Archivo-OFL.txt").text.count("SIL OPEN FONT LICENSE") >= 1
 
 
 def test_data_apis_read_the_fixture(tmp_path):

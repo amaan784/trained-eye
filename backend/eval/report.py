@@ -35,6 +35,10 @@ calibration (optional): what te replay --run replays before the test clips, so e
 threshold comes from its own validation clips: [{"run", "skill", "clips": [{"clip", "log",
 "labels"}]}], calibrated into data/watch/<run>/<skill>/threshold.json (te calibrate --run).
 
+footage (optional): where the test clips come from, as the results should name it, e.g.
+"other kitchens (EPIC-KITCHENS-100, head-mounted camera)"; results.md puts it in its
+heading, so results on different footage are never read as one.
+
 on_time_s (optional): {skill: seconds}, to change a skill's on-time window from its
 default (metrics.ON_TIME_S): an event's alert is on time when it comes within that many
 seconds after the end of the skill's hold (the hold the logs record). An evaluation whose
@@ -134,6 +138,7 @@ class Calibration(BaseModel):
 
 class Plan(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    footage: str | None = Field(None, min_length=1, max_length=200)
     on_time_s: dict[str, float] = {}
     evaluations: list[Evaluation]
     calibration: list[Calibration] = []
@@ -374,7 +379,8 @@ def run_eval(plan_path: Path, out_dir: Path, *, log_wandb: bool = False,
     out_dir.mkdir(parents=True, exist_ok=True)
     counts = {e.name: count(e, base, plan.window(e.skill)) for e in plan.evaluations}
     entries = [score(e, base, plan.window(e.skill), counts[e.name]) for e in plan.evaluations]
-    results = {"plan": plan_path.name, "on_time": on_time(plan, entries),
+    results = {"plan": plan_path.name, "footage": plan.footage,
+               "on_time": on_time(plan, entries),
                "evaluations": entries,
                "experiment4": pool_judges(entries, counts),
                **side_results(sorted({e.skill for e in plan.evaluations}), data_dir,

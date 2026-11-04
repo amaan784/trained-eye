@@ -247,8 +247,11 @@ def on_time_text(results: dict) -> str:
 
 def render(results: dict) -> str:
     """The whole results.md for the dict run_eval returns."""
+    footage = results.get("footage")
     lines = [
-        "# Evaluation results", "",
+        f"# Evaluation results: {footage}" if footage else "# Evaluation results", "",
+        *([f"Test footage: {footage}. Results on other footage are reported apart.", ""]
+          if footage else []),
         (f"Computed by `te eval` from the plan {results['plan']}: the frame logs of `te watch` "
          "scored against the human labels of each test clip. Every number below comes from "
          "that computation, and results.json holds all of them. n/a means there was nothing "

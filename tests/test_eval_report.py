@@ -86,6 +86,21 @@ def test_run_eval_writes_results_tables_and_charts(plan, tmp_path):
     assert md.isascii()  # plain text: no em or en dashes either
 
 
+def test_the_footage_a_plan_names_heads_its_results(plan, tmp_path):
+    out = tmp_path / "out"
+    assert run_eval(plan, out)["footage"] is None
+    assert (out / "results.md").read_text().startswith("# Evaluation results\n")
+    data = json.loads(plan.read_text())
+    data["footage"] = "other kitchens (EPIC-KITCHENS-100, head-mounted camera)"
+    plan.write_text(json.dumps(data))
+    results = run_eval(plan, out)
+    md = (out / "results.md").read_text()
+    assert results["footage"] == data["footage"]
+    assert md.startswith("# Evaluation results: other kitchens (EPIC-KITCHENS-100, "
+                         "head-mounted camera)\n")
+    assert "Results on other footage are reported apart." in md
+
+
 def test_bad_plans_are_refused(tmp_path):
     def check(evaluations, match):
         path = tmp_path / "plan.json"

@@ -119,9 +119,22 @@ simulator), the product model and the first results; see "Live runs, Nov 4" belo
   was typed). Upload waits for the author: huggingface_hub is not installed, and the repo
   name is theirs to pick.
 - Commits are pushed to main from this Mac through the GitHub CLI's sign-in, as the author.
-- Waiting for the author's footage: the fridge glasses test clip with its labels
-  (`data/clips/fridge_left_open/`) and the burner teaching clip. The design kit restyle
-  (README art, playground, iPhone app) comes after the glasses replay.
+- The contact-sheet restyle from the author's design kit, started while the footage was
+  not in yet: Archivo (OFL) with static instances for the app (`python -m
+  backend.art.fonts`); the README's How it learned strip from real keyframe times
+  (te teach now writes `keyframes.json`) and SAM's boxes; the Meta models table in place
+  of cards.png; the charts in the design's colours; the playground (the hero replays a clip
+  above an advancing film strip and rings the alert frame; checked at phone width with a
+  local clip that was then deleted); the iPhone app (Theme.swift, Watch, Teach, Skills),
+  built and screenshotted on the simulator. The simulator's synthetic taps did not flip the
+  Skills switch, so watching with a skill on is not checked there.
+- Still waiting for the author's footage: the fridge glasses test clip with its labels
+  (`data/clips/fridge_left_open/`), for the main test set, the banner
+  (`python -m backend.art.build --only banner --replay-clip <name>`) and the playground's
+  hero clip; and the burner teaching clip.
+- The fridge skill's spoken alert, written by Muse Wonder, holds an em dash ("Heads up, your
+  fridge door is open!" with a dash after "Heads up"); the banner and the playground quote it
+  as it is spoken.
 
 ### Failed, and fixed at the root (each with a test)
 

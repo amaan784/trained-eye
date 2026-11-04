@@ -279,7 +279,8 @@ open needs the Mac, the keys, the glasses or new footage:
   yet; the cookbook has no Mac path for a fine-tuned Glimmer)
 - [x] Teaching from the phone: `/teach/start`, `/teach/status`, `/teach/answer` (they need
   `SERVER_TOKEN`), and `GET /skills` for the app
-- [x] The iOS app's code in `ios/` (never compiled: needs Xcode on the Mac)
+- [x] The iOS app's code in `ios/`; it builds for the simulator (Xcode 27.2, Nov 4, from
+  `ios/project.yml` with XcodeGen); not run on a phone or the glasses yet
 - [ ] The first real export and endpoint, then `TE_STUDENT_URL`; the first Xcode build
 - [x] `te calibrate`: a skill's threshold from replayed validation clips and their true
   time ranges
@@ -549,10 +550,10 @@ sources disagree with SPEC.md, the sources win.
 - Image token counts are unknown until the first calls: estimates assume 1,500 tokens per
   image, then use the mean measured from the ledger's compile and label calls.
 - Unverified until run for real: everything on Modal (preflight, detached runs, base and
-  multi-adapter serving), the W&B report's API calls, and every iOS change (not compiled;
+  multi-adapter serving), the W&B report's API calls, and the iOS app on a phone (it builds;
   `ios/README.md` lists the checks on the glasses).
 - The teach flow takes keyframes from a video file or a folder of frames; the iOS Teach
-  screen (M2) sends the 10 s capture as frames, three a second (not compiled yet).
+  screen (M2) sends the 10 s capture as frames, three a second (not run on a phone yet).
 
 ## Spend
 

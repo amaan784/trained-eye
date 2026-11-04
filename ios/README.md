@@ -299,11 +299,11 @@ glasses, and each needs one check on the glasses (and in the simulator where it 
   after `te serve-student` and `te calibrate`, "Ready, threshold" and the number. A backend
   without the `training` and `served` fields shows the earlier lines.
 
-Unverified, because nothing was compiled or run:
+Unverified until it runs on a phone with the glasses (it builds for the simulator with Xcode
+27.2, Nov 4, so the code compiles against DAT 1.0.1):
 
-- Every DAT call is copied from the samples, but its exact signature (typed throws, whether
-  a listener closure is `@Sendable`, enum cases a `switch` covers) is only known from how the
-  samples use it.
+- Every DAT call is copied from the samples. They compile against 1.0.1 now; how they behave
+  with real glasses is known only from how the samples use them.
 - `NSAllowsLocalNetworking` letting plain `http` and `ws` reach the Mac's IP address. If it
   does not, a Debug-only ATS exception for that address is the fallback.
 - That `URLSessionWebSocketTask` and the spoken alerts keep working in the background while

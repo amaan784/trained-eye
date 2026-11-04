@@ -99,6 +99,11 @@ def test_the_footage_a_plan_names_heads_its_results(plan, tmp_path):
     assert md.startswith("# Evaluation results: other kitchens (EPIC-KITCHENS-100, "
                          "head-mounted camera)\n")
     assert "Results on other footage are reported apart." in md
+    assert "calibrated for frame F1" not in md
+    data["threshold_objective"] = "frames"
+    plan.write_text(json.dumps(data))
+    assert run_eval(plan, out)["threshold_objective"] == "frames"
+    assert "Thresholds here were calibrated for frame F1" in (out / "results.md").read_text()
 
 
 def test_bad_plans_are_refused(tmp_path):

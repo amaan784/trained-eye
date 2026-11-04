@@ -39,9 +39,11 @@ from backend.inference.student import StudentError
 from backend.watch.watcher import FrameLog, WatchedSkill, Watcher
 
 WAIT_S = 15.0  # between warm-up requests
-# Frames scored at once (our choice): vLLM batches requests and Spark allows 3,000 a
-# minute; the watch trigger still sees the scores in frame order.
-SCORE_WORKERS = 8
+# Frames scored at once (our choice): vLLM batches a student's requests; Muse Spark takes
+# about 12 s a frame (it reasons first) and allows 3,000 requests a minute, so it gets more
+# (the client's pacer still keeps it under config.MAX_RPM). The watch trigger still sees
+# the scores in frame order.
+SCORE_WORKERS = {"student": 8, "spark": 24}
 DEFAULT_WARM_UP_S = 900.0  # te replay --warm-up-s; modal_serve.py allows 30 min to start
 RETRY_STATUS = (408, 425, 429)  # client errors worth sending again
 STATUS = re.compile(r"Client error '(\d{3})")

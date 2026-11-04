@@ -250,7 +250,7 @@ def cmd_replay(args) -> int:
                 skill.trigger.threshold, skill.threshold_source = 1.0, "spark"
             scored, errors = replay.replay_clip(job, skill, scoring, frames, run=run,
                                                 confirm=confirm if kind == "test" else None,
-                                                workers=replay.SCORE_WORKERS)
+                                                workers=replay.SCORE_WORKERS[scorer])
             print(f"  {kind} {shown_path(job.log)}: {scored} frames scored, {errors} student "
                   f"errors, threshold {skill.trigger.threshold:.3f} ({skill.threshold_source})")
             if scored:
@@ -268,10 +268,12 @@ def cmd_replay(args) -> int:
             continue
         if target.is_file() and not (any(log in replayed for log in logs)
                                      or _calibration_changed(
-                                         target, logs, labels, _spec_hold(settings, cal.skill))):
+                                         target, logs, labels, _spec_hold(settings, cal.skill),
+                                         plan.threshold_objective)):
             continue
         if cmd_calibrate(Namespace(skill=cal.skill, run=run, log=[str(p) for p in logs],
-                                   labels=[str(p) for p in labels])) != 0:
+                                   labels=[str(p) for p in labels],
+                                   objective=plan.threshold_objective)) != 0:
             uncalibrated.add(cal.skill)  # an older threshold must not score the test clips
     for job in [j for j in todo if j.kind == "test" and j.skill in uncalibrated]:
         held[job.log] = (f"te calibrate --run {run} failed for {job.skill} (see above): fix "
@@ -291,7 +293,7 @@ def cmd_replay(args) -> int:
 
 
 def _calibration_changed(target: Path, logs: list[Path], labels: list[Path],
-                         hold_s: float | None = None) -> bool:
+                         hold_s: float | None = None, objective: str = "alerts") -> bool:
     """Whether a run threshold was computed on other validation clips than the plan's now,
     before one of their logs or labels changed (labels added after a replay), or with
     another hold than the skill's spec has now (`hold_s`, when known)."""
@@ -300,7 +302,10 @@ def _calibration_changed(target: Path, logs: list[Path], labels: list[Path],
         used = saved.get("clips") or []
         recorded = {(c.get("log"), c.get("labels")) for c in used}
         hold_then = saved.get("hold_s")
+        objective_then = saved.get("objective", "alerts")
     except (OSError, ValueError, AttributeError):
+        return True
+    if objective_then != objective:  # the plan now calibrates for something else
         return True
     if hold_s is not None and (hold_then is None or float(hold_then) != hold_s):
         return True

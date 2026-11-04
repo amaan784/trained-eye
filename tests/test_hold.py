@@ -392,6 +392,8 @@ def test_a_threshold_records_its_hold_and_te_replay_recalibrates_when_it_changes
     target.write_text(json.dumps(saved))
     assert not _calibration_changed(target, [log], [labels], 10.0)
     assert _calibration_changed(target, [log], [labels], 30.0)  # the spec's hold changed
+    # the plan now calibrates for frames, the saved threshold was for alerts
+    assert _calibration_changed(target, [log], [labels], 10.0, "frames")
     target.write_text(json.dumps({k: v for k, v in saved.items() if k != "hold_s"}))
     assert _calibration_changed(target, [log], [labels], 10.0)  # calibrated before holds
 

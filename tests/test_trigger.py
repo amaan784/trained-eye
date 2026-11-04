@@ -91,3 +91,20 @@ def test_labelled_frames_from_a_watch_log():
     assert [(f.t, f.p, f.truth) for f in frames] == [(0.0, 0.1, False), (2.0, 0.8, True)]
     with pytest.raises(ValueError):
         labelled_frames(rows, "burner_left_on", [[3, 1]])
+
+
+def test_calibrating_for_frames_picks_the_best_frame_f1():
+    # EPIC-KITCHENS' fridge stretches are mostly shorter than the 30 s hold, so its
+    # thresholds are calibrated for frames: here 0.4 splits the frames best (F1 1.0),
+    # while the alert rule takes the lowest threshold without a false alarm.
+    from backend.watch.trigger import calibrate_frames
+
+    probs = [0.1, 0.3, 0.2, 0.9, 0.8, 0.95, 0.85, 0.35, 0.2, 0.1]
+    truths = [False, False, False, True, True, True, True, False, False, False]
+    clip = [Frame(float(i), p, t) for i, (p, t) in enumerate(zip(probs, truths, strict=True))]
+    result = calibrate_frames([clip], cooldown_s=60.0, hold_s=30.0)
+    assert result["threshold"] == 0.8 and result["frame_f1"] == 1.0
+    assert (result["frame_tp"], result["frame_fp"], result["frame_fn"]) == (4, 0, 0)
+    assert result["events"] == 0  # a 4 s stretch never reaches the 30 s hold
+    with pytest.raises(ValueError):
+        calibrate_frames([], 60.0)

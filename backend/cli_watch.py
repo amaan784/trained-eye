@@ -122,7 +122,7 @@ def served_run_note(settings, skill: str, run: str | None) -> str | None:
 
 def cmd_calibrate(args) -> int:
     from backend.skills.spec import SkillSpec, check_name
-    from backend.watch.trigger import calibrate, labelled_frames
+    from backend.watch.trigger import calibrate, calibrate_frames, labelled_frames
     from backend.watch.watcher import run_threshold_file
 
     settings = load_settings()
@@ -152,7 +152,9 @@ def cmd_calibrate(args) -> int:
             clips.append(frames)
             sources.append({"log": Path(log).name, "labels": Path(labels).name,
                             "frames": len(frames)})
-        result = calibrate(clips, float(spec.cooldown_s), hold_s=float(spec.hold_s))
+        objective = getattr(args, "objective", None) or "alerts"
+        pick = calibrate_frames if objective == "frames" else calibrate
+        result = pick(clips, float(spec.cooldown_s), hold_s=float(spec.hold_s))
     except (OSError, ValueError, KeyError, TypeError) as err:
         print(f"te: {err}", file=sys.stderr)
         return 2
@@ -162,7 +164,7 @@ def cmd_calibrate(args) -> int:
               f"{minutes:.0f} minutes: the student needs more training", file=sys.stderr)
         return 1
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps({**result, "hold_s": spec.hold_s,
+    target.write_text(json.dumps({**result, "objective": objective, "hold_s": spec.hold_s,
                                   **({"run": args.run} if args.run else {}),
                                   "clips": sources}, indent=1) + "\n")
     delay = result["median_delay_s"]
@@ -170,6 +172,8 @@ def cmd_calibrate(args) -> int:
     print(f"{args.skill}{for_run}: threshold {result['threshold']:.3f} on {minutes:.0f} minutes of "
           f"footage: {result['false_alarms']} false alarms, {result['caught']} of "
           f"{result['events']} events caught"
+          + (f", frame F1 {result['frame_f1']:.3f} (calibrated for frames)"
+             if objective == "frames" else "")
           + (f", median delay {delay:.0f} s" if delay is not None else "")
           + (f" (after the {spec.hold_s} s hold)" if spec.hold_s and delay is not None else ""))
     print(f"saved: {shown_path(target)}")
@@ -208,4 +212,8 @@ def add_parsers(sub) -> None:
                      help='JSON {"true": [[start_s, end_s], ...]} for the clip of that log')
     cal.add_argument("--run", help="the run these logs replayed (te watch --run): writes "
                      "data/watch/<run>/<skill>/threshold.json, not the skill-wide file")
+    cal.add_argument("--objective", choices=["alerts", "frames"], default="alerts",
+                     help="alerts (default): the lowest threshold with at most one false "
+                     "alarm an hour; frames: the best frame F1, for footage with too few "
+                     "events past the hold to judge alerts")
     cal.set_defaults(func=cmd_calibrate)

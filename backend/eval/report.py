@@ -35,6 +35,11 @@ calibration (optional): what te replay --run replays before the test clips, so e
 threshold comes from its own validation clips: [{"run", "skill", "clips": [{"clip", "log",
 "labels"}]}], calibrated into data/watch/<run>/<skill>/threshold.json (te calibrate --run).
 
+threshold_objective (optional): what te replay calibrates each run's threshold for:
+"alerts" (the default: the lowest threshold with at most one false alarm an hour) or
+"frames" (the best frame F1 on the calibration clips), for footage with too few events
+past the skill's hold to judge alerts on.
+
 footage (optional): where the test clips come from, as the results should name it, e.g.
 "other kitchens (EPIC-KITCHENS-100, head-mounted camera)"; results.md puts it in its
 heading, so results on different footage are never read as one.
@@ -139,6 +144,7 @@ class Calibration(BaseModel):
 class Plan(BaseModel):
     model_config = ConfigDict(extra="forbid")
     footage: str | None = Field(None, min_length=1, max_length=200)
+    threshold_objective: Literal["alerts", "frames"] = "alerts"
     on_time_s: dict[str, float] = {}
     evaluations: list[Evaluation]
     calibration: list[Calibration] = []
@@ -380,6 +386,7 @@ def run_eval(plan_path: Path, out_dir: Path, *, log_wandb: bool = False,
     counts = {e.name: count(e, base, plan.window(e.skill)) for e in plan.evaluations}
     entries = [score(e, base, plan.window(e.skill), counts[e.name]) for e in plan.evaluations]
     results = {"plan": plan_path.name, "footage": plan.footage,
+               "threshold_objective": plan.threshold_objective,
                "on_time": on_time(plan, entries),
                "evaluations": entries,
                "experiment4": pool_judges(entries, counts),

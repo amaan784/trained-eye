@@ -183,6 +183,34 @@ def calibrate(clips: Sequence[Sequence[Frame]], cooldown_s: float,
             "never_fires": True}
 
 
+OBJECTIVES = ("alerts", "frames")
+
+
+def calibrate_frames(clips: Sequence[Sequence[Frame]], cooldown_s: float,
+                     hold_s: float = 0.0) -> dict:
+    """The threshold with the best frame F1 over the clips (ties: the higher threshold,
+    fewer false yeses), with the same evaluation as calibrate() plus the frame counts.
+    For footage whose events are too few or too short to judge alerts on (a frame says
+    yes when it scores at or over the threshold, as the evaluation counts it). Raises
+    ValueError without frames."""
+    frames = [f for c in clips for f in c]
+    if not frames:
+        raise ValueError("no labelled frames to calibrate on")
+    positives = sum(f.truth for f in frames)
+    best = None
+    for threshold in sorted({min(1.0, math.floor(f.p * 1000) / 1000) for f in frames} | {1.0}):
+        tp = sum(f.truth and f.p >= threshold for f in frames)
+        fp = sum((not f.truth) and f.p >= threshold for f in frames)
+        f1 = 2 * tp / (2 * tp + fp + (positives - tp)) if positives else 0.0
+        if best is None or f1 >= best[0]:
+            best = (f1, threshold, tp, fp)
+    f1, threshold, tp, fp = best
+    result = evaluate([sorted(c, key=lambda f: f.t) for c in clips if c], threshold,
+                      cooldown_s, hold_s)
+    return {**result, "frame_f1": round(f1, 4), "frame_tp": tp, "frame_fp": fp,
+            "frame_fn": positives - tp}
+
+
 def labelled_frames(rows: Iterable[dict], skill: str,
                     true_ranges: Sequence[Sequence[float]]) -> list[Frame]:
     """Frames of one skill from a watch frame log (te watch), labelled true inside the

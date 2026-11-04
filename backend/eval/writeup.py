@@ -252,6 +252,10 @@ def render(results: dict) -> str:
         f"# Evaluation results: {footage}" if footage else "# Evaluation results", "",
         *([f"Test footage: {footage}. Results on other footage are reported apart.", ""]
           if footage else []),
+        *([("Thresholds here were calibrated for frame F1 on the calibration clips, not for "
+           "alerts: this footage has too few events that last past the skill's hold to judge "
+           "alerts on, so read the frame columns."), ""]
+          if results.get("threshold_objective") == "frames" else []),
         (f"Computed by `te eval` from the plan {results['plan']}: the frame logs of `te watch` "
          "scored against the human labels of each test clip. Every number below comes from "
          "that computation, and results.json holds all of them. n/a means there was nothing "

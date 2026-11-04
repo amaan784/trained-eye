@@ -31,6 +31,7 @@ from backend.release.faces import IMAGE_SUFFIXES, SOURCES_FILE
 
 PLAN_FIELDS = tuple(f.name for f in fields(synth.Variation))  # what regenerates an image
 PROVENANCE_FIELDS = ("image_sha256", "model", "cache_key")  # what checks it
+OPTIONAL_FIELDS = ("reasoning_strength",)  # not in manifests from before Nov 4: the default
 
 
 def read_rows(path: Path) -> list[dict]:
@@ -39,7 +40,8 @@ def read_rows(path: Path) -> list[dict]:
         if not line.strip():
             continue
         row = json.loads(line)
-        missing = [f for f in PLAN_FIELDS if not isinstance(row.get(f), str)]
+        missing = [f for f in PLAN_FIELDS if f not in OPTIONAL_FIELDS
+                   and not isinstance(row.get(f), str)]
         if missing:
             raise ValueError(f"{path} line {n}: no {', '.join(missing)}")
         rows.append(row)
@@ -119,7 +121,7 @@ def regenerate(client: MetaClient, manifest: Path, keyframes_dir: Path, out_dir:
         raise ValueError(f"{out_dir} holds the manifest being read: pick another folder")
     rows = read_rows(manifest)
     todo = [r for r in rows if not failed(r)]
-    plan = [synth.Variation(**{f: r[f] for f in PLAN_FIELDS}) for r in todo]
+    plan = [synth.Variation(**{f: r.get(f) for f in PLAN_FIELDS}) for r in todo]
     keyframes, mapped = find_keyframes(keyframes_dir, {v.keyframe_sha256 for v in plan},
                                        mapping)
     report = {"manifest": str(manifest), "planned": len(plan),

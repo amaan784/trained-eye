@@ -233,3 +233,15 @@ def test_the_student_reply_budget():
         with pytest.raises(ConfigError, match="TE_STUDENT_MAX_TOKENS must be a whole number, "
                            f"1 or more, got '{raw}'"):
             load_settings(env={"TE_STUDENT_MAX_TOKENS": raw}, env_file=None)
+
+
+@pytest.mark.parametrize("raw, want", [(None, "low"), ("", "low"), ("low", "low"),
+                                       ("default", None), ("HIGH", None)])
+def test_image_reasoning_for_new_teach_plans(raw, want):
+    env = {} if raw is None else {"TE_IMAGE_REASONING": raw}
+    assert load_settings(env=env, env_file=None).image_reasoning == want
+
+
+def test_an_unknown_image_reasoning_is_refused():
+    with pytest.raises(ConfigError, match="TE_IMAGE_REASONING"):
+        load_settings(env={"TE_IMAGE_REASONING": "medium"}, env_file=None)

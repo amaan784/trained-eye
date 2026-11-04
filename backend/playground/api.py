@@ -127,7 +127,8 @@ class Teacher:
             job.spec = {"target": spec.target.description, "look_at": spec.target.sam_prompt,
                         "positive": spec.positive, "negatives": spec.negatives,
                         "alert": spec.alert}
-            plan = synth.plan_variations(spec, [sha256_hex(image)], runs.POSITIVES, runs.NEGATIVES)
+            plan = synth.plan_variations(spec, [sha256_hex(image)], runs.POSITIVES, runs.NEGATIVES,
+                                         reasoning_strength=client.settings.image_reasoning)
             pool = ThreadPoolExecutor(self.workers, thread_name_prefix=f"playground-{job.id}")
             try:
                 futures = [pool.submit(self._variation, client, spec, v, image) for v in plan]

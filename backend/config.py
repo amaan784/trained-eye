@@ -108,6 +108,11 @@ class Settings:
     # the processor preflight shows the template mishandles system turns. Watch mode asks
     # the student the way the skill's dataset was written, whatever this says now.
     system_in_user: bool = False
+    # Muse Image's reasoning_strength for new teach plans: "low" (the default since Nov 4:
+    # 8 fresh edits took 15.6 s instead of 26.2 s at the API's default, and Spark agreed
+    # with all 8 each way), or None for the API's default (high), which earlier skills'
+    # images were made with, so TE_IMAGE_REASONING=default reruns them from the cache.
+    image_reasoning: str | None = "low"
     secrets: Mapping[str, str] = field(default_factory=dict, repr=False)
 
     @property
@@ -239,6 +244,7 @@ def load_settings(
         student_model=(merged.get("TE_STUDENT_MODEL") or "").strip() or Settings.student_model,
         student_max_tokens=student_max_tokens,
         system_in_user=switch("TE_SYSTEM_IN_USER", Settings.system_in_user),
+        image_reasoning=image_reasoning(merged.get("TE_IMAGE_REASONING")),
         secrets={name: merged[name] for name in SECRET_NAMES if merged.get(name)},
     )
 
@@ -249,6 +255,16 @@ def shown_path(path: Path) -> str:
         return str(Path(path).resolve().relative_to(Path.cwd().resolve()))
     except ValueError:
         return str(Path(path).resolve())
+
+
+def image_reasoning(raw: str | None) -> str | None:
+    """TE_IMAGE_REASONING: low (the default) or default (the API's own, high)."""
+    value = (raw or "").strip().lower()
+    if value in ("", "low"):
+        return Settings.image_reasoning if not value else "low"
+    if value in ("default", "high"):
+        return None  # the field left out, as the images made before Nov 4 were
+    raise ConfigError(f"TE_IMAGE_REASONING must be low or default, not {raw!r}")
 
 
 def describe(settings: Settings) -> str:

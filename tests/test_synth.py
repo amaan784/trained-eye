@@ -57,7 +57,7 @@ def test_the_manifest_records_this_run_even_when_it_stops(tmp_path):
     from backend.meta.client import OutputError
 
     class Rejects:
-        def image_edit(self, image, prompt, skill=None):
+        def image_edit(self, image, prompt, skill=None, reasoning_strength=None):
             raise OutputError("no images returned")
 
     (tmp_path / "manifest.jsonl").write_text('{"id": "from an older plan"}\n')
@@ -67,3 +67,42 @@ def test_the_manifest_records_this_run_even_when_it_stops(tmp_path):
     rows = [json.loads(line) for line in (tmp_path / "manifest.jsonl").read_text().splitlines()]
     assert len(rows) == 6 and all(r["file"] is None and r["error"] for r in rows)
     assert [r["id"] for r in rows] == [v.id for v in plan[:6]]
+
+
+def test_plans_record_the_image_reasoning_and_generate_asks_with_it(tmp_path):
+    import json
+
+    from backend.dataengine.synth import generate
+
+    asked = []
+
+    class Edits:
+        def image_edit(self, image, prompt, skill=None, reasoning_strength=None):
+            import types
+            asked.append(reasoning_strength)
+            info = types.SimpleNamespace(model="muse-image-1.0", cache_key="k", billed_usd=0.01,
+                                         cached=False, cost_usd=0.01)
+            return types.SimpleNamespace(images=[b"\x89PNG\r\n\x1a\n" + prompt.encode()],
+                                         info=info)
+
+    plan = plan_variations(SPEC, ["a" * 64], 2, 1, reasoning_strength="low")
+    assert {v.reasoning_strength for v in plan} == {"low"}
+    assert [v.prompt for v in plan] == [v.prompt for v in plan_variations(SPEC, ["a" * 64], 2, 1)]
+    generate(Edits(), plan, {"a" * 64: b"jpeg"}, tmp_path)
+    assert asked == ["low"] * 3
+    rows = [json.loads(line) for line in (tmp_path / "manifest.jsonl").read_text().splitlines()]
+    assert {r["reasoning_strength"] for r in rows} == {"low"}
+
+
+def test_an_older_manifest_without_the_reasoning_regenerates_with_the_default(tmp_path):
+    import json
+    from dataclasses import asdict
+
+    from backend.regenerate import PLAN_FIELDS, read_rows
+
+    row = asdict(plan_variations(SPEC, ["a" * 64], 1, 0)[0])
+    row.pop("reasoning_strength")  # as written before Nov 4
+    path = tmp_path / "manifest.jsonl"
+    path.write_text(json.dumps(row) + "\n")
+    [read] = read_rows(path)
+    assert {f: read.get(f) for f in PLAN_FIELDS}["reasoning_strength"] is None

@@ -53,10 +53,14 @@ class Variation:
     nuisance: str
     keyframe_sha256: str
     prompt: str
+    # Muse Image's reasoning_strength ("low"), or None for the API's default: recorded in
+    # the manifest, so te regenerate asks the same way
+    reasoning_strength: str | None = None
 
 
 def plan_variations(
     spec: SkillSpec, keyframe_hashes: list[str], positives: int = 150, negatives: int = 150,
+    reasoning_strength: str | None = None,
 ) -> list[Variation]:
     """Deterministic plan: same spec and keyframes give the same prompts and ids.
 
@@ -90,6 +94,7 @@ def plan_variations(
                 id=f"{spec.name}-{kind[:3]}-{i:03d}-{digest.hexdigest()[:8]}",
                 skill=spec.name, label=label, kind=kind, condition=condition,
                 nuisance=nuisance, keyframe_sha256=keyframe, prompt=prompt,
+                reasoning_strength=reasoning_strength,
             ))
     return plan
 
@@ -146,7 +151,8 @@ def generate(
     rows, failed, order = [], [], {v.id: i for i, v in enumerate(plan)}
 
     def edit(v: Variation):
-        return client.image_edit(keyframes[v.keyframe_sha256], v.prompt, skill=v.skill)
+        return client.image_edit(keyframes[v.keyframe_sha256], v.prompt, skill=v.skill,
+                                 reasoning_strength=v.reasoning_strength)
 
     try:
         for i, result, err in parallel.run_all(plan, edit, workers):

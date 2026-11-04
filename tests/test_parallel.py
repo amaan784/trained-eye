@@ -86,7 +86,7 @@ def test_generate_with_workers_writes_the_manifest_in_plan_order(tmp_path):
     png = b"\x89PNG\r\n\x1a\n"
 
     class SlowEdits:
-        def image_edit(self, image, prompt, skill=None):
+        def image_edit(self, image, prompt, skill=None, reasoning_strength=None):
             time.sleep(random.random() / 50)  # finish out of order
             info = types.SimpleNamespace(model="muse-image-1.0", cache_key=prompt[:8],
                                          billed_usd=0.01, cached=False, cost_usd=0.01)

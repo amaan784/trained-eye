@@ -750,3 +750,15 @@ def test_structured_entries_carry_their_images_and_text_estimate(tmp_path):
     [entry] = client.ledger.entries()
     assert entry["input_images"] == 2
     assert entry["input_text_tokens"] == len("Answer.Is it done?") // 3 + 50
+
+
+def test_image_reasoning_is_sent_only_when_set(tmp_path):
+    png = {"data": [{"b64_json": base64.b64encode(PNG).decode()}]}
+    rec = Recorder(png, png)
+    client, _ = make_client(tmp_path, rec)
+    client.image_edit(JPEG, "open the door", reasoning_strength="low")
+    client.image_edit(JPEG, "open the door")  # not a cache hit: another request
+    low, default = (json.loads(r.content) for r in rec.requests)
+    assert low["reasoning_strength"] == "low" and "reasoning_strength" not in default
+    with pytest.raises(ValueError, match="low or high"):
+        client.image_edit(JPEG, "open the door", reasoning_strength="medium")

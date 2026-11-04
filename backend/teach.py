@@ -241,7 +241,8 @@ def run_teach(
 
     # 5. synthetic variations
     by_hash = {sha256_hex(data): data for data in keyframes.values()}
-    plan = synth.plan_variations(spec, list(by_hash), opts.positives, opts.negatives)
+    plan = synth.plan_variations(spec, list(by_hash), opts.positives, opts.negatives,
+                                 reasoning_strength=client.settings.image_reasoning)
     say(f"generating {len(plan)} images with Muse Image (finished calls are cached, so "
         "stopping and rerunning costs nothing for them)")
     generated = synth.generate(client, plan, by_hash, root / "synthetic",

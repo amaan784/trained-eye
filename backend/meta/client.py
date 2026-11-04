@@ -719,10 +719,12 @@ class MetaClient:
 
     def image_edit(
         self, image: bytes, prompt: str, *, skill: str | None = None, n: int = 1,
-        size: str | None = None,
+        size: str | None = None, reasoning_strength: str | None = None,
     ) -> ImageResult:
-        """Muse Image edit of a real keyframe."""
-        return self._images("/images/edits", prompt, [image], skill=skill, n=n, size=size)
+        """Muse Image edit of a real keyframe. `reasoning_strength` "low" or "high" (the
+        API's default when left out) is how long the model plans before it draws."""
+        return self._images("/images/edits", prompt, [image], skill=skill, n=n, size=size,
+                            reasoning_strength=reasoning_strength)
 
     def image_generate(
         self, prompt: str, refs: list[bytes] = (), *, skill: str | None = None, n: int = 1,
@@ -733,10 +735,14 @@ class MetaClient:
         return self._images(endpoint, prompt, list(refs), skill=skill, n=n, size=size)
 
     def _images(self, endpoint: str, prompt: str, images: list[bytes], *, skill: str | None,
-                n: int, size: str | None) -> ImageResult:
+                n: int, size: str | None, reasoning_strength: str | None = None
+                ) -> ImageResult:
         model = self.settings.model("image")
         price = self.settings.price(model)
-        fields = {"model": model, "prompt": prompt, "n": n, "size": size}
+        if reasoning_strength not in (None, "low", "high"):
+            raise ValueError(f"reasoning_strength must be low or high, not {reasoning_strength!r}")
+        fields = {"model": model, "prompt": prompt, "n": n, "size": size,
+                  "reasoning_strength": reasoning_strength}
         fields = {k: v for k, v in fields.items() if v is not None}
 
         def send(tally):

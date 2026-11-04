@@ -371,16 +371,21 @@ def taught(env, skill="burner_left_on", n=40):
     return root
 
 
-def fake_modal(monkeypatch, result=None, code=0):
+def fake_modal(monkeypatch, result=None, code=0, base=True):
+    """Fake `modal`: training runs are recorded in the returned list; the base model's
+    marker on the volume is there when `base` (te train then downloads nothing)."""
     runs = []
 
     def run(command, cwd=None, check=False, **kw):
         if command[0] != "modal":
             return subprocess.CompletedProcess(command, 0, stdout="abc1234\n", stderr="")
+        if command[1:3] == ["volume", "get"] and command[4].startswith("/hf/"):
+            if base:
+                Path(command[5], Path(command[4]).name).write_text("{}")
+            return subprocess.CompletedProcess(command, 0 if base else 1)
         runs.append(command)
-        path = command[command.index("--result") + 1]
-        if result is not None:
-            Path(path).write_text(json.dumps(result))
+        if result is not None and "--result" in command:
+            Path(command[command.index("--result") + 1]).write_text(json.dumps(result))
         return subprocess.CompletedProcess(command, code)
 
     monkeypatch.setattr(cli.subprocess, "run", run)

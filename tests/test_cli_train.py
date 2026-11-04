@@ -8,8 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from backend import cli
+from backend import cli, cli_train
 from tests.test_cli import TRAIN, answer, fake_modal, taught
+
+REAL_ENSURE_BASE = cli_train.ensure_base
 
 
 @pytest.fixture
@@ -17,7 +19,55 @@ def env(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("TE_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("MODEL_API_KEY", "sk-test-cli-key")
+    # The base model is on the volume, unless a test says otherwise (the tests below
+    # with their own subprocess fakes see only the training command).
+    monkeypatch.setattr(cli_train, "ensure_base", lambda: 0)
     return tmp_path
+
+
+def test_a_gpu_run_downloads_the_base_on_cpu_first_when_the_volume_lacks_it(env, monkeypatch,
+                                                                           capsys):
+    taught(env)
+    monkeypatch.setattr(cli_train, "ensure_base", REAL_ENSURE_BASE)
+    calls, marker = [], {"there": False}
+
+    def modal(command, cwd=None, check=False, **kw):
+        if command[0] != "modal":
+            return subprocess.CompletedProcess(command, 0, stdout="abc1234\n", stderr="")
+        calls.append(command)
+        if command[1:3] == ["volume", "get"]:
+            assert command[3:5] == ["trained-eye", f"/hf/{cli_train.BASE_MARKER}"]
+            if marker["there"]:
+                Path(command[5], cli_train.BASE_MARKER).write_text("{}")
+            return subprocess.CompletedProcess(command, 0 if marker["there"] else 1)
+        if "--fetch-base" in command:
+            marker["there"] = True
+            return subprocess.CompletedProcess(command, 0)
+        Path(command[command.index("--result") + 1]).write_text(json.dumps(
+            {"seconds": 900.0, "ok": True}))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(cli.subprocess, "run", modal)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
+    assert cli.main([*TRAIN, "--smoke", "--yes"]) == 0
+    kinds = [c[1] if c[1] == "volume" else ("fetch" if "--fetch-base" in c else "train")
+             for c in calls]
+    assert kinds == ["volume", "fetch", "volume", "train"]
+    assert calls[1] == ["modal", "run", "backend/training/modal_train.py", "--fetch-base"]
+    assert "a CPU job on Modal downloads it first" in capsys.readouterr().out
+    calls.clear()
+    assert cli.main([*TRAIN, "--smoke", "--yes"]) == 0  # there now: straight to training
+    assert [c[1] for c in calls] == ["volume", "run"] and "--fetch-base" not in calls[1]
+
+
+def test_a_failed_base_download_trains_nothing(env, monkeypatch, capsys):
+    taught(env)
+    monkeypatch.setattr(cli_train, "ensure_base", REAL_ENSURE_BASE)
+    runs = fake_modal(monkeypatch, {"seconds": 900.0, "ok": True}, code=3, base=False)
+    assert cli.main([*TRAIN, "--smoke", "--yes"]) == 3
+    assert [c[-1] for c in runs] == ["--fetch-base"]  # the smoke never started
+    assert "the base model download failed (exit 3); nothing was trained" in (
+        capsys.readouterr().err)
 
 
 def test_train_needs_a_smoke_timing_before_a_real_run(env, monkeypatch, capsys):

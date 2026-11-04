@@ -29,6 +29,11 @@ as a dataset artifact and the adapter at the end.
 
 `--preflight` runs no training: the CPU function preflight() loads the pinned processor
 (no weights) and renders a few bundle examples (backend/training/preflight.py).
+
+`--fetch-base` runs no training either: the CPU function download_base() downloads the
+pinned base (about 60 GB) into the volume's Hugging Face cache and then writes
+/vol/hf/base-<revision>.json, so the H100 never waits for the download. te train runs it
+before a GPU run when that file is missing.
 """
 
 from __future__ import annotations
@@ -51,12 +56,17 @@ HF_SECRET = "huggingface"
 TIMEOUT_S = 4 * 3600
 PREFLIGHT_TIMEOUT_S = 30 * 60  # our choice: the processor and a few images, no weights
 PREFLIGHT_EXAMPLES = 4  # our choice: records rendered, each in both prompt layouts
+DOWNLOAD_TIMEOUT_S = 2 * 3600  # our choice: 60 GB still fits at 10 MB/s
 CUDA_IMAGE = "nvidia/cuda:13.0.0-devel-ubuntu24.04"  # the recipe needs the full toolkit
 CCE = ("cut-cross-entropy[transformers] @ git+https://github.com/axolotl-ai-cloud/"
        "ml-cross-entropy.git@4dfa52212d0552805aec5a6a2176c0abbea277d2")
-BUILD_ENV = {"CUDA_HOME": "/usr/local/cuda", "TORCH_CUDA_ARCH_LIST": "9.0",
-             "FLASH_ATTN_CUDA_ARCHS": "90", "MAX_JOBS": "8", "NVCC_THREADS": "2",
-             "UV_TORCH_BACKEND": "cu130"}
+BUILD_ENV = {"CUDA_HOME": "/usr/local/cuda", "CC": "/usr/bin/gcc", "CXX": "/usr/bin/g++",
+             "TORCH_CUDA_ARCH_LIST": "9.0", "FLASH_ATTN_CUDA_ARCHS": "90", "MAX_JOBS": "8",
+             "NVCC_THREADS": "2", "UV_TORCH_BACKEND": "cu130"}
+# Not in the recipe, but its --no-build-isolation installs need them in the environment:
+# flash-attn's setup.py imports wheel (the first build failed without it, Nov 4), and
+# ninja runs the compile in parallel (torch falls back to one file at a time without it).
+BUILD_TOOLS = ("wheel", "ninja", "packaging", "psutil")
 
 # The trainer's summary line, e.g. {'train_runtime': 41.2, 'train_samples_per_second': 0.05, ...}
 SUMMARY = re.compile(r"'train_(runtime|samples_per_second)':\s*([0-9.]+)")
@@ -74,13 +84,13 @@ image = (
     .apt_install("git", "build-essential")
     .pip_install("uv")
     .env(BUILD_ENV)
-    .run_commands(
-        'uv pip install --system "torch==2.12.1" "torchvision==0.27.1"',
-        'uv pip install --system "axolotl==0.19.0"',
-        'uv pip install --system --no-build-isolation "flash-attn==2.8.3"',
-        f'uv pip install --system --no-build-isolation "{CCE}"',
-        "uv pip check --system",
-    )
+    # one layer per step, so a failed compile does not reinstall torch and Axolotl
+    .run_commands('uv pip install --system "torch==2.12.1" "torchvision==0.27.1"',
+                  'uv pip install --system "axolotl==0.19.0"')
+    .run_commands(f"uv pip install --system {' '.join(BUILD_TOOLS)}",
+                  'uv pip install --system --no-build-isolation "flash-attn==2.8.3"')
+    .run_commands(f'uv pip install --system --no-build-isolation "{CCE}"',
+                  "uv pip check --system")
     .env({"HF_HOME": f"{MOUNT}/hf"})  # the base model is downloaded to the volume once
 )
 # The same image (its transformers) plus preflight.py, which imports nothing from backend.
@@ -165,6 +175,31 @@ def preflight(base: str, revision: str, examples: list[dict]) -> dict:
     return te_preflight.render_all(processor, examples, generation_eos=eos)
 
 
+def base_marker(revision: str) -> str:
+    """The file download_base() writes once the base at `revision` is complete on the
+    volume (cli_train.BASE_MARKER for the pinned revision)."""
+    return f"base-{revision}.json"
+
+
+@app.function(image=image, volumes={MOUNT: volume}, timeout=DOWNLOAD_TIMEOUT_S, cpu=4,
+              memory=4096, secrets=[modal.Secret.from_name(HF_SECRET)])
+def download_base(base: str, revision: str) -> dict:
+    """The pinned base into HF_HOME on the volume, on CPU (the training image, so the
+    cache is written by the huggingface_hub that Axolotl reads it with). A rerun only
+    checks what is there. The marker is written last, after the volume commit."""
+    from huggingface_hub import snapshot_download
+
+    start = time.monotonic()
+    path = Path(snapshot_download(base, revision=revision))
+    size = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+    volume.commit()
+    info = {"base": base, "revision": revision, "path": str(path), "gb": round(size / 1e9, 1),
+            "seconds": round(time.monotonic() - start, 1), "finished": now_iso()}
+    (Path(MOUNT) / "hf" / base_marker(revision)).write_text(json.dumps(info, indent=1) + "\n")
+    volume.commit()
+    return info
+
+
 def upload(bundle: Path, run: str) -> str:
     """Copy the local bundle to /vol/bundles/<run> and return that path."""
     remote = f"/bundles/{run}"
@@ -174,11 +209,21 @@ def upload(bundle: Path, run: str) -> str:
 
 
 @app.local_entrypoint()
-def main(bundle: str, run: str, smoke: bool = False, tags: str = "", result: str = "",
-         max_steps: int = 0, wandb_entity: str = "", wandb_artifacts: bool = False,
-         detached: bool = False, preflight: bool = False) -> None:
+def main(bundle: str = "", run: str = "", smoke: bool = False, tags: str = "",
+         result: str = "", max_steps: int = 0, wandb_entity: str = "",
+         wandb_artifacts: bool = False, detached: bool = False, preflight: bool = False,
+         fetch_base: bool = False) -> None:
     from backend.training.axolotl import qlora_config, wandb_config
 
+    if fetch_base:  # the flag; the CPU function is download_base
+        from backend import config
+
+        base = config.DEFAULT_MODELS["student_base"]
+        config.check_model_allowed(base)
+        print(json.dumps(download_base.remote(base, config.STUDENT_BASE_REVISION)))
+        return
+    if not bundle or not run:
+        raise SystemExit("pass --bundle and --run (or --fetch-base)")
     manifest = json.loads((Path(bundle) / "manifest.json").read_text())
     if manifest["image_root"] != f"{MOUNT}/bundles/{run}":
         raise SystemExit(f"the bundle was made for {manifest['image_root']}, not run {run}")

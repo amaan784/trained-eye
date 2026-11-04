@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from backend import cli, cli_serving
+from backend import cli, cli_serving, cli_train
 from tests.test_cli import TRAIN, answer, fake_modal, taught
 from tests.test_cli_train import SMOKE_RESULT
 
@@ -18,6 +18,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("TE_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("MODEL_API_KEY", "sk-test-cli-key")
+    monkeypatch.setattr(cli_train, "ensure_base", lambda: 0)  # the base is on the volume
     return tmp_path
 
 

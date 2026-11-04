@@ -10,6 +10,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from backend import cli
@@ -21,6 +22,7 @@ from backend.cli import (
     load_settings,
     shown_path,
 )
+from backend.config import STUDENT_BASE_REVISION
 from backend.training import gpu_ledger, runs
 from backend.training.runs import RUN_NAME
 
@@ -46,6 +48,33 @@ def git_commit() -> str:
 
 
 TRAIN_VOLUME = "trained-eye"  # backend/training/modal_train.py's VOLUME
+# modal_train.base_marker(): written on the volume once the pinned base is downloaded
+BASE_MARKER = f"base-{STUDENT_BASE_REVISION}.json"
+
+
+def base_on_volume() -> bool:
+    """Whether download_base() finished for the pinned revision (its marker file)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        code = subprocess.run(["modal", "volume", "get", TRAIN_VOLUME, f"/hf/{BASE_MARKER}",
+                               tmp], cwd=PROJECT_ROOT, capture_output=True, text=True,
+                              check=False).returncode
+        return code == 0 and any(Path(tmp).rglob(BASE_MARKER))
+
+
+def ensure_base() -> int:
+    """Before a GPU run: the 30B base on the volume, downloaded by a CPU job if missing,
+    so the H100 is not billed while it downloads."""
+    if base_on_volume():
+        return 0
+    print("the 30B base is not on the volume yet: a CPU job on Modal downloads it first "
+          "(about 60 GB), so the H100 does not wait for it")
+    code = subprocess.run(["modal", "run", "backend/training/modal_train.py", "--fetch-base"],
+                          cwd=PROJECT_ROOT, check=False).returncode
+    if code != 0 or not base_on_volume():
+        print(f"te: the base model download failed (exit {code}); nothing was trained",
+              file=sys.stderr)
+        return code or 1
+    return 0
 
 
 def read_result(path: Path) -> dict | None:
@@ -225,9 +254,9 @@ def cmd_train(args) -> int:
     timing_path = settings.data_dir / "train" / "smoke-timing.json"
     estimate = None
     if args.smoke:
-        print(f"two-step smoke on one {GPU} on Modal. The first one also builds the image "
-              "(flash-attn compiles) and downloads the 30B base to the volume, so its time is "
-              "only known once it has run.")
+        print(f"two-step smoke on one {GPU} on Modal. The first one may also build the image "
+              "(flash-attn compiles; the preflight builds it too), so its time is only known "
+              "once it has run. The 30B base is downloaded before it by a CPU job.")
         question = "Run the smoke on Modal?"
     else:
         timing = json.loads(timing_path.read_text()) if timing_path.is_file() else None
@@ -260,6 +289,9 @@ def cmd_train(args) -> int:
         print('te: the modal command is missing: pip install -e ".[train]", then modal token '
               "set", file=sys.stderr)
         return 2
+    fetched = ensure_base()
+    if fetched:
+        return fetched
     result_path = out.parent / f"{args.run}.result.json"
     result_path.unlink(missing_ok=True)
     tags = [f"exp:{args.run.split('-')[0]}", f"skills:{'+'.join(names)}",

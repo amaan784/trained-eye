@@ -97,9 +97,9 @@ def test_train_writes_its_result_to_the_volume_and_points_wandb_at_the_summary(t
     old.parent.mkdir(parents=True)
     old.write_text('{"run": "exp1-mixed", "from": "an earlier run"}')
 
-    def run(command, env, stdout, stderr, check):
+    def run(command, env, cwd, stdout, stderr, check):
         assert not old.exists()  # removed before training: --collect never sees it
-        seen.update(command=command, env=env)
+        seen.update(command=command, env=env, cwd=cwd)
         stdout.write("{'train_runtime': 41.2, 'train_samples_per_second': 0.05}\n")
         return types.SimpleNamespace(returncode=0)
 
@@ -118,7 +118,11 @@ def test_train_writes_its_result_to_the_volume_and_points_wandb_at_the_summary(t
     assert saved["finished"] >= saved["started"] and saved["started"].endswith("Z")
     assert seen["command"][:2] == ["axolotl", "train"]
     assert seen["env"]["WANDB_TAGS"] == "exp:exp1,data:0123456789ab"
-    assert json.loads(Path(seen["env"]["WANDB_CONFIG_PATHS"]).read_text()) == SUMMARY
+    # W&B reads the summary from config-defaults.yaml where Axolotl runs (wandb 0.31
+    # rejects WANDB_CONFIG_PATHS from the environment)
+    assert "WANDB_CONFIG_PATHS" not in seen["env"]
+    assert seen["cwd"] == tmp_path / "runs/exp1-mixed"
+    assert json.loads((seen["cwd"] / "config-defaults.yaml").read_text()) == SUMMARY
     assert len(commits) == 2 and "wandb_artifact" not in saved
 
 
@@ -144,7 +148,7 @@ def test_artifacts_log_the_bundle_named_after_the_run_and_its_data_hash(tmp_path
     assert (calls["init"]["entity"], calls["init"]["job_type"]) == ("team", "dataset")
 
     # train() calls it only when asked, and records the artifact's name
-    def run(command, env, stdout, stderr, check):
+    def run(command, env, cwd, stdout, stderr, check):
         return types.SimpleNamespace(returncode=0)
 
     train = function("train", MOUNT=str(tmp_path), log_bundle=lambda *a: "exp1-mixed-0123",
@@ -152,6 +156,32 @@ def test_artifacts_log_the_bundle_named_after_the_run_and_its_data_hash(tmp_path
                      subprocess=types.SimpleNamespace(run=run, STDOUT=-2))
     out = train("exp1-mixed", {"output_dir": "/o"}, [], summary=SUMMARY, artifacts=True)
     assert out["wandb_artifact"] == "exp1-mixed-0123"
+
+
+def test_timings_read_the_quoted_summary_of_the_first_smoke():
+    # The trainer's summary line from the first smoke on Modal (Nov 4), as Axolotl 0.19
+    # printed it: quoted values. The bare-number pattern missed it, so no timing was saved.
+    line = ("  {'train_runtime': '34.4', 'train_samples_per_second': '0.058', "
+            "'train_steps_per_second': '0.058', 'train_loss': '2.839', 'memory/max_active "
+            "(GiB)': '19.18', 'memory/max_allocated (GiB)': '19.18', 'memory/device_reserved "
+            "(GiB)': '20.6', 'epoch': '0.04'}\n")
+    timings = function("timings")  # with the script's own SUMMARY pattern
+    assert timings("loading\n" + line) == {"train_runtime": 34.4,
+                                           "train_samples_per_second": 0.058}
+    assert timings("{'train_runtime': 41.2, 'train_samples_per_second': 0.05}") == {
+        "train_runtime": 41.2, "train_samples_per_second": 0.05}  # bare numbers still read
+
+
+def test_wandb_reads_the_summary_from_config_defaults_in_the_working_folder(tmp_path,
+                                                                           monkeypatch):
+    # The first smoke on Modal (Nov 4) stopped in wandb.init: wandb 0.31 rejected
+    # WANDB_CONFIG_PATHS from the environment ("'str' instances are not allowed as a
+    # Sequence value"). train() now writes config-defaults.yaml where Axolotl runs.
+    wandb_config = pytest.importorskip("wandb.sdk.wandb_config")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config-defaults.yaml").write_text(json.dumps(SUMMARY, indent=1))
+    config = wandb_config.Config()
+    assert dict(config)["trained_eye"] == SUMMARY["trained_eye"]["value"]
 
 
 def bundle_for(tmp_path, run="exp1-mixed"):

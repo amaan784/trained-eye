@@ -9,7 +9,7 @@ accumulation 32 to keep the recipe's global batch of 32 (the recipe's README say
 The config is written as JSON, which YAML readers (Axolotl's included) accept as is.
 
 W&B: the run's tags come from te train; wandb_config() is the bundle summary modal_train.py
-adds to the run's config (WANDB_CONFIG_PATHS). Model uploads (wandb_log_model "end") stay
+adds to the run's config (config-defaults.yaml in the run folder). Model uploads (wandb_log_model "end") stay
 off unless te train --wandb-artifacts asked the author first.
 """
 
@@ -136,8 +136,8 @@ def wandb_tags(manifest: dict) -> list[str]:
 
 def wandb_config(manifest: dict, run: str, tags: list[str]) -> dict:
     """The bundle summary for the W&B run's config, in W&B's config-defaults format
-    ({key: {"value": ...}}): modal_train.py writes it as YAML and points WANDB_CONFIG_PATHS
-    at it. It holds hashes and counts, never images or prompts."""
+    ({key: {"value": ...}}): modal_train.py writes it as config-defaults.yaml in the folder
+    Axolotl runs in. It holds hashes and counts, never images or prompts."""
     tagged = dict(t.split(":", 1) for t in tags if ":" in t)
     summary = {"run": run, "data_hash": data_hash(manifest),
                "base_model": DEFAULT_MODELS["student_base"],

@@ -23,7 +23,7 @@ seconds per step price the real run before it starts.
 train() also writes its result to /vol/runs/<run>/result.json, so a run launched with
 `modal run --detach` (te train --detach) can be collected later (te train --collect) even
 if this Mac lost the connection. W&B gets the tags te train passes, the bundle summary in
-the run's config (wandb-config.yaml next to the config, through WANDB_CONFIG_PATHS),
+the run's config (config-defaults.yaml in the run folder, which Axolotl runs in),
 `--wandb-entity` for a team, and with `--wandb-artifacts` (te train asks first) the bundle
 as a dataset artifact and the adapter at the end.
 
@@ -68,8 +68,10 @@ BUILD_ENV = {"CUDA_HOME": "/usr/local/cuda", "CC": "/usr/bin/gcc", "CXX": "/usr/
 # ninja runs the compile in parallel (torch falls back to one file at a time without it).
 BUILD_TOOLS = ("wheel", "ninja", "packaging", "psutil")
 
-# The trainer's summary line, e.g. {'train_runtime': 41.2, 'train_samples_per_second': 0.05, ...}
-SUMMARY = re.compile(r"'train_(runtime|samples_per_second)':\s*([0-9.]+)")
+# The trainer's summary line. Axolotl 0.19 prints the values quoted, as in the first smoke
+# (Nov 4): {'train_runtime': '34.4', 'train_samples_per_second': '0.058', ...}; older
+# trainers print bare numbers.
+SUMMARY = re.compile(r"'train_(runtime|samples_per_second)':\s*'?([0-9.]+)'?")
 
 
 def timings(log: str) -> dict:
@@ -135,16 +137,19 @@ def train(run: str, config: dict, tags: list[str], smoke: bool = False,
     config_path = run_dir / "config.yaml"
     config_path.write_text(json.dumps(config, indent=1))  # JSON is valid YAML
     env = {**os.environ, "WANDB_TAGS": ",".join(tags)}
-    if summary:  # W&B adds these files' keys to the run's config
-        summary_path = run_dir / "wandb-config.yaml"
-        summary_path.write_text(json.dumps(summary, indent=1))
-        env["WANDB_CONFIG_PATHS"] = str(summary_path)
+    # wandb.init loads config-defaults.yaml from the working directory into the run's
+    # config. Not WANDB_CONFIG_PATHS: wandb 0.31 rejects any string in it ("'str' instances
+    # are not allowed as a Sequence value"), which stopped the first smoke before step 1.
+    defaults = run_dir / "config-defaults.yaml"
+    defaults.unlink(missing_ok=True)
+    if summary:
+        defaults.write_text(json.dumps(summary, indent=1))  # JSON is valid YAML
     volume.commit()
     artifact = log_bundle(run, config, tags, summary) if artifacts and summary else None
     start = time.monotonic()
     with (run_dir / "train.log").open("w") as log:
-        done = subprocess.run(["axolotl", "train", str(config_path)], env=env, stdout=log,
-                              stderr=subprocess.STDOUT, check=False)
+        done = subprocess.run(["axolotl", "train", str(config_path)], env=env, cwd=run_dir,
+                              stdout=log, stderr=subprocess.STDOUT, check=False)
     seconds = time.monotonic() - start
     text = (run_dir / "train.log").read_text(errors="replace")
     result = {"run": run, "ok": done.returncode == 0, "seconds": round(seconds, 1),

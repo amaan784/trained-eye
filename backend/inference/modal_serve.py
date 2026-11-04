@@ -9,9 +9,11 @@ serve-student runs these and asks first):
 The first serves /vol/runs/<run>/merged (backend/training/export.py writes it) as the app
 trained-eye-student, model name trained-eye. The other two deploy the app trained-eye-base,
 so a base and a fine-tuned endpoint can be up together (Experiment 4, te regress): the base
-from the Hub at the pinned revision, model name muse-glimmer, its download in the Hugging
-Face cache on the volume (/vol/hf, where training already put it) with HF_TOKEN from the
-Modal Secret "huggingface". TE_SERVE_LORAS also loads each run's QLoRA adapter
+at the pinned revision, model name muse-glimmer, served from its snapshot folder in the
+Hugging Face cache on the volume (/vol/hf, filled by modal_train.py's download_base), the
+cookbook's pre-downloaded-weights form, with the Hub offline. Served by its Hub id instead,
+vLLM's structured-output tokenizer did not follow --tokenizer-revision and failed to start
+(Nov 4: "Couldn't instantiate the backend tokenizer"). TE_SERVE_LORAS also loads each run's QLoRA adapter
 (/vol/runs/<run>/out, from modal_train.py) with --enable-lora, each run a model name of its
 own (its run name), so Experiments 1 to 3 need no merge and no deploy per run.
 
@@ -78,6 +80,12 @@ LORAS_ENV = "TE_SERVE_LORAS"  # run names, comma-separated: the base with their 
 RUN_NAME = re.compile(r"[a-z0-9][a-z0-9-]{1,39}")  # as te train checks it
 
 
+def base_dir() -> str:
+    """The pinned base's snapshot folder in the volume's Hugging Face cache."""
+    return (f"{MOUNT}/hf/hub/models--{BASE_MODEL.replace('/', '--')}/snapshots/"
+            f"{BASE_REVISION}")
+
+
 def model_dir(run: str) -> str:
     """Where export.py saved the run's merged model."""
     if not RUN_NAME.fullmatch(run):
@@ -128,7 +136,11 @@ BASE = wants_base(os.environ)
 app = modal.App(BASE_APP if BASE else APP)
 volume = modal.Volume.from_name(VOLUME)  # no create: training or export.py filled it
 # The image's ENTRYPOINT is `vllm serve` (vllm.md); cleared so Modal can start the container.
-image = (modal.Image.from_registry(VLLM_IMAGE).entrypoint([])
+# It has python3 (3.12) but no `python`, and Modal reads the version from `python`: the first
+# deploy (Nov 4) failed with "unable to determine the version of Python installed".
+image = (modal.Image.from_registry(
+             VLLM_IMAGE, setup_dockerfile_commands=["RUN ln -sf /usr/bin/python3 /usr/bin/python"])
+         .entrypoint([])
          .env({name: os.environ.get(name, "") for name in (RUN_ENV, BASE_ENV, LORAS_ENV)})
          .env({"HF_HOME": f"{MOUNT}/hf"}))  # the base's cache, as modal_train.py's
 SECRETS = [modal.Secret.from_name(API_SECRET)] + (
@@ -147,7 +159,11 @@ def serve() -> None:
             adapter = module.split("=", 1)[1]
             if not Path(adapter, "adapter_config.json").is_file():
                 raise RuntimeError(f"no adapter in {adapter}: train that run first")
-        command = serve_command(BASE_MODEL, BASE_MODEL_NAME, BASE_REVISION, loras)
+        model = base_dir()
+        if not Path(model, "config.json").is_file():
+            raise RuntimeError(f"no base model in {model}: run modal run "
+                               "backend/training/modal_train.py --fetch-base first")
+        command = serve_command(model, BASE_MODEL_NAME, loras=loras)
     else:
         model = model_dir(os.environ.get(RUN_ENV, ""))
         if not Path(model, "config.json").is_file():
@@ -157,5 +173,7 @@ def serve() -> None:
     api_key = os.environ.get(API_KEY_ENV, "")
     if not api_key:
         raise RuntimeError(f"the Modal Secret {API_SECRET!r} has no {API_KEY_ENV}")
-    # a list, no shell; the key only in the child's environment, never on its command line
-    subprocess.Popen(command, env={**os.environ, "VLLM_API_KEY": api_key})
+    # a list, no shell; the key only in the child's environment, never on its command line;
+    # every model is a folder on the volume, so nothing is looked up on the Hub
+    subprocess.Popen(command, env={**os.environ, "VLLM_API_KEY": api_key,
+                                   "HF_HUB_OFFLINE": "1"})

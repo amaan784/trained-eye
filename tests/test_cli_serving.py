@@ -58,7 +58,7 @@ def test_serve_student_deploys_with_the_run_and_stops(env, monkeypatch, capsys):
     assert cli.main(["serve-student", "--run", "exp1-mixed", "--yes"]) == 0
     assert cli.main(["serve-student", "--stop"]) == 0
     assert calls == [(["modal", "deploy", "backend/inference/modal_serve.py"], "exp1-mixed"),
-                     (["modal", "app", "stop", "trained-eye-student"], None)]
+                     (["modal", "app", "stop", "--yes", "trained-eye-student"], None)]
     assert "TE_STUDENT_URL" in capsys.readouterr().out
 
 
@@ -162,7 +162,7 @@ def test_serve_student_base_and_adapters_get_their_own_app_and_the_time_is_recor
                 ["--run", "exp1-mixed", "--base"]):
         assert cli.main(["serve-student", *bad, "--yes"]) == 2, bad
     assert cli.main(["serve-student", "--stop", "--base"]) == 0
-    assert calls[-1][0] == ["modal", "app", "stop", "trained-eye-base"]
+    assert calls[-1][0] == ["modal", "app", "stop", "--yes", "trained-eye-base"]
     assert "trained-eye-base was deployed for" in capsys.readouterr().out
     rows = gpu_ledger.read(env / "data")
     assert [(r["kind"], r["name"]) for r in rows] == [

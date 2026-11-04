@@ -108,7 +108,7 @@ def cmd_serve_student(args) -> int:
     if args.stop:
         if not cli.modal_ready():
             return 2
-        code = subprocess.run(["modal", "app", "stop", app], cwd=PROJECT_ROOT,
+        code = subprocess.run(["modal", "app", "stop", "--yes", app], cwd=PROJECT_ROOT,
                               check=False).returncode
         if code == 0:
             if not base:

@@ -163,18 +163,38 @@ def banner(sk: F.SkillFacts, head: F.Headline, rp: F.Replay, out: Path, work: Pa
     cy = top + height / 2
     lead = (cx + fw * 0.68 * 0.5 + 40, top - 64)
     ring = film.ring(cx, cy, fw * 0.68, height * 0.55, lead, (1280, 640))
+    note = (f'<div class="note"><q>{html.escape(rp.alert_text)}</q><span>Spoken on the '
+            f"glasses once this has lasted {rp.hold_s:g} seconds.</span></div>")
+    return banner_page(sk, head, strip_html, ring, note, (lead[0] + 12, lead[1] - 40), out,
+                       work)
+
+
+def banner_page(sk: F.SkillFacts, head: F.Headline, strip_html: str, ring: str, note: str,
+                note_at: tuple[float, float], out: Path, work: Path) -> Path:
     data_models = [m.name for m in sk.models if not m.highlight]
     student = next(m.name for m in sk.models if m.highlight)
     page = fill("banner.html", {
-        "css": css(), "strip": strip_html, "ring": ring,
-        "note_left": f"{lead[0] + 12:.0f}", "note_top": f"{lead[1] - 40:.0f}",
-        "alert": html.escape(rp.alert_text),
-        "when": f"Spoken on the glasses once this has lasted {rp.hold_s:g} seconds.",
+        "css": css(), "strip": strip_html, "ring": ring, "note": note,
+        "note_left": f"{note_at[0]:.0f}", "note_top": f"{note_at[1]:.0f}",
         "headline": html.escape(head.text), "detail": html.escape(head.detail),
         "credits": (f"Built on {html.escape(_and(data_models))}, with a fine-tuned "
                     f"{html.escape(student)} watching.<br>Meta Global AI Developer Hackathon "
                     "2026.")})
     return screenshot(page, out, (1280, 640), folder=work)
+
+
+def banner_teaching(sk: F.SkillFacts, frames: list[F.TeachFrame], head: F.Headline, out: Path,
+                    work: Path) -> Path:
+    """The banner before a replay of the author's own footage exists: the teaching frames
+    on film with their times, and no ring, since no alert fired on them."""
+    picked = pick_teaching(frames, work, n=BANNER_BEFORE + 1 + BANNER_AFTER)
+    times = [f.t_s for f, _ in picked]
+    tenths = len({int(t) for t in times}) < len(times)
+    cells = [film.Cell(path.as_uri(), film.edge_time(f.t_s, tenths), f.size)
+             for f, path in picked]
+    strip_html = film.strip(cells, left=0, top=236, fw=156, fh=208, gap=12, rebate=36,
+                            pad=-40, width=1280, hole_every=22)
+    return banner_page(sk, head, strip_html, "", "", (0, 0), out, work)
 
 
 def models_markdown(sk: F.SkillFacts) -> str:
@@ -278,11 +298,14 @@ def main(argv: list[str] | None = None) -> int:
                 elif part == "models":
                     made.append(write_models(Path(args.readme), sk))
                 elif part == "banner":
-                    if not args.replay_clip:
-                        raise F.MissingFact("no --replay-clip given")
                     head = F.headline(Path(args.results))
-                    rp = F.replay(settings.data_dir, args.replay_clip, args.skill)
-                    made.append(banner(sk, head, rp, out / "banner.png", work))
+                    if args.replay_clip:
+                        rp = F.replay(settings.data_dir, args.replay_clip, args.skill)
+                        made.append(banner(sk, head, rp, out / "banner.png", work))
+                    else:  # no replay of the author's footage yet: the teaching frames
+                        frames = F.teaching_frames(settings.data_dir, args.skill)
+                        made.append(banner_teaching(sk, frames, head, out / "banner.png",
+                                                    work))
                 elif part == "hero":
                     if not args.hero_clip:
                         raise F.MissingFact("no --hero-clip given")

@@ -71,7 +71,7 @@ def test_unusable_hand_labels_are_refused(tmp_path, content, message):
 def taught(tmp_path):
     """A finished fake teach run: Spark disagrees with some generated positives."""
     opts = TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"),
-                        request="let me know when the washer says done", positives=12,
+                        request="tell me if I leave the burner on", positives=12,
                         negatives=12)
     report = run_teach(client_for(tmp_path, FakeMeta()), opts, tmp_path / "skills",
                        confirm=lambda s: True, say=lambda s: None)

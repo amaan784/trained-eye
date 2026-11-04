@@ -10,7 +10,7 @@ from backend.teach import TeachOptions
 from backend.teach_session import NotWaiting, ServerStopping, TeachSession, failure, summarise
 from tests.test_teach import FakeMeta, client_for, clip, wav
 
-REQUEST = "let me know when the washer says done"
+REQUEST = "tell me if I leave the burner on"
 
 
 def session(tmp_path, fake, timeout_s=5.0, **opts):

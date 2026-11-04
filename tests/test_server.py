@@ -150,7 +150,7 @@ class FakeWatcher:
         from backend.watch.watcher import Alert
 
         self.frames += 1
-        alerts = [Alert(name, "Laundry's done.", float(self.frames), 0.9, True)
+        alerts = [Alert(name, "The burner is still on.", float(self.frames), 0.9, True)
                   for name in self.skills] if self.frames == 3 else []
         return dict.fromkeys(self.skills, 0.9), alerts
 
@@ -170,7 +170,7 @@ def test_watch_mode_scores_frames_and_sends_alerts():
             ack = (ws.send_bytes(synthetic_jpeg(i, size=(320, 240))), ws.receive_json())[1]
             assert ack["type"] == "ack" and ack["scores"] == {"burner_left_on": 0.9}
         assert ws.receive_json() == {"type": "alert", "skill": "burner_left_on",
-                                     "text": "Laundry's done.", "t": 3.0, "p": 0.9,
+                                     "text": "The burner is still on.", "t": 3.0, "p": 0.9,
                                      "confirmed": True}
         ws.send_json({"type": "bye"})
     assert made == [(["burner_left_on"], "s1")]
@@ -206,10 +206,10 @@ def test_the_default_watcher_needs_a_student_endpoint_and_taught_skills(tmp_path
     skill = tmp_path / "skills/burner_left_on"
     skill.mkdir(parents=True)
     skill.joinpath("spec.json").write_text(SkillSpec(
-        name="burner_left_on", request="tell me when the washer says End",
-        target=Target(sam_prompt="washer display", description="the display"),
-        positive="the display shows End", negatives=["display off"],
-        alert="Laundry's done.").model_dump_json())
+        name="burner_left_on", request="tell me when the burner is left on",
+        target=Target(sam_prompt="stove burner", description="the display"),
+        positive="the burner is lit with no pan on it", negatives=["a pan being stirred on it"],
+        alert="The burner is still on.").model_dump_json())
     watcher = default_watcher(["burner_left_on"], "s7")
     assert list(watcher.skills) == ["burner_left_on"]
     assert watcher.log.path.parent == tmp_path / "watch" and watcher.log.path.name.endswith(
@@ -225,10 +225,10 @@ def test_skills_lists_taught_skills_for_the_app(tmp_path):
         spec = (SkillSpec(name=name, request="tell me when Sam gets here", refused=True,
                           refusal_reason="I can't watch for or recognize specific people.")
                 if refused else SkillSpec(
-                    name=name, request="tell me when the washer says End",
-                    target=Target(sam_prompt="washer display", description="the display"),
-                    positive="the display shows End", negatives=["display off"],
-                    alert="Laundry's done."))
+                    name=name, request="tell me when the burner is left on",
+                    target=Target(sam_prompt="stove burner", description="the display"),
+                    positive="the burner is lit with no pan on it", negatives=["a pan being stirred on it"],
+                    alert="The burner is still on."))
         (folder / "spec.json").write_text(spec.model_dump_json())
         if threshold is not None:
             (folder / "threshold.json").write_text(f'{{"threshold": {threshold}}}')
@@ -246,11 +246,11 @@ def test_skills_lists_taught_skills_for_the_app(tmp_path):
         listed = c.get("/skills").json()["skills"]
     untrained = {"training": None, "served": None}  # no deploy recorded: unknown
     assert listed == [
-        {"name": "burner_left_on", "alert": "Laundry's done.", "cooldown_s": 600, "hold_s": 0,
+        {"name": "burner_left_on", "alert": "The burner is still on.", "cooldown_s": 600, "hold_s": 0,
          "dataset": True, "calibrated": True, "threshold": 0.82, **untrained},
-        {"name": "hot_pan", "alert": "Laundry's done.", "cooldown_s": 600, "hold_s": 0,
+        {"name": "hot_pan", "alert": "The burner is still on.", "cooldown_s": 600, "hold_s": 0,
          "dataset": False, "calibrated": False, "threshold": None, **untrained},
-        {"name": "pot_boils", "alert": "Laundry's done.", "cooldown_s": 600, "hold_s": 0,
+        {"name": "pot_boils", "alert": "The burner is still on.", "cooldown_s": 600, "hold_s": 0,
          "dataset": False, "calibrated": False, "threshold": None, **untrained},
     ]
 
@@ -350,10 +350,10 @@ def taught_skill(data_dir, name, threshold=None):
     folder = data_dir / "skills" / name
     (folder / "dataset").mkdir(parents=True)
     folder.joinpath("spec.json").write_text(SkillSpec(
-        name=name, request="tell me when the washer says End",
-        target=Target(sam_prompt="washer display", description="the display"),
-        positive="the display shows End", negatives=["display off"],
-        alert="Laundry's done.").model_dump_json())
+        name=name, request="tell me when the burner is left on",
+        target=Target(sam_prompt="stove burner", description="the display"),
+        positive="the burner is lit with no pan on it", negatives=["a pan being stirred on it"],
+        alert="The burner is still on.").model_dump_json())
     if threshold is not None:
         folder.joinpath("threshold.json").write_text(json.dumps({"threshold": threshold}))
     return folder

@@ -12,11 +12,11 @@ from backend.skills.spec import REFUSALS
 
 ACCEPTED = {
     "refused": False, "refusal_reason": None, "name": "burner_left_on",
-    "sam_prompt": "washing machine display",
-    "target_description": "the digital display on the front of the washer",
-    "positive": "the display shows the cycle has finished (e.g. 'End' or '0:00')",
-    "negatives": ["display shows time remaining", "display off", "  "],
-    "alert": "Your laundry's done.", "cooldown_s": 99999, "confirm_with_cloud": True,
+    "sam_prompt": "stove burner",
+    "target_description": "the front left burner of the stove",
+    "positive": "the burner is lit with no pan on it",
+    "negatives": ["the burner is off", "a pan being stirred on it", "  "],
+    "alert": "The burner is still on.", "cooldown_s": 99999, "confirm_with_cloud": True,
 }
 JPEG = b"\xff\xd8\xff\xe0frame"
 
@@ -37,10 +37,10 @@ def test_compiles_a_spec_with_wonder(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     requests = []
     client = client_with(ACCEPTED, requests)
-    spec = compile_skill(client, "let me know when the washer says done", [JPEG] * 5,
+    spec = compile_skill(client, "tell me if I leave the burner on", [JPEG] * 5,
                          name="burner_left_on")
-    assert spec.target.sam_prompt == "washing machine display"
-    assert spec.negatives == ["display shows time remaining", "display off"]
+    assert spec.target.sam_prompt == "stove burner"
+    assert spec.negatives == ["the burner is off", "a pan being stirred on it"]
     assert spec.cooldown_s == 3600  # 99999 asked for: clamped to what SYSTEM allows
     [body] = requests
     assert body["model"] == "muse-wonder-1.0"
@@ -64,7 +64,7 @@ def test_invalid_model_output_is_an_output_error(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     bad = {**ACCEPTED, "sam_prompt": "", "negatives": []}
     with pytest.raises(OutputError, match="not a valid skill spec"):
-        compile_skill(client_with(bad, []), "let me know when the washer says done", [JPEG])
+        compile_skill(client_with(bad, []), "tell me if I leave the burner on", [JPEG])
 
 
 def test_local_refusal_makes_no_call(tmp_path, monkeypatch):
@@ -100,14 +100,14 @@ def test_unusable_output_is_not_cached(tmp_path, monkeypatch):
     client = client_with({**ACCEPTED, "sam_prompt": " ", "negatives": []}, requests)
     for _ in range(2):
         with pytest.raises(OutputError):
-            compile_skill(client, "let me know when the washer says done", [JPEG])
+            compile_skill(client, "tell me if I leave the burner on", [JPEG])
     assert len(requests) == 2  # the bad answer was billed but not cached
 
 
 def test_long_fields_are_clamped(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     reply = {**ACCEPTED, "alert": "Your laundry is done " * 20, "sam_prompt": "display " * 30}
-    spec = compile_skill(client_with(reply, []), "let me know when the washer says done", [JPEG])
+    spec = compile_skill(client_with(reply, []), "tell me if I leave the burner on", [JPEG])
     assert len(spec.alert) <= 120 and len(spec.target.sam_prompt) <= 80
     long_refusal = {**ACCEPTED, "refused": True, "refusal_reason": "No. " * 200}
     refused = compile_skill(client_with(long_refusal, []), "watch the clinic", [JPEG])
@@ -120,7 +120,7 @@ def test_refusal_reason_counts_even_if_refused_is_false(tmp_path, monkeypatch):
     spec = compile_skill(client_with(reply, []), "tell me when the porch light turns on", [JPEG])
     assert spec.refused and spec.refusal_reason == "This would track a specific person."
     assert not compile_skill(client_with({**ACCEPTED, "refusal_reason": "n/a"}, []),
-                             "let me know when the washer says done", [JPEG]).refused
+                             "tell me if I leave the burner on", [JPEG]).refused
 
 
 def test_model_wording_gets_the_policy_check_too(tmp_path, monkeypatch):
@@ -136,15 +136,15 @@ def test_display_labels_in_model_wording_are_not_people(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     reply = {**ACCEPTED, "negatives": ["the countdown is still running until End lights up",
                                        "the light stays on when Boil is selected"]}
-    spec = compile_skill(client_with(reply, []), "let me know when the washer says done", [JPEG])
+    spec = compile_skill(client_with(reply, []), "tell me if I leave the burner on", [JPEG])
     assert not spec.refused
 
 
 @pytest.mark.parametrize("field, value", [
-    ("negatives", ["display shows time remaining", "the child lock icon is lit"]),
-    ("negatives", ["someone opens the door mid-cycle", "display off"]),
-    ("negatives", ["the display counts down until Done shows up", "display off"]),
-    ("target_description", "the washing machine display in the bathroom"),
+    ("negatives", ["the burner is off", "the child lock icon is lit"]),
+    ("negatives", ["someone opens the door mid-cycle", "a pan being stirred on it"]),
+    ("negatives", ["the display counts down until Done shows up", "a pan being stirred on it"]),
+    ("target_description", "the stove burner in the bathroom"),
     ("alert", "Someone's laundry is done!"),
     ("alert", "Laundry's done!"),
 ])
@@ -152,7 +152,7 @@ def test_near_misses_and_descriptions_may_mention_people_and_rooms(tmp_path, mon
                                                                     field, value):
     monkeypatch.chdir(tmp_path)
     spec = compile_skill(client_with({**ACCEPTED, field: value}, []),
-                         "let me know when the washer says done", [JPEG])
+                         "tell me if I leave the burner on", [JPEG])
     assert not spec.refused
 
 
@@ -161,7 +161,7 @@ def test_near_misses_and_descriptions_may_mention_people_and_rooms(tmp_path, mon
 def test_placeholder_refusal_reason_is_not_a_refusal(tmp_path, monkeypatch, reason):
     monkeypatch.chdir(tmp_path)
     spec = compile_skill(client_with({**ACCEPTED, "refusal_reason": reason}, []),
-                         "let me know when the washer says done", [JPEG])
+                         "tell me if I leave the burner on", [JPEG])
     assert not spec.refused
 
 
@@ -176,14 +176,14 @@ def test_real_reasons_still_refuse_and_a_bare_refusal_says_so(tmp_path, monkeypa
 
 
 @pytest.mark.parametrize("reply", [
-    [1, 2], "hello", {**ACCEPTED, "negatives": [None, "display off"]},
+    [1, 2], "hello", {**ACCEPTED, "negatives": [None, "a pan being stirred on it"]},
     {**ACCEPTED, "negatives": "displays"}, {**ACCEPTED, "alert": None},
 ])
 def test_wrong_typed_output_is_a_recorded_output_error(tmp_path, monkeypatch, reply):
     monkeypatch.chdir(tmp_path)
     client = client_with(reply, [])
     with pytest.raises(OutputError):
-        compile_skill(client, "let me know when the washer says done", [JPEG])
+        compile_skill(client, "tell me if I leave the burner on", [JPEG])
     [entry] = client.ledger.entries()
     assert entry["status"] == "output_error" and entry["actual_usd"] > 0
 
@@ -192,13 +192,13 @@ def test_correction_is_policy_checked_and_sent(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     requests = []
     client = client_with(ACCEPTED, requests)
-    compile_skill(client, "let me know when the washer says done", [JPEG])
-    compile_skill(client, "let me know when the washer says done", [JPEG],
+    compile_skill(client, "tell me if I leave the burner on", [JPEG])
+    compile_skill(client, "tell me if I leave the burner on", [JPEG],
                   correction="the light on the lid")
     assert len(requests) == 2  # a correction changes the request, so it compiles again
     texts = [p["text"] for p in requests[1]["messages"][1]["content"] if p["type"] == "text"]
     assert any("the light on the lid" in t for t in texts)
-    refused = compile_skill(client, "let me know when the washer says done", [JPEG],
+    refused = compile_skill(client, "tell me if I leave the burner on", [JPEG],
                             correction="when my wife takes it out")
     assert refused.refused and len(requests) == 2
 
@@ -212,7 +212,7 @@ def test_correction_is_policy_checked_and_sent(tmp_path, monkeypatch):
 def test_what_a_correction_rules_out_is_not_policy_checked(tmp_path, monkeypatch, correction):
     monkeypatch.chdir(tmp_path)
     requests = []
-    spec = compile_skill(client_with(ACCEPTED, requests), "let me know when the washer says done",
+    spec = compile_skill(client_with(ACCEPTED, requests), "tell me if I leave the burner on",
                          [JPEG], correction=correction)
     assert not spec.refused and len(requests) == 1
 
@@ -228,7 +228,7 @@ def test_what_a_correction_rules_out_is_not_policy_checked(tmp_path, monkeypatch
 def test_a_refused_correction_says_it_was_the_correction(tmp_path, monkeypatch, correction):
     monkeypatch.chdir(tmp_path)
     requests = []
-    spec = compile_skill(client_with(ACCEPTED, requests), "let me know when the washer says done",
+    spec = compile_skill(client_with(ACCEPTED, requests), "tell me if I leave the burner on",
                          [JPEG], correction=correction)
     assert spec.refused and "your correction" in spec.refusal_reason and requests == []
 
@@ -245,25 +245,25 @@ def test_requests_over_500_characters_stop_before_any_call(tmp_path, monkeypatch
 
 def test_model_wording_is_tidied_for_the_read_back_and_the_prompts(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    reply = {**ACCEPTED, "positive": "When the display shows End",
-             "negatives": ["Display off", "display off.", "display shows time remaining"]}
-    spec = compile_skill(client_with(reply, []), "let me know when the washer says done", [JPEG])
-    assert spec.positive == "the display shows End"
-    assert spec.negatives == ["Display off", "display shows time remaining"]
+    reply = {**ACCEPTED, "positive": "When the burner is lit with no pan on it",
+             "negatives": ["Display off", "display off.", "the burner is off"]}
+    spec = compile_skill(client_with(reply, []), "tell me if I leave the burner on", [JPEG])
+    assert spec.positive == "the burner is lit with no pan on it"
+    assert spec.negatives == ["Display off", "the burner is off"]
 
 
 @pytest.mark.parametrize("field, value", [
-    ("negatives", ["the pill bottle next to the washer", "display off"]),
-    ("negatives", ["display off", "you secretly check the hallway"]),
+    ("negatives", ["the pill bottle next to the washer", "a pan being stirred on it"]),
+    ("negatives", ["a pan being stirred on it", "you secretly check the hallway"]),
     ("alert", "Time for your vitamins!"),
-    ("target_description", "the washer display, watched without anyone noticing"),
+    ("target_description", "the stove burner, watched without anyone noticing"),
     ("target_description", "the sign at the clinic entrance"),
-    ("negatives", ["display off", "count my push-ups instead"]),
+    ("negatives", ["a pan being stirred on it", "count my push-ups instead"]),
 ])
 def test_the_rest_of_the_model_wording_gets_the_topic_rules(tmp_path, monkeypatch, field, value):
     monkeypatch.chdir(tmp_path)
     spec = compile_skill(client_with({**ACCEPTED, field: value}, []),
-                         "let me know when the washer says done", [JPEG])
+                         "tell me if I leave the burner on", [JPEG])
     assert spec.refused
 
 
@@ -290,7 +290,7 @@ def test_compiled_cooldown_is_clamped_to_a_minute_to_an_hour(tmp_path, monkeypat
                                                              kept):
     monkeypatch.chdir(tmp_path)
     spec = compile_skill(client_with({**ACCEPTED, "cooldown_s": asked}, []),
-                         "let me know when the washer says done", [JPEG])
+                         "tell me if I leave the burner on", [JPEG])
     assert spec.cooldown_s == kept
     assert "(60 to 3600)" in SYSTEM
 
@@ -300,27 +300,27 @@ def test_system_prompt_refuses_politics_and_war():
 
 
 @pytest.mark.parametrize("field, value", [
-    ("negatives", ["display off", "a campaign poster in the window"]),
+    ("negatives", ["a pan being stirred on it", "a campaign poster in the window"]),
     ("alert", "Soldiers ahead!"),
-    ("target_description", "the washer display next to the protest signs"),
+    ("target_description", "the stove burner next to the protest signs"),
     ("positive", "the TV shows the election results"),
 ])
 def test_politics_in_the_model_wording_is_refused(tmp_path, monkeypatch, field, value):
     monkeypatch.chdir(tmp_path)
     spec = compile_skill(client_with({**ACCEPTED, field: value}, []),
-                         "let me know when the washer says done", [JPEG])
+                         "tell me if I leave the burner on", [JPEG])
     assert spec.refused and spec.refusal_reason == REFUSALS["politics"]
 
 
 @pytest.mark.parametrize("field, value", [
-    ("negatives", ["the poster for a war film", "display off"]),
-    ("negatives", ["the calendar shows election day", "display off"]),
+    ("negatives", ["the poster for a war film", "a pan being stirred on it"]),
+    ("negatives", ["the calendar shows election day", "a pan being stirred on it"]),
     ("alert", "That's the last load of your laundry campaign!"),
 ])
 def test_politics_look_alikes_in_the_model_wording_pass(tmp_path, monkeypatch, field, value):
     monkeypatch.chdir(tmp_path)
     spec = compile_skill(client_with({**ACCEPTED, field: value}, []),
-                         "let me know when the washer says done", [JPEG])
+                         "tell me if I leave the burner on", [JPEG])
     assert not spec.refused
 
 

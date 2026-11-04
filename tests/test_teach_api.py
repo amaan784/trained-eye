@@ -18,7 +18,7 @@ from backend.meta.client import MetaClient
 from backend.teach_api import teach_routes
 from tests.test_teach import FakeMeta, clip, wav
 
-REQUEST = "let me know when the washer says done"
+REQUEST = "tell me if I leave the burner on"
 TOKEN = "t0ken-for-tests"
 
 
@@ -173,7 +173,7 @@ def test_a_run_over_the_ask_limit_is_refused(api, fake, frames):
 def test_bad_inputs_are_refused_before_anything_is_saved(api, fake, settings, frames, audio,
                                                          case, status, message):
     reply = {
-        "bad name": lambda: start(api, frames, skill="Washer Done", request=REQUEST),
+        "bad name": lambda: start(api, frames, skill="Burner Left On", request=REQUEST),
         "no request": lambda: start(api, frames),
         "no frames": lambda: start(api, [], audio=audio),
         "not multipart": lambda: api.post("/teach/start", json={"skill": "burner_left_on"}),

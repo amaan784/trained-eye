@@ -5,11 +5,11 @@ from backend.skills.spec import SkillSpec, Target
 
 SPEC = SkillSpec(
     name="burner_left_on",
-    request="let me know when the washer says done",
-    target=Target(sam_prompt="washing machine display", description="the washer display"),
-    positive="the display shows the cycle has finished (e.g. 'End' or '0:00')",
-    negatives=["display shows time remaining", "display off", "a different appliance"],
-    alert="Your laundry's done.",
+    request="tell me if I leave the burner on",
+    target=Target(sam_prompt="stove burner", description="the stove burner"),
+    positive="the burner is lit with no pan on it",
+    negatives=["the burner is off", "a pan being stirred on it", "a different appliance"],
+    alert="The burner is still on.",
 )
 
 
@@ -42,10 +42,11 @@ def test_no_two_requests_are_identical():
 
 
 def test_negatives_that_differ_only_in_case_or_a_period_are_planned_once():
-    spec = SPEC.model_copy(update={"negatives": ["Display off", "display off.", "display off",
-                                                 "display shows time remaining"]})
+    spec = SPEC.model_copy(update={"negatives": ["The burner is off", "the burner is off.",
+                                                 "the burner is off",
+                                                 "a pan being stirred on it"]})
     plan = plan_variations(spec, ["a" * 64], positives=0, negatives=40)
-    assert {v.condition for v in plan} == {"Display off", "display shows time remaining"}
+    assert {v.condition for v in plan} == {"The burner is off", "a pan being stirred on it"}
     assert len({v.prompt for v in plan}) == 40
 
 

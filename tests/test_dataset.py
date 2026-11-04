@@ -16,11 +16,11 @@ from backend.skills.spec import SkillSpec, Target
 
 SPEC = SkillSpec(
     name="burner_left_on",
-    request="let me know when the washer says done",
-    target=Target(sam_prompt="washing machine display", description="the washer display"),
-    positive="the display shows the cycle has finished (e.g. 'End' or '0:00')",
-    negatives=["display shows time remaining", "display off", "a different appliance"],
-    alert="Your laundry's done.",
+    request="tell me if I leave the burner on",
+    target=Target(sam_prompt="stove burner", description="the stove burner"),
+    positive="the burner is lit with no pan on it",
+    negatives=["the burner is off", "a pan being stirred on it", "a different appliance"],
+    alert="The burner is still on.",
 )
 
 

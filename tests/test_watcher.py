@@ -17,10 +17,10 @@ from backend.watch.watcher import (
 
 
 def spec(name="burner_left_on", confirm=True, cooldown=600):
-    return SkillSpec(name=name, request="tell me when the washer says End",
-                     target=Target(sam_prompt="washer display", description="the display"),
-                     positive="the display shows End", negatives=["display off"],
-                     alert="Laundry's done.", cooldown_s=cooldown, confirm_with_cloud=confirm)
+    return SkillSpec(name=name, request="tell me when the burner is left on",
+                     target=Target(sam_prompt="stove burner", description="the display"),
+                     positive="the burner is lit with no pan on it", negatives=["a pan being stirred on it"],
+                     alert="The burner is still on.", cooldown_s=cooldown, confirm_with_cloud=confirm)
 
 
 class Scores:
@@ -57,14 +57,14 @@ def test_an_alert_after_three_of_four_frames_confirmed_by_spark(tmp_path):
     results = run(watcher, 5)
     alerts = [a for _, fired in results for a in fired]
     assert [(a.skill, a.text, a.t, a.confirmed) for a in alerts] == [
-        ("burner_left_on", "Laundry's done.", 3.0, True)]
+        ("burner_left_on", "The burner is still on.", 3.0, True)]
     assert asked == ["burner_left_on"]  # Spark only when the trigger fires
     rows = [json.loads(x) for x in log.path.read_text().splitlines()]
     assert [r["p"] for r in rows] == [0.1, 0.9, 0.8, 0.9, 0.95]
     assert [r.get("alert") for r in rows] == [None, None, None, True, None]
     assert rows[3]["cloud"] == "yes" and "image" not in json.dumps(rows)
     assert alert_message(alerts[0]) == {"type": "alert", "skill": "burner_left_on",
-                                        "text": "Laundry's done.", "t": 3.0, "p": 0.9,
+                                        "text": "The burner is still on.", "t": 3.0, "p": 0.9,
                                         "confirmed": True}
 
 

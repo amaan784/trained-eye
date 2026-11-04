@@ -17,7 +17,7 @@ def png(seed):
 
 def teach_dataset(root, skill, real=10, synthetic=40, system_in_user=False):
     examples = [Example(f"{skill}-{src[:4]}-{i:03d}", png(i), "yes" if i % 2 else "no", src,
-                        skill, "the display shows End", ["display off"])
+                        skill, "the burner is lit with no pan on it", ["a pan being stirred on it"])
                 for src, n in (("real", real), ("synthetic", synthetic)) for i in range(n)]
     write_dataset(examples, root / skill / "dataset", f"{skill}-teach",
                   system_in_user=system_in_user)
@@ -203,7 +203,7 @@ def test_experiment_2s_arms_must_share_one_prompt_layout(tmp_path):
 
     skill = teach_dataset(tmp_path / "skills", "burner_left_on", system_in_user=True)
     examples = [Example(f"burner_left_on-synt-{i:03d}", png(i), "yes" if i % 2 else "no",
-                        "synthetic", "burner_left_on", "the display shows End", ["display off"])
+                        "synthetic", "burner_left_on", "the burner is lit with no pan on it", ["a pan being stirred on it"])
                 for i in range(20)]
     write_dataset(examples, skill / "dataset-unfiltered", "burner_left_on-teach",
                   system_in_user=False)  # te unfiltered ran before TE_SYSTEM_IN_USER=1

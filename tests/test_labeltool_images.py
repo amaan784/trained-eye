@@ -7,9 +7,9 @@ from starlette.testclient import TestClient
 from backend.labeltool.images import create_image_app, sample_images
 from backend.skills.spec import SkillSpec
 
-SPEC = SkillSpec(name="burner_left_on", request="Tell me when the washer is done", alert="Done.",
-                 target={"sam_prompt": "washer display", "description": "the washer display"},
-                 positive="The display shows End", negatives=["time remaining is shown"])
+SPEC = SkillSpec(name="burner_left_on", request="Tell me when the burner is left on", alert="Done.",
+                 target={"sam_prompt": "stove burner", "description": "the stove burner"},
+                 positive="The burner is lit with no pan on it", negatives=["the burner is off"])
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ def test_page_shows_the_question_and_images_but_not_spark(skill, tmp_path):
     client = TestClient(create_image_app(images, tmp_path / "human.json"))
     assert client.get("/").status_code == 200 and "Inter" in client.get("/static/style.css").text
     state = client.get("/state").json()
-    assert state["question"].startswith("Condition: The display shows End. Not: time remaining")
+    assert state["question"].startswith("Condition: The burner is lit with no pan on it. Not: the burner is off")
     assert state["images"] == [p.name for p in images] and state["labels"] == {}
     assert "spark" not in json.dumps(state)
     assert client.get("/image/2").content == images[2].read_bytes()

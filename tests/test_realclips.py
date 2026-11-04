@@ -18,10 +18,10 @@ from backend.dataengine.realclips import (
 )
 from backend.skills.spec import SkillSpec, Target
 
-SPEC = SkillSpec(name="burner_left_on", request="tell me when the washer says End",
-                 target=Target(sam_prompt="washer display", description="the washer display"),
-                 positive="the display shows End", negatives=["display off"],
-                 alert="Laundry's done.")
+SPEC = SkillSpec(name="burner_left_on", request="tell me when the burner is left on",
+                 target=Target(sam_prompt="stove burner", description="the stove burner"),
+                 positive="the burner is lit with no pan on it", negatives=["a pan being stirred on it"],
+                 alert="The burner is still on.")
 
 
 def skill_folder(root, spec=SPEC):
@@ -109,7 +109,7 @@ def test_labelled_clips_become_real_examples_split_by_session(tmp_path):
     assert "burner_left_on-real-session1_kitchen-00010.0s" not in index  # at the change
     record = json.loads((out / "burner_left_on-clips.jsonl").read_text().splitlines()[0])
     assert record["messages"][1]["content"][1]["text"].startswith(
-        "Condition: the display shows End. Not: display off.")
+        "Condition: the burner is lit with no pan on it. Not: a pan being stirred on it.")
     again = write_clip_dataset(skill, tmp_path / "clips")
     assert again["jsonl_sha256"] == manifest["jsonl_sha256"]  # deterministic
 
@@ -187,11 +187,11 @@ def test_a_video_is_sampled_once_a_second(tmp_path):
     frames = frame_clip(tmp_path / "src", 60)  # 6 s at 10 fps
     clips = tmp_path / "clips"
     clips.mkdir()
-    video = clips / "session1_washer.mp4"
+    video = clips / "session1_burner.mp4"
     subprocess.run(["ffmpeg", "-v", "error", "-framerate", "10", "-i", str(frames / "f%03d.jpg"),
                     "-pix_fmt", "yuv420p", str(video)], check=True)
     labels_path(video).write_text(json.dumps(
-        {"clip": "session1_washer.mp4", "duration_s": 6.0, "true": [[3.0, 6.0]]}))
+        {"clip": "session1_burner.mp4", "duration_s": 6.0, "true": [[3.0, 6.0]]}))
     manifest = write_clip_dataset(skill_folder(tmp_path / "skills"), clips)
     times = {e["t_s"]: e["answer"] for e in manifest["examples_index"]}
     assert times == {0.0: "no", 1.0: "no", 5.0: "yes"}  # 2 to 4 s: near the change at 3 s

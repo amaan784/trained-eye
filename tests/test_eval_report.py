@@ -34,7 +34,7 @@ def plan(tmp_path):
     plan = {"evaluations": [
         evaluation("exp1-real", 1, write_clip(clips, "real", 75, over=range(70, 100)),
                    variant="real only"),
-        evaluation("exp1-mixed", 1, mixed, variant="mixed", alert_text="Laundry's done."),
+        evaluation("exp1-mixed", 1, mixed, variant="mixed", alert_text="The burner is still on."),
         evaluation("exp3-25", 3, write_clip(clips, "n25", None, over=()), images=25,
                    generation_usd=0.25),
         evaluation("exp3-300", 3, write_clip(clips, "n300", 62), images=300),
@@ -99,7 +99,7 @@ def test_bad_plans_are_refused(tmp_path):
     check([evaluation("a", 1, clip, gpu_usd_per_hr=1)], "Extra inputs")
     check([evaluation("a", 1, clip, gpu="TPU")], "gpu must be one of")
     check([evaluation("../a", 1, clip)], "pattern")
-    check([{**evaluation("a", 1, clip), "skill": "Washer Done"}], "snake_case")
+    check([{**evaluation("a", 1, clip), "skill": "Burner Left On"}], "snake_case")
     (tmp_path / "a.jsonl").write_text("{}\n")
     (tmp_path / "a.json").write_text('{"true": []}')
     check([evaluation("a", 1, clip)], "a, a.jsonl: ValueError")  # no rows for the skill

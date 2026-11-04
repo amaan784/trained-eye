@@ -19,7 +19,7 @@ ROWS = [  # as backend/watch/watcher.py logs them
 ]
 
 
-def make_clip(data_dir, name="washer_1", rows=ROWS, video=True, labels=None, blurred=False):
+def make_clip(data_dir, name="burner_1", rows=ROWS, video=True, labels=None, blurred=False):
     """data/playground/clips/<name>/ as te playground-clip leaves it (fake video bytes)."""
     folder = data.clips_root(data_dir) / name
     folder.mkdir(parents=True)
@@ -35,7 +35,7 @@ def make_clip(data_dir, name="washer_1", rows=ROWS, video=True, labels=None, blu
     return folder
 
 
-def write_spec(data_dir, skill="burner_left_on", alert="Your laundry's done."):
+def write_spec(data_dir, skill="burner_left_on", alert="The burner is still on."):
     folder = data_dir / "skills" / skill
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "spec.json").write_text(json.dumps({"name": skill, "alert": alert}))
@@ -46,10 +46,10 @@ def test_list_clips(tmp_path):
     make_clip(tmp_path, "no_video", rows=ROWS[:1], video=False)
     (data.clips_root(tmp_path) / "no_log").mkdir()
     clips = data.list_clips(tmp_path)
-    assert [c["name"] for c in clips] == ["no_video", "washer_1"]
-    assert clips[1] == {"name": "washer_1", "video": True, "skills": ["burner_left_on"],
+    assert [c["name"] for c in clips] == ["burner_1", "no_video"]
+    assert clips[0] == {"name": "burner_1", "video": True, "skills": ["burner_left_on"],
                         "frames": 5, "alerts": 2, "labelled": True}
-    assert clips[0]["video"] is False and clips[0]["alerts"] == 0
+    assert clips[1]["video"] is False and clips[1]["alerts"] == 0
     assert data.list_clips(tmp_path / "missing") == []
 
 
@@ -64,23 +64,23 @@ def test_clip_timeline(tmp_path):
     data_dir = tmp_path / "data"
     make_clip(data_dir, labels={"true": [[2.5, 4.0], [3, 1], "bad", [0, "x"]]})
     write_spec(data_dir)
-    clip = data.clip_timeline(data_dir, "washer_1")
-    assert clip["video"] == "media/clips/washer_1/clip.mp4"
+    clip = data.clip_timeline(data_dir, "burner_1")
+    assert clip["video"] == "media/clips/burner_1/clip.mp4"
     assert clip["duration"] == 4.0
     assert clip["true_ranges"] == [[2.5, 4.0]]  # reversed and malformed ranges dropped
     skill = clip["skills"]["burner_left_on"]
     assert skill["threshold"] == 0.6
     assert skill["points"] == [[0.0, 0.1], [1.0, None], [2.0, 0.8], [3.0, 0.9], [4.0, 0.95]]
-    assert skill["alerts"] == [{"t": 3.0, "p": 0.9, "text": "Your laundry's done."},
+    assert skill["alerts"] == [{"t": 3.0, "p": 0.9, "text": "The burner is still on."},
                                {"t": 4.0, "p": 0.95, "text": "Custom words."}]
 
 
 def test_clip_timeline_without_spec_or_labels(tmp_path):
     make_clip(tmp_path, video=False)
-    clip = data.clip_timeline(tmp_path, "washer_1")
+    clip = data.clip_timeline(tmp_path, "burner_1")
     assert clip["video"] is None and clip["true_ranges"] == []
     assert clip["skills"]["burner_left_on"]["alerts"][0]["text"] == "Alert"
-    for name in ("missing", "../washer_1", "washer_1/..", ""):
+    for name in ("missing", "../burner_1", "burner_1/..", ""):
         assert data.clip_timeline(tmp_path, name) is None
 
 
@@ -114,12 +114,12 @@ def test_media_path_serves_only_linked_files(tmp_path):
         hit = data.media_path(data_dir, eval_dir, path)
         return hit and (hit[0].name, hit[1])
 
-    assert found("clips/washer_1/clip.mp4") == ("clip.mp4", "video/mp4")
+    assert found("clips/burner_1/clip.mp4") == ("clip.mp4", "video/mp4")
     assert found("skills/burner_left_on/keyframes/kf_00_1a2b3c4d.jpg") == ("kf_00_1a2b3c4d.jpg",
                                                                        "image/jpeg")
     assert found("playground/keyframes/door.png") == ("door.png", "image/png")
     assert found("results/chart.svg") == ("chart.svg", "image/svg+xml")
-    for path in ("clips/washer_1/log.jsonl", "skills/burner_left_on/spec.json",
+    for path in ("clips/burner_1/log.jsonl", "skills/burner_left_on/spec.json",
                  "skills/burner_left_on/keyframes/../spec.json", "results/../.env",
                  "skills/../../.env", "clips/../../.env/clip.mp4", "results/missing.svg",
                  "skills/burner_left_on/dataset/x.png", "", "results"):
@@ -154,7 +154,7 @@ def test_public_copy_serves_only_blurred_files(tmp_path):
         hit = data.media_path(data_dir, eval_dir, path, public=public)
         return hit and hit[0].name
 
-    assert found("clips/washer_1/clip.mp4") == "clip.mp4"
+    assert found("clips/burner_1/clip.mp4") == "clip.mp4"
     assert found("skills/burner_left_on/keyframes_blurred/kf_00.png") == "kf_00.png"
     for path in ("clips/raw_clip/clip.mp4", "clips/swapped/clip.mp4",
                  "skills/burner_left_on/keyframes/kf_00.png", "skills/burner_left_on/synthetic/pos.png",
@@ -166,9 +166,9 @@ def test_public_copy_serves_only_blurred_files(tmp_path):
     assert found("skills/burner_left_on/synthetic/pos.png", public=False) == "pos.png"
     assert not found("skills/burner_left_on/keyframes_blurred/kf_00.png", public=False)
     videos = {c["name"]: c["video"] for c in data.list_clips(data_dir, public=True)}
-    assert videos == {"raw_clip": False, "swapped": False, "washer_1": True}
+    assert videos == {"raw_clip": False, "swapped": False, "burner_1": True}
     assert data.clip_timeline(data_dir, "raw_clip", public=True)["video"] is None
-    assert data.clip_timeline(data_dir, "washer_1", public=True)["video"].endswith("clip.mp4")
+    assert data.clip_timeline(data_dir, "burner_1", public=True)["video"].endswith("clip.mp4")
 
     (tmp_path / "picked").mkdir()
     (tmp_path / "picked" / "door.png").write_bytes(png((50, 60, 70)))

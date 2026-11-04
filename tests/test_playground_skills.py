@@ -13,7 +13,7 @@ def make_skill(tmp_path, name="burner_left_on"):
     """data/skills/<name>/ as `te teach` leaves it, with 6 + 6 variations. Returns data/."""
     client = client_for(tmp_path, FakeMeta())
     opts = TeachOptions(skill=name, clip=clip(tmp_path / f"clip_{name}"),
-                        request="tell me when the washer says done", positives=6, negatives=6)
+                        request="tell me if I leave the burner on", positives=6, negatives=6)
     data_dir = tmp_path / "data"
     run_teach(client, opts, data_dir / "skills", confirm=lambda s: True, say=lambda s: None)
     return data_dir
@@ -30,7 +30,7 @@ def test_list_skills_skips_refused_and_odd_folders(tmp_path):
     listed = skills.list_skills(data_dir)
     assert [s["name"] for s in listed] == ["burner_left_on"]
     stats = json.loads((data_dir / "skills/burner_left_on/label_stats.json").read_text())
-    assert listed[0]["read_back"].startswith("I'll watch the digital display")
+    assert listed[0]["read_back"].startswith("I'll watch the front left burner of the stove")
     assert listed[0]["variations"] == 12 and listed[0]["kept"] == stats["kept"]
     assert listed[0]["keyframes"] == len(list((data_dir / "skills/burner_left_on/keyframes")
                                               .iterdir()))
@@ -40,7 +40,7 @@ def test_list_skills_skips_refused_and_odd_folders(tmp_path):
 def test_skill_detail_wall_and_keyframes(tmp_path):
     data_dir = make_skill(tmp_path)
     detail = skills.skill_detail(data_dir, "burner_left_on")
-    assert detail["target"] == "washing machine display"
+    assert detail["target"] == "stove burner"
     assert detail["keyframes"][0]["spark_label"] == "no"  # the fake labels real frames no
     assert detail["wall_total"] == 12 and len(detail["wall"]) == 12
     kinds = {t["kind"] for t in detail["wall"]}
@@ -107,7 +107,7 @@ def test_examples(tmp_path):
     data_dir = make_skill(tmp_path)
     (example,) = skills.examples(data_dir)
     assert example["skill"] == "burner_left_on"
-    assert example["request"] == "tell me when the washer says done"
+    assert example["request"] == "tell me if I leave the burner on"
     kinds = [t["kind"] for t in example["variations"]]
     assert kinds == ["positive"] * 6 + ["hard_negative"] * 6
 

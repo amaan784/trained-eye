@@ -195,8 +195,8 @@ def test_student_endpoint_settings():
     assert s.student_url is None and s.student_model == "trained-eye"
     assert "student: not set (TE_STUDENT_URL)" in describe(s)
     s = load_settings(env={"TE_STUDENT_URL": " http://192.168.1.23:8080/v1/ ",
-                           "TE_STUDENT_MODEL": "washer-v1"}, env_file=None)
-    assert (s.student_url, s.student_model) == ("http://192.168.1.23:8080/v1", "washer-v1")
+                           "TE_STUDENT_MODEL": "burner-v1"}, env_file=None)
+    assert (s.student_url, s.student_model) == ("http://192.168.1.23:8080/v1", "burner-v1")
 
 
 def test_an_unknown_home_folder_is_a_config_error():

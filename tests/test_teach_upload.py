@@ -11,7 +11,7 @@ from backend.meta.client import MetaClient
 from backend.teach_upload import Problem, new_session, parse_multipart, save_capture
 from tests.test_teach import clip, wav
 
-REQUEST = "let me know when the washer says done"
+REQUEST = "tell me if I leave the burner on"
 
 
 def encode(fields, files):
@@ -88,7 +88,7 @@ def test_bad_uploads_are_refused_before_anything_is_saved(tmp_path, frames, case
               "audio type": ([*frames, audio], {}),
               "bad count": (frames, {"request": REQUEST, "positives": "many"}),
               "negative count": (frames, {"request": REQUEST, "negatives": "-1"}),
-              "long request": (frames, {"request": "the washer " * 60}),
+              "long request": (frames, {"request": "the burner " * 60}),
               "policy": (frames, {"request": "tell me when Sam gets here"}),
               "no key": (frames, {"request": REQUEST, "env": {"MODEL_API_KEY": ""}})}[case]
     files, fields = kwargs

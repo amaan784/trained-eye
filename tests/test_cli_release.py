@@ -22,7 +22,7 @@ def env(tmp_path, monkeypatch):
 
 def manifest_rows(skill="burner_left_on"):
     return [{"id": f"{skill}-pos-{i:03d}", "skill": skill, "label": "yes", "kind": "positive",
-             "condition": "the display shows End", "nuisance": "in the same lighting",
+             "condition": "the burner is lit with no pan on it", "nuisance": "in the same lighting",
              "keyframe_sha256": "a" * 64, "prompt": f"Edit this photo {i}.", "file": f"{i}.png",
              "image_sha256": "b" * 64, "model": "muse-image-1.0", "cache_key": "c" * 64,
              "cost_usd": 0.01, "cached": False} for i in range(3)]

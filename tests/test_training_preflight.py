@@ -69,7 +69,7 @@ class FakeProcessor:
 
 def record(i, answer, folded=False):
     example = Example(f"burner_left_on-real-{i:03d}", b"", answer, "real", "burner_left_on",
-                      "the display shows End", ["display off"])
+                      "the burner is lit with no pan on it", ["a pan being stirred on it"])
     return build_record(example, Path(f"/vol/bundles/exp1/images/{i}.png"), folded)
 
 
@@ -89,7 +89,7 @@ def test_both_layouts_from_either_way_the_dataset_was_written():
         layouts = preflight.both_layouts(record(1, "yes", folded), SYSTEM_PROMPT)
         turn, user = layouts["system_turn"], layouts["system_in_user"]
         assert turn[0] == {"role": "system", "content": SYSTEM_PROMPT}
-        assert turn[1]["content"][1]["text"].startswith("Condition: the display shows End.")
+        assert turn[1]["content"][1]["text"].startswith("Condition: the burner is lit with no pan on it.")
         assert user[0]["role"] == "user" and user[-1] == {"role": "assistant", "content": "yes"}
         assert user[0]["content"][1]["text"] == f"{SYSTEM_PROMPT}\n\n" + turn[1]["content"][1][
             "text"]

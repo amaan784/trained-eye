@@ -88,7 +88,7 @@ def test_teach_estimate_only_makes_no_call(env, monkeypatch, capsys):
     calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
     clip = write_clip(env / "clip")
     code = cli.main(["teach", "--skill", "burner_left_on", "--clip", str(clip), "--request",
-                     "let me know when the washer says done", "--estimate-only"])
+                     "tell me if I leave the burner on", "--estimate-only"])
     assert code == 0 and calls == []
     out = capsys.readouterr().out
     assert out.startswith("estimate for burner_left_on") and "images $3.00" in out
@@ -108,8 +108,8 @@ def test_teach_refused_request_stops_for_free(env, monkeypatch, capsys):
 def test_teach_rejects_a_bad_skill_name_before_anything(env, monkeypatch, capsys):
     calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
     clip = write_clip(env / "clip")
-    code = cli.main(["teach", "--skill", "washer-done", "--clip", str(clip), "--request",
-                     "let me know when the washer says done", "--yes"])
+    code = cli.main(["teach", "--skill", "burner-left-on", "--clip", str(clip), "--request",
+                     "tell me if I leave the burner on", "--yes"])
     assert code == 2 and calls == []
     assert "snake_case" in capsys.readouterr().err
     assert not (env / "data" / "skills").exists()
@@ -117,13 +117,13 @@ def test_teach_rejects_a_bad_skill_name_before_anything(env, monkeypatch, capsys
 
 SPEC_REPLY = {
     "refused": False, "refusal_reason": None, "name": "burner_left_on",
-    "sam_prompt": "washing machine display",
-    "target_description": "the digital display on the front of the washer",
-    "positive": "the display shows the cycle has finished (e.g. 'End' or '0:00')",
-    "negatives": ["display shows time remaining", "display off"],
-    "alert": "Your laundry's done.", "cooldown_s": 600, "confirm_with_cloud": True,
+    "sam_prompt": "stove burner",
+    "target_description": "the front left burner of the stove",
+    "positive": "the burner is lit with no pan on it",
+    "negatives": ["the burner is off", "a pan being stirred on it"],
+    "alert": "The burner is still on.", "cooldown_s": 600, "confirm_with_cloud": True,
 }
-TEACH = ["teach", "--skill", "burner_left_on", "--request", "let me know when the washer says done"]
+TEACH = ["teach", "--skill", "burner_left_on", "--request", "tell me if I leave the burner on"]
 
 
 def answer(monkeypatch, *replies):
@@ -164,7 +164,7 @@ def test_teach_read_back_no_stops_after_the_spec_and_says_how_to_correct(env, mo
     assert code == 1 and len(calls) == 1
     assert [p.split(" ")[0] for p in prompts] == ["Spend", "Is"]
     out = capsys.readouterr().out
-    assert "I'll watch the digital display" in out and "stopped: not confirmed" in out
+    assert "I'll watch the front left burner of the stove" in out and "stopped: not confirmed" in out
     assert '--correct "what is wrong"' in out
 
 
@@ -248,7 +248,7 @@ def test_teach_checks_its_inputs_before_any_estimate(env, monkeypatch, capsys, p
     calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
     clip = write_clip(env / "clip")
     args = ["teach", "--skill", "burner_left_on", "--clip", str(clip), "--request",
-            "let me know when the washer says done"]
+            "tell me if I leave the burner on"]
     if problem == "missing clip":
         args[4] = str(env / "nope.mp4")
     elif problem == "empty folder":
@@ -360,14 +360,14 @@ def taught(env, skill="burner_left_on", n=40):
     root = env / "data/skills" / skill
     examples = [Example(f"{skill}-{'real' if i < 10 else 'synt'}-{i:03d}",
                         synthetic_jpeg(i, size=(64, 48)), "yes" if i % 2 else "no",
-                        "real" if i < 10 else "synthetic", skill, "the display shows End",
-                        ["display off"]) for i in range(n)]
+                        "real" if i < 10 else "synthetic", skill, "the burner is lit with no pan on it",
+                        ["a pan being stirred on it"]) for i in range(n)]
     write_dataset(examples, root / "dataset", f"{skill}-teach")
     (root / "spec.json").write_text(SkillSpec(
-        name=skill, request="tell me when the washer says End",
-        target=Target(sam_prompt="washer display", description="the display"),
-        positive="the display shows End", negatives=["display off"],
-        alert="Laundry's done.", confirm_with_cloud=False).model_dump_json())
+        name=skill, request="tell me when the burner is left on",
+        target=Target(sam_prompt="stove burner", description="the display"),
+        positive="the burner is lit with no pan on it", negatives=["a pan being stirred on it"],
+        alert="The burner is still on.", confirm_with_cloud=False).model_dump_json())
     return root
 
 

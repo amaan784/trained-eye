@@ -16,10 +16,10 @@ from backend.watch.trigger import Trigger
 from backend.watch.watcher import FrameLog, WatchedSkill, Watcher
 from tests.test_teach import chat, client_for, png
 
-SPEC = SkillSpec(name="burner_left_on", request="tell me when the washer says End",
-                 target=Target(sam_prompt="washer display", description="the washer display"),
-                 positive="the display shows End", negatives=["display off"],
-                 alert="Laundry's done.", confirm_with_cloud=False)
+SPEC = SkillSpec(name="burner_left_on", request="tell me when the burner is left on",
+                 target=Target(sam_prompt="stove burner", description="the stove burner"),
+                 positive="the burner is lit with no pan on it", negatives=["a pan being stirred on it"],
+                 alert="The burner is still on.", confirm_with_cloud=False)
 GREEN, RED, GREY, BLUE = (0, 220, 0), (220, 0, 0), (128, 128, 128), (0, 0, 220)
 
 

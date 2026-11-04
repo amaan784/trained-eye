@@ -15,7 +15,7 @@ from tests.test_playground_data import make_clip
 from tests.test_playground_skills import blur, make_skill
 from tests.test_teach import FakeMeta, png
 
-CONDITION = {"condition": "the washer display shows End"}
+CONDITION = {"condition": "the stove burner shows End"}
 
 
 def make_app(tmp_path, key=True, public=False, **caps):
@@ -75,9 +75,9 @@ def test_page_and_static_files_load(tmp_path):
 
 def test_data_apis_read_the_fixture(tmp_path):
     client, fake = make_app(tmp_path)
-    assert [c["name"] for c in client.get("/api/clips").json()["clips"]] == ["washer_1"]
-    timeline = client.get("/api/clips/washer_1").json()
-    assert timeline["skills"]["burner_left_on"]["alerts"][0]["text"] == "Your laundry's done."
+    assert [c["name"] for c in client.get("/api/clips").json()["clips"]] == ["burner_1"]
+    timeline = client.get("/api/clips/burner_1").json()
+    assert timeline["skills"]["burner_left_on"]["alerts"][0]["text"] == "The burner is still on."
     assert client.get("/api/clips/nope").status_code == 404
     (skill,) = client.get("/api/skills").json()["skills"]
     detail = client.get(f"/api/skills/{skill['name']}").json()
@@ -92,7 +92,7 @@ def test_data_apis_read_the_fixture(tmp_path):
         r = client.get("/" + url)
         assert r.status_code == 200 and r.headers["x-content-type-options"] == "nosniff"
     assert "default-src 'none'" in client.get("/" + urls[1]).headers["content-security-policy"]
-    for bad in ("/media/clips/washer_1/log.jsonl", "/media/skills/burner_left_on/spec.json",
+    for bad in ("/media/clips/burner_1/log.jsonl", "/media/skills/burner_left_on/spec.json",
                 "/media/results/..%2F..%2Fledger.jsonl", "/media/"):
         assert client.get(bad).status_code == 404
     assert fake.calls == {}  # reading costs nothing
@@ -186,7 +186,7 @@ def test_public_copy_serves_no_generated_image_and_no_original_keyframe(tmp_path
     assert r.status_code == 400 and "Pick one" in r.json()["error"]
     for odd in (["a"], {"x": 1}):
         assert client.post("/api/teach", json={**CONDITION, "keyframe": odd}).status_code == 400
-    timeline = client.get("/api/clips/washer_1").json()  # blurred: its video is served
+    timeline = client.get("/api/clips/burner_1").json()  # blurred: its video is served
     assert client.get("/" + timeline["video"]).status_code == 200
     assert fake.calls == {}
 

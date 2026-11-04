@@ -16,10 +16,10 @@ from backend.inference.student import (
 )
 from backend.skills.spec import SkillSpec, Target
 
-SPEC = SkillSpec(name="burner_left_on", request="tell me when the washer says End",
-                 target=Target(sam_prompt="washer display", description="the washer display"),
-                 positive="the display shows End", negatives=["display off", "time left"],
-                 alert="Laundry's done.")
+SPEC = SkillSpec(name="burner_left_on", request="tell me when the burner is left on",
+                 target=Target(sam_prompt="stove burner", description="the stove burner"),
+                 positive="the burner is lit with no pan on it", negatives=["a pan being stirred on it", "time left"],
+                 alert="The burner is still on.")
 
 
 def jpeg(size=(1280, 720)):

@@ -404,11 +404,11 @@ def wav_bytes(seconds=2.0, rate=16000):
 
 
 def test_transcribe(tmp_path):
-    rec = Recorder({"text": "let me know when the washer says done", "duration": 2.0,
+    rec = Recorder({"text": "tell me if I leave the burner on", "duration": 2.0,
                     "segments": [{"start": 0.0, "end": 2.0, "text": "let me know..."}]})
     client, _ = make_client(tmp_path, rec)
     t = client.transcribe(wav_bytes(), skill="burner_left_on")
-    assert t.text.startswith("let me know") and t.duration_s == 2.0 and len(t.segments) == 1
+    assert t.text.startswith("tell me if") and t.duration_s == 2.0 and len(t.segments) == 1
     assert t.info.cost_usd == pytest.approx(0.18 * 2 / 3600)
     [entry] = client.ledger.entries()
     assert entry["skill"] == "burner_left_on" and entry["actual_usd"] == t.info.cost_usd
@@ -449,14 +449,14 @@ def test_sam_streamed(tmp_path):
         {"type": "response.completed", "response": {"usage": {"input_tokens": 900}}},
     ))
     client, _ = make_client(tmp_path, rec)
-    result = client.sam_image("washing machine display", JPEG, skill="burner_left_on")
+    result = client.sam_image("stove burner", JPEG, skill="burner_left_on")
     assert result.text == SAM_LINE + "\n"
     assert result.info.cost_usd == pytest.approx(0.0025)
     body = json.loads(rec.requests[0].content)
     assert body["model"] == "sam-3.1" and body["stream"] is True
     assert body["metadata"] == {"include_confidence": "true"}
     assert [p["type"] for p in body["input"][0]["content"]] == ["input_text", "input_image"]
-    assert client.sam_image("washing machine display", JPEG, skill="burner_left_on").info.cached
+    assert client.sam_image("stove burner", JPEG, skill="burner_left_on").info.cached
     [entry] = client.ledger.entries()
     assert entry["model"] == "sam-3.1" and entry["actual_usd"] == pytest.approx(0.0025)
 
@@ -523,10 +523,10 @@ def test_sam_done_text_alone_is_the_whole_output(tmp_path):
 
 def test_image_edit_keeps_bytes_exactly(tmp_path):
     rec = Recorder({"data": [{"b64_json": base64.b64encode(PNG).decode(),
-                              "revised_prompt": "washer display showing End"}]})
+                              "revised_prompt": "stove burner showing End"}]})
     client, _ = make_client(tmp_path, rec)
     result = client.image_edit(JPEG, "make the display show End", skill="burner_left_on")
-    assert result.images == [PNG] and result.revised_prompts == ["washer display showing End"]
+    assert result.images == [PNG] and result.revised_prompts == ["stove burner showing End"]
     assert result.info.cost_usd == pytest.approx(0.01)
     request = rec.requests[0]
     assert request.url.path == "/v1/images/edits"
@@ -544,7 +544,7 @@ def test_image_url_download_never_sends_the_key(tmp_path):
                    httpx.Response(302, headers={"location": "https://store.example.test/1.png"}),
                    httpx.Response(200, content=PNG))
     client, _ = make_client(tmp_path, rec)
-    assert client.image_generate("a washer display showing End").images == [PNG]
+    assert client.image_generate("a stove burner showing End").images == [PNG]
     generate, download, redirected = rec.requests
     assert generate.url.path == "/v1/images/generations"
     assert json.loads(generate.content)["model"] == "muse-image-1.0"
@@ -570,7 +570,7 @@ def test_an_image_reply_without_images_is_charged_for_what_was_asked(tmp_path):
                     "usage": {"images": 2}})
     client, _ = make_client(tmp_path, rec)
     with pytest.raises(OutputError, match="no images"):
-        client.image_generate("a washer display showing End", n=2)
+        client.image_generate("a stove burner showing End", n=2)
     [entry] = client.ledger.entries()
     assert entry["status"] == "output_error" and entry["actual_usd"] == pytest.approx(0.02)
 

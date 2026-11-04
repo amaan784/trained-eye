@@ -111,10 +111,10 @@ class Scores(list):
 
 
 def test_a_log_written_by_the_watcher(tmp_path):
-    spec = SkillSpec(name="burner_left_on", request="tell me when the washer says End",
-                     target=Target(sam_prompt="washer display", description="the display"),
-                     positive="the display shows End", negatives=["display off"],
-                     alert="Laundry's done.", cooldown_s=600, confirm_with_cloud=False)
+    spec = SkillSpec(name="burner_left_on", request="tell me when the burner is left on",
+                     target=Target(sam_prompt="stove burner", description="the display"),
+                     positive="the burner is lit with no pan on it", negatives=["a pan being stirred on it"],
+                     alert="The burner is still on.", cooldown_s=600, confirm_with_cloud=False)
     log = FrameLog(tmp_path / "replay.jsonl")
     skill = WatchedSkill(spec, Trigger(0.5, spec.cooldown_s), calibrated=True)
     watcher = Watcher([skill], Scores([0.1] * 5 + [0.9] * 5), log=log)

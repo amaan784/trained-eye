@@ -109,8 +109,8 @@ def test_playground_deploy_asks_first_and_copies_only_public_files(env, monkeypa
         "/data/skills/burner_left_on/synthetic/manifest.jsonl",
         "/data/skills/burner_left_on/keyframes_blurred/sources.json",
         "/data/skills/burner_left_on/keyframes_blurred/kf_00.png",
-        "/data/playground/clips/washer_1/log.jsonl", "/data/playground/clips/washer_1/clip.mp4",
-        "/data/playground/clips/washer_1/clip.mp4.blur.json",
+        "/data/playground/clips/burner_1/log.jsonl", "/data/playground/clips/burner_1/clip.mp4",
+        "/data/playground/clips/burner_1/clip.mp4.blur.json",
         "/data/playground/clips/raw_clip/log.jsonl", "/eval/f1.svg"}
     deploy_env = commands[-1][1]
     assert (deploy_env["TE_PLAYGROUND_VISITOR_CAP"], deploy_env["TE_PLAYGROUND_DAILY_CAP"],
@@ -152,16 +152,16 @@ def test_playground_clip_blurs_and_assembles_the_clip_folder(env, monkeypatch, c
     labels = env / "session3_test_1.labels.json"
     labels.write_text(json.dumps({"clip": clip.name, "duration_s": 2.0, "true": [[0.5, 1.0]]}))
     args = ["playground-clip", "--clip", str(clip), "--log", str(log), "--labels", str(labels),
-            "--name", "washer_1", "--fps", "10"]
+            "--name", "burner_1", "--fps", "10"]
     assert cli.main(args) == 0
-    folder = env / "data/playground/clips/washer_1"
+    folder = env / "data/playground/clips/burner_1"
     assert sorted(p.name for p in folder.iterdir()) == ["clip.mp4", "clip.mp4.blur.json",
                                                         "labels.json", "log.jsonl"]
     record = json.loads((folder / "clip.mp4.blur.json").read_text())
     assert record["frames"] == len(seen) == 20 and record["faces"] == 20
     assert record["source_sha256"] == data.file_sha256(clip)
     assert data.blurred_video(folder) == "clip.mp4"
-    assert data.clip_timeline(env / "data", "washer_1", public=True)["true_ranges"] == [[0.5, 1.0]]
+    assert data.clip_timeline(env / "data", "burner_1", public=True)["true_ranges"] == [[0.5, 1.0]]
     assert "20 faces blurred in 20 frames" in capsys.readouterr().out
     assert cli.main(args) == 2 and "already exists" in capsys.readouterr().err
 

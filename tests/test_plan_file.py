@@ -73,7 +73,7 @@ def test_same_models_share_their_replays_and_every_run_calibrates_its_own(tmp_pa
     assert timelines["exp1-mixed"] == timelines["exp4-finetuned"] == [True, False]
     assert not any(any(t) for name, t in timelines.items()
                    if name not in ("exp1-mixed", "exp4-finetuned"))
-    assert {e["alert_text"] for e in entries.values()} == {"Laundry's done."}
+    assert {e["alert_text"] for e in entries.values()} == {"The burner is still on."}
     assert entries["exp4-spark"]["scorer"] == "spark" and entries["exp1-real"]["scorer"] == \
         "student"
     calibration = {c["run"]: c for c in plan["calibration"]}

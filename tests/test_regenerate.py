@@ -12,10 +12,10 @@ from backend.release.faces import SOURCES_FILE, blur_folder
 from backend.skills.spec import SkillSpec, Target
 from tests.test_teach import FakeMeta, client_for, png
 
-SPEC = SkillSpec(name="burner_left_on", request="tell me when the washer is done",
-                 target=Target(sam_prompt="washer display", description="the display"),
+SPEC = SkillSpec(name="burner_left_on", request="tell me when the burner is left on",
+                 target=Target(sam_prompt="stove burner", description="the display"),
                  positive="the display says End", negatives=["the display shows time left"],
-                 alert="Laundry's done.")
+                 alert="The burner is still on.")
 
 
 def taught(tmp_path):

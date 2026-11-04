@@ -54,12 +54,12 @@ def ledger(tmp_path):
 def test_live_run_gives_12_labelled_variations_and_writes_no_images(tmp_path):
     teacher, fake, kf = setup(tmp_path)
     before = {p for p in tmp_path.rglob("*") if p.is_file()}
-    status, body = teacher.start("the washer display shows End", kf, KEYS)
+    status, body = teacher.start("the stove burner shows End", kf, KEYS)
     assert status == 202 and body["planned"] == 12 and body["variations"] == []
     view = finish(teacher, body["job"])
     assert view["stopped"] is None and not view["refused"]
-    assert view["read_back"].startswith("I'll watch the digital display")
-    assert view["spec"]["alert"] == "Your laundry's done."
+    assert view["read_back"].startswith("I'll watch the front left burner of the stove")
+    assert view["spec"]["alert"] == "The burner is still on."
     rows = view["variations"]
     assert sorted(r["kind"] for r in rows) == ["hard_negative"] * 6 + ["positive"] * 6
     for r in rows:

@@ -39,7 +39,7 @@ def test_watch_replays_a_clip_through_the_student(env, monkeypatch, capsys):
     assert cli.main(["watch", "--skills", "burner_left_on", "--clip", str(clip)]) == 0
     out = capsys.readouterr().out
     assert seen == [("http://127.0.0.1:8080/v1", "trained-eye", None)]
-    assert '2.0 s  burner_left_on: "Laundry\'s done."' in out and "cloud not checked" in out
+    assert '2.0 s  burner_left_on: "The burner is still on."' in out and "cloud not checked" in out
     assert "5 frames scored at 1 fps" in out and "no calibrated threshold" in out
     [log] = (env / "data/watch").glob("replay-*-clip.jsonl")
     assert len(log.read_text().splitlines()) == 5
@@ -103,7 +103,7 @@ def test_watch_with_spark_asks_first_and_only_a_yes_fires(env, monkeypatch, caps
     assert "earlier run" not in log.read_text() and len(log.read_text().splitlines()) == 5
     replies[:] = [1.0] * 5
     assert cli.main([*args, "--yes", "--log", str(log)]) == 0
-    assert 'burner_left_on: "Laundry\'s done."' in capsys.readouterr().out
+    assert 'burner_left_on: "The burner is still on."' in capsys.readouterr().out
 
 
 def scoring(monkeypatch, p=0.9):

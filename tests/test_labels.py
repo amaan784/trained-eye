@@ -8,11 +8,11 @@ from backend.dataengine.labels import filter_generated, label_image
 from backend.meta.client import MetaAPIError, MetaClient
 from backend.skills.spec import SkillSpec, Target
 
-SPEC = SkillSpec(name="burner_left_on", request="let me know when the washer says done",
-                 target=Target(sam_prompt="washing machine display",
-                               description="the washer display"),
-                 positive="the display shows End", negatives=["display off"],
-                 alert="Laundry's done.")
+SPEC = SkillSpec(name="burner_left_on", request="tell me if I leave the burner on",
+                 target=Target(sam_prompt="stove burner",
+                               description="the stove burner"),
+                 positive="the burner is lit with no pan on it", negatives=["a pan being stirred on it"],
+                 alert="The burner is still on.")
 JPEG = b"\xff\xd8\xff\xe0frame"
 
 

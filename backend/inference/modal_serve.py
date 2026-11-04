@@ -143,7 +143,10 @@ image = (modal.Image.from_registry(
              VLLM_IMAGE, setup_dockerfile_commands=["RUN ln -sf /usr/bin/python3 /usr/bin/python"])
          .entrypoint([])
          .env({name: os.environ.get(name, "") for name in (RUN_ENV, BASE_ENV, LORAS_ENV)})
-         .env({"HF_HOME": f"{MOUNT}/hf"}))  # the base's cache, as modal_train.py's
+         .env({"HF_HOME": f"{MOUNT}/hf"})  # the base's cache, as modal_train.py's
+         # vLLM's torch.compile and CUDA graph cache on the volume, so a cold start after the
+         # first reuses it (the first deploy spent 57 s compiling)
+         .env({"VLLM_CACHE_ROOT": f"{MOUNT}/vllm-cache"}))
 SECRETS = [modal.Secret.from_name(API_SECRET)] + (
     [modal.Secret.from_name(HF_SECRET)] if BASE else [])
 

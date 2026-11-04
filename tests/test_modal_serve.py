@@ -97,6 +97,7 @@ def test_the_base_is_the_pinned_hub_model_under_its_own_app_and_model_name():
     text = SCRIPT.read_text()
     assert "app = modal.App(BASE_APP if BASE else APP)" in text
     assert '.env({"HF_HOME": f"{MOUNT}/hf"})' in text  # the cache training filled
+    assert '.env({"VLLM_CACHE_ROOT": f"{MOUNT}/vllm-cache"})' in text  # kept between starts
     serve = ast.unparse(FUNCS["serve"])
     assert "serve_command(model, BASE_MODEL_NAME, loras=loras)" in serve
     assert "model = base_dir()" in serve and "'HF_HUB_OFFLINE': '1'" in serve

@@ -193,7 +193,7 @@ def cmd_regress(args) -> int:
 
 def add_parsers(sub) -> None:
     exp = sub.add_parser("experiments", help="print the training runs of Experiments 1 to 3")
-    exp.add_argument("--skills", required=True, help="comma-separated, e.g. washer_done")
+    exp.add_argument("--skills", required=True, help="comma-separated, e.g. burner_left_on")
     exp.add_argument("--write-plan", action="store_true", help="also write eval/plan.json")
     exp.add_argument("--force", action="store_true", help="replace an existing eval/plan.json")
     exp.add_argument("--endpoint-hours", type=_hours, default=None,

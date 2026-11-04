@@ -10,8 +10,8 @@
 // simulator, that watching comes back after a fold and is not restarted while paused.
 //
 
-// Resources/mock_feed.mp4 (made by ios/make_mock_feed.py: a drawn washer display counting
-// down to "End", HEVC tagged hvc1) is the feed in the simulator, which has no camera.
+// Resources/mock_feed.mp4 (made by ios/make_mock_feed.py: a drawn gas burner, off and then
+// lit with no pan, HEVC tagged hvc1) is the feed in the simulator, which has no camera.
 
 #if DEBUG
 

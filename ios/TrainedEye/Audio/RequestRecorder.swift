@@ -1,7 +1,7 @@
 //
 // RequestRecorder.swift
 //
-// Records the spoken teach request ("tell me when the washer is done") as 16 kHz mono
+// Records the spoken teach request ("tell me if I leave the burner on") as 16 kHz mono
 // 16-bit WAV: the backend reads a WAV file's length for its cost estimate. Set up the way
 // AudioInputHandler.swift in Meta's CameraAccess sample records the glasses' microphone
 // over Bluetooth HFP: a playAndRecord session in videoRecording mode with allowBluetoothHFP

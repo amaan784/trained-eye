@@ -439,7 +439,7 @@ def build_parser() -> argparse.ArgumentParser:
     policy.set_defaults(func=cmd_policy)
 
     teach = sub.add_parser("teach", help="teach a skill from a request and a 10 s clip")
-    teach.add_argument("--skill", required=True, help="skill name, e.g. washer_done")
+    teach.add_argument("--skill", required=True, help="skill name, e.g. burner_left_on")
     teach.add_argument("--clip", required=True, help="video file or folder of JPEG frames")
     said = teach.add_mutually_exclusive_group()
     said.add_argument("--audio", help="the spoken request (wav, m4a, ...)")

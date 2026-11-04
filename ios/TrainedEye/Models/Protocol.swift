@@ -107,6 +107,9 @@ struct SkillInfo: Decodable, Identifiable, Hashable {
   let name: String
   let alert: String?
   let cooldownSeconds: Int?
+  /// How long the condition must stay true before it alerts; nil from a backend older
+  /// than the field.
+  let holdSeconds: Int?
   /// True once the teach flow has written the skill's dataset.
   let dataset: Bool
   /// True once `te calibrate` has set a threshold from labelled validation clips.
@@ -124,6 +127,7 @@ struct SkillInfo: Decodable, Identifiable, Hashable {
   enum CodingKeys: String, CodingKey {
     case name, alert, dataset, calibrated, threshold, training, served
     case cooldownSeconds = "cooldown_s"
+    case holdSeconds = "hold_s"
   }
 
   init(from decoder: Decoder) throws {
@@ -131,6 +135,7 @@ struct SkillInfo: Decodable, Identifiable, Hashable {
     name = try c.decode(String.self, forKey: .name)
     alert = try c.decodeIfPresent(String.self, forKey: .alert)
     cooldownSeconds = try c.decodeIfPresent(Int.self, forKey: .cooldownSeconds)
+    holdSeconds = try? c.decodeIfPresent(Int.self, forKey: .holdSeconds)
     dataset = try c.decode(Bool.self, forKey: .dataset)
     calibrated = try c.decode(Bool.self, forKey: .calibrated)
     threshold = try c.decodeIfPresent(Double.self, forKey: .threshold)

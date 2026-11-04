@@ -314,7 +314,7 @@ def cmd_train(args) -> int:
 
 def add_parsers(sub) -> None:
     train = sub.add_parser("train", help="train the student on Modal from taught skills")
-    train.add_argument("--skills", help="comma-separated, e.g. washer_done (needed but with "
+    train.add_argument("--skills", help="comma-separated, e.g. burner_left_on (needed but with "
                        "--collect)")
     train.add_argument("--run", help="run name, e.g. exp1-mixed (needed but with --collect)")
     train.add_argument("--variant", choices=["mixed", "real", "synthetic"], default="mixed")

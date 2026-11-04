@@ -8,7 +8,7 @@
                       400 bad input, 409 another session runs, 413 too large,
                       422 refused (policy, own labels needed, or over ASK_ABOVE_USD),
                       503 MODEL_API_KEY missing; each as {"error": "...", ...}
-  GET  /teach/status?skill=washer_done   (without skill: the latest; 404 if none)
+  GET  /teach/status?skill=burner_left_on   (without skill: the latest; 404 if none)
                       {"skill", "state", "question": "spend" | "read_back" | null, "lines",
                        "estimate", "warning", "capture", "read_back", "stopped", "error",
                        "summary", "spent_usd"}
@@ -147,7 +147,7 @@ def teach_api(settings_factory: Callable[[], Settings],
         except (ValueError, RecursionError):
             body = None
         if not isinstance(body, dict) or not isinstance(body.get("yes"), bool):
-            return error(400, 'send JSON like {"skill": "washer_done", "step": "spend", '
+            return error(400, 'send JSON like {"skill": "burner_left_on", "step": "spend", '
                          '"yes": true}')
         skill, correction = body.get("skill"), body.get("correction")
         session = sessions.get(skill) if isinstance(skill, str) else None

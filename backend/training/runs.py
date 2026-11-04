@@ -5,7 +5,7 @@ screen (server.taught_skills); nothing here calls Modal.
 te train writes data/train/<run>.status.json just before the Modal call and again after
 it (also when it is interrupted):
 
-    {"state": "running" | "done" | "failed", "skills": ["washer_done", ...],
+    {"state": "running" | "done" | "failed", "skills": ["burner_left_on", ...],
      "started": "2026-11-03T14:03:00Z", "finished": null or "<ISO time>",
      "smoke": false, "pid": 4242, "host": "<this Mac's name>"}
 
@@ -15,7 +15,7 @@ reads as failed, unless it was launched with te train --detach ("detached": true
 that one stays running until te train --collect. te serve-student writes
 data/train/serving.json after a deploy,
 
-    {"run": "exp1-mixed", "deployed": "<ISO time>", "skills": ["washer_done", ...]}
+    {"run": "exp1-mixed", "deployed": "<ISO time>", "skills": ["burner_left_on", ...]}
 
 and removes it after --stop. Times are UTC, ISO 8601 with a Z.
 """

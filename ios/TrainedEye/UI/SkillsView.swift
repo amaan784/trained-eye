@@ -54,6 +54,9 @@ private struct SkillRow: View {
           }
         }
       }
+      if let hold = skill.holdSeconds, hold > 0 {
+        InfoRow(label: "Waits before alerting", value: "\(hold) s")
+      }
       if let cooldown = skill.cooldownSeconds, cooldown > 0 {
         InfoRow(label: "Quiet after an alert", value: "\(max(1, cooldown / 60)) min")
       }

@@ -20,7 +20,8 @@ end, under "TODOs and unverified points".
 - **Skills**: the taught skills from `GET /skills`, an on/off switch for each, and their
   status: Training (a `te train` run is going on Modal), Trained (a run finished), Ready (the
   model `te serve-student` deployed knows it and `te calibrate` set its threshold), else how
-  far the teach flow got.
+  far the teach flow got. Each skill also shows how long it waits before alerting (its
+  hold: the fridge 30 s, the tap 20 s, the burner 10 s) and how long it stays quiet after.
 - **Watch**: start and stop watching, the camera-on state, the frame the backend sees, the
   last alert (and whether it was spoken), each skill's score, the connection and the battery.
   It says when the glasses are folded or out of reach, and after a stay in the background
@@ -179,9 +180,9 @@ The app uses `GET /health`, `GET /skills`, the WebSocket at `/ws` (protocol 1, w
 In Debug builds, the Connect screen has "Use mock glasses". It pairs DAT's mock "Meta
 Glasses", powers it on, unfolds and dons it, and sets its camera feed, which the mock needs
 before any stream: an HEVC video named `mock_feed.mp4` if the target has one, else the
-iPhone's back camera. `Resources/mock_feed.mp4` is a 16 second synthetic clip of a washer
-display counting down to "End" (HEVC, made by `python ios/make_mock_feed.py`), so the
-simulator, which has no camera, has a feed. While the mock is on, Fold, Unfold and "Tap the
+iPhone's back camera. `Resources/mock_feed.mp4` is a 16 second synthetic clip of a gas
+burner, off for 3 seconds and then lit with no pan (HEVC, made by
+`python ios/make_mock_feed.py`), so the simulator, which has no camera, has a feed. While the mock is on, Fold, Unfold and "Tap the
 touchpad" run MockDeviceKit's `fold()`, `unfold()` and touchpad tap, to check that watching
 comes back after a fold and is left alone while paused. To watch for something else,
 replace the clip with one of your own, converted with `ffmpeg -i clip.mov -c:v libx265

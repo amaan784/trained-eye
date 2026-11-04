@@ -31,7 +31,7 @@ struct TeachView: View {
 
   @ViewBuilder private var composeCards: some View {
     Card(title: "1. Name") {
-      TextField("washer_done", text: $flow.skillName)
+      TextField("burner_left_on", text: $flow.skillName)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .font(Theme.data)
@@ -62,7 +62,7 @@ struct TeachView: View {
           Button("Clear") { flow.clearRecording() }.font(Theme.label)
         }
       } else {
-        TextField("Or type it: tell me when the washer is done", text: $flow.typedRequest)
+        TextField("Or type it: tell me if I leave the burner on", text: $flow.typedRequest)
           .padding(10)
           .background(Theme.ground, in: RoundedRectangle(cornerRadius: 8))
       }

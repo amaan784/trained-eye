@@ -183,6 +183,18 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
 This is the last stage: the folder is the finished project, the same as the repository
 root.
 
+## Test footage from other kitchens
+
+Besides the author's own glasses footage, the fridge skill is also tested on short
+windows of EPIC-KITCHENS-100, head-mounted video of other people's kitchens, reported
+apart in the results as "other kitchens (EPIC-KITCHENS-100, head-mounted camera)".
+EPIC-KITCHENS-100 is by Dima Damen, Hazel Doughty, Giovanni Maria Farinella, Antonino
+Furnari, Evangelos Kazakos, Jian Ma, Davide Moltisanti, Jonathan Munro, Toby Perrett, Will
+Price and Michael Wray ("Rescaling Egocentric Vision: Collection, Pipeline and Challenges
+for EPIC-KITCHENS-100", IJCV 2022), epic-kitchens.github.io, under CC BY-NC 4.0. It is used
+only to test and for comparisons that are not published: never to train the published
+model, and none of its frames are published or committed.
+
 ## Privacy and policy
 
 - No skill may identify or track a specific person.

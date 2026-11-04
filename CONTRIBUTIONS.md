@@ -82,6 +82,17 @@ with QLoRA. Its model card at that revision gives the license as Apache-2.0 (rea
 2026-11-02; the text is in `backend/release/BASE_LICENSE.txt` and ships as `LICENSE` with any
 release), with Meta's Muse Glimmer Usage Policy beside it, which any use must follow.
 
+## EPIC-KITCHENS-100
+
+Test footage from other kitchens: EPIC-KITCHENS-100 (Damen et al., "Rescaling Egocentric
+Vision: Collection, Pipeline and Challenges for EPIC-KITCHENS-100", IJCV 2022,
+epic-kitchens.github.io), CC BY-NC 4.0. Its public annotations
+(github.com/epic-kitchens/epic-kitchens-100-annotations) give the fridge open and close
+times; its videos come from the dataset's own hosts (data.bris.ac.uk), the URLs its
+download scripts (github.com/epic-kitchens/epic-kitchens-download-scripts) use. Used for
+testing and unpublished comparisons only; no frame of it is committed or published, and
+the published model is never trained on it.
+
 ## Other software
 
 Modal (training and serving), Weights & Biases (experiment tracking), PyTorch and

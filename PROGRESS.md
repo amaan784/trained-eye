@@ -1,17 +1,108 @@
 # Progress
 
 The source of truth between sessions. Updated at the end of every milestone.
-Last update: 2026-11-03, the code for M2 to M4 (stages v31 to v92) and the kitchen skills with
-their holds (on main directly), tested offline only;
-v1 to v93 are on main.
+Last update: 2026-11-04 morning, the first live runs on the Mac (Meta API, Modal, the
+simulator); see "Live runs, Nov 4" below. v1 to v93 are on main, and the fixes since.
+
+## Live runs, Nov 4
+
+### Worked
+
+- `te models`: all six configured model IDs exist for the key. `te api-smoke`:
+  `{"ok": true}` for $0.00126.
+- The teach flow's request shapes, checked against the API reference on dev.meta.ai:
+  Voice Transcribe is `/asr/transcribe` (a JSON `request` part and a WAV `audio` part;
+  m4a is converted with ffmpeg first), Muse Image edits are JSON with an `images` array,
+  SAM is the streamed Responses API as built. The live replies are fixtures in
+  `tests/fixtures/meta/`.
+- SAM: the boxes in `roi.json` match the raw SAM text for all 24 keyframes of the first
+  clip. The region of interest is now the box around every confident match, since the
+  largest match alone was the shut fridge door in 18 of 24 keyframes.
+- First fridge teach (`teach.mov`, spoken request, 6 and 6): the read-back named only the
+  right door, so it was corrected with `--correct` to either door. 59 examples (53 yes,
+  6 no); Spark agreed with 12 of 12 generated images. Kept in `data/archive/`.
+- Second fridge teach (`video-65_singular_display.MOV`, 6 to 22 s, as `teach.mp4`, with
+  `--request`): the 6 and 6 batch gave 58 examples (52 yes, 6 no), 12 of 12 agreed. Every
+  real frame shows the door open, so every "no" example is generated. A `--correct` that
+  pointed SAM at the whole refrigerator rewrote the condition to "the whole refrigerator
+  is visible with at least one door swung open", and Spark then labelled most real
+  frames no (25 yes, 34 no), so it was dropped: the full run uses the request as said
+  ("the refrigerator door is standing open, exposing the lit interior shelves and food").
+- The full fridge teach run (150 and 150): 345 examples (196 yes, 149 no; 22 keyframe
+  crops); Spark kept 299 of 300 generated images (one unsure); no label needed the larger
+  budget. Bundled for training: 316 training and 29 validation examples.
+- Muse Image edits and Spark labels run 12 at a time, paced under 120 requests a minute
+  per endpoint. With 12 in flight, Muse Image finished about 20 edits a minute.
+- The two-step smoke on the full bundle: 105.7 s, 24.89 s of training, 0.08 samples a
+  second. `te train` priced the real run (10 optimizer steps, one epoch at the recipe's
+  global batch of 32) at about 73 min of H100, about $4.82; it is running (exp1-mixed,
+  the product model: the teaching clip and its generated images only).
+- The simulator against `te serve`: with the address corrected to port 8765, "Check the
+  connection" says "The backend answered (protocol 1)" and the server logged the app's
+  GET /health and GET /skills.
+- EPIC-KITCHENS-100 (test footage from other kitchens): kitchens P03 (calibration), P22
+  and P02 (test) have the most fridge and tap pairs in the public annotations. The planned
+  fridge windows (60 s before an open to 60 s after its close, merged when they overlap,
+  none touching an unpaired action, plus 3 windows with no event): test 11 windows, 1,405
+  frames, 13 open stretches of which 5 last longer than the 30 s hold; calibration 11
+  windows, 770 frames, 18 stretches (1 over the hold). Fewer than 10 test stretches pass
+  the hold, so EPIC is used for frame-level scores of the fridge only. Tap: only 3 test
+  stretches over its 20 s hold survive the same rules (taps go on and off in quick runs
+  and many actions are unpaired), and no tap skill is taught yet, so tap is left out for
+  now. The dataset's host serves about 70 KB/s per connection and about 0.7 MB/s in all,
+  and the EPIC-55 videos are 30 Mbps, so whole videos (14.5 GB for these windows) were out
+  of reach: the frames are fetched as one keyframe a second from the same official URLs,
+  by byte range (the official download script fetches whole files only).
+- Modal: the training image builds (flash-attn 2.8.3 from Meta's pin compiled in 15 min
+  43 s); the 30B base (59.6 GB) downloads to the volume on CPU in 246 s, and `te train`
+  does that before any GPU run; the processor preflight passed (the system turn renders
+  once, longest example 507 tokens, "yes" is token 8628 and "no" 1537, stop tokens 200001
+  and 200008); the two-step smoke passed.
+- Smoke timing (`data/train/smoke-timing.json`): 105.3 s in the container, of which
+  19.23 s of training for 2 steps (9.6 s a step at one example a step), 0.104 samples a
+  second.
+- Base Glimmer on Modal (Meta's vLLM image, one H100): after a 204 s cold start, one
+  image request returned in 3.1 s; the reply ended in the answer token "Yes"; all 53
+  tokens came with logprobs and 10 top_logprobs each; the scorer read p(yes) 0.99999999951.
+  The student key appeared in none of the container log lines read, but those did not
+  include vLLM's startup arguments: check again from container start on the next deploy.
+- The iPhone app builds for the simulator (Xcode 27.2) and launches without a crash
+  (iPhone 18 Pro, iOS 27.2). The earlier "not connected": the address saved in the app is
+  `http://127.0.0.1:876`, not port 8765.
+
+### Failed, and fixed at the root (each with a test)
+
+1. Voice Transcribe at `/audio/transcriptions`: 404. Now `/asr/transcribe`.
+2. The flash-attn build: "No module named 'wheel'". The image installs wheel, ninja,
+   packaging and psutil first; flash-attn stays Meta's pinned source build.
+3. The first smoke: wandb 0.31 rejects `WANDB_CONFIG_PATHS` from the environment. The
+   run summary is now `config-defaults.yaml` in the folder Axolotl runs in.
+4. The second smoke saved no timing: Axolotl 0.19 prints the summary with quoted values.
+5. The base deploy: Modal found no `python` in Meta's vLLM image (it has `python3`).
+6. vLLM loaded the weights, then "Couldn't instantiate the backend tokenizer": served by
+   Hub id, its structured-output tokenizer did not follow `--tokenizer-revision`. The base
+   is now served from its pinned snapshot folder on the volume, with the Hub offline.
+7. Requests got 401: the Modal Secret "student" held 63 characters, `.env` 64. The author
+   updated the secret.
+8. `te serve-student --stop`: `modal app stop` now asks to confirm; te passes `--yes`.
+9. 11 of 36 Spark labels spent the whole 1024-token budget on reasoning and were asked
+   again; the first budget is now 2048 (billing follows the tokens used).
+
+### Needed from the author
+
+- Footage: the teaching clip shows the door open the whole time, so every "no" example
+  is generated. Clips with the fridge closed and opened (session 1 and 2,
+  `docs/recording-protocol.md`), and the glasses test footage, are still to record.
+- tap_left_running has no teaching clip or request yet.
+- In the simulator app, the backend address `http://127.0.0.1:876` needs the 5 back.
+- Nothing is waiting for an approval; nothing has been published.
 
 ## Status
 
-M0 and M1 code are done and tested offline. M2 to M4 are written and tested offline too
+M0 and M1 code are done. M2 to M4 are written and tested offline too
 (stages v31 to v92, then the kitchen skills with a hold per skill, committed directly to
-main; 1039 tests pass and one skips without OpenCV, none calls a paid API);
-none of it has run against Meta, Modal or a phone yet, and the iOS app has never been
-compiled. A full review after M1 (bugs, version compatibility, functionality against
+main; the suite passes, none calls a paid API). Since Nov 4 the teach flow, the Modal
+training image, the smoke and base serving have run live (above). A full review after M1 (bugs, version compatibility, functionality against
 SPEC.md, the UI) found 27 confirmed problems in F1 to F29, fixed in stages v23 to v30. The
 rest, F30 to F62, and a second check of those fixes are fixed in the stages that hold that
 code (v31 to v34, v41 and v45; the docs in v73 and v92), and so is a review of those (see
@@ -38,9 +129,9 @@ open needs the Mac, the keys, the glasses or new footage:
 - [x] Repo layout, `CLAUDE.md`, `PROGRESS.md`, `.env.example`
 - [x] Meta API client with content-addressed cache, spend ledger and retries
 - [x] `te spend`, `te models`, `te api-smoke`
-- [ ] First live Meta call (`te models`, `te api-smoke` on the Mac)
+- [x] First live Meta call (`te models`, `te api-smoke` on the Mac, Nov 4)
 - [x] W&B smoke script for Modal
-- [ ] W&B project `trained-eye` with one test run logged from Modal
+- [x] W&B project `trained-eye` with one test run logged from Modal (Nov 4)
 - [ ] Glasses check: camera frames, glasses mic and speakers with Meta's CameraAccess sample
 - [x] Backend skeleton receiving frames over WebSocket (`te serve`, `te ws-selftest`)
 
@@ -54,7 +145,7 @@ open needs the Mac, the keys, the glasses or new footage:
 - [x] Muse Spark labels and filtering, with agreement stats
 - [x] Axolotl dataset in the cookbook's format
 - [x] `te teach` end to end, `te policy`
-- [ ] First live teach run on the Mac (burner_left_on)
+- [x] First live teach run on the Mac (fridge_left_open, Nov 4)
 - [x] Ask for real clips for all 3 skills (`docs/recording-protocol.md`)
 - [ ] Real clips recorded
 
@@ -131,7 +222,8 @@ open needs the Mac, the keys, the glasses or new footage:
   with this run's paths, W&B names and gradient accumulation 32 on one H100
 - [x] Modal training app with the recipe's pins; `te train` (smoke first, then a run
   priced from the smoke, asking always over $15) and `te watch` (replay a clip)
-- [ ] The two-step smoke and the first real run on Modal (asks first)
+- [x] The two-step smoke on Modal (Nov 4)
+- [ ] The first real run on Modal
 - [x] Export code: `te export` merges on Modal and compares 50 answers (not run yet)
 - [x] Serving code: `te serve-student` deploys vLLM on Modal behind STUDENT_API_KEY (not run
   yet; the cookbook has no Mac path for a fine-tuned Glimmer)
@@ -421,4 +513,5 @@ sources disagree with SPEC.md, the sources win.
 | M2 | $0.00 | $0.00 | built and tested offline by Nov 3; no Modal job has run yet |
 | M3 | $0.00 | $0.00 | built and tested offline by Nov 3; the experiment runs need footage |
 | M4 | $0.00 | $0.00 | built and tested offline by Nov 3; nothing deployed or published |
-| Total | $0.00 of $150 credit (cap $120) | $0.00 of about $200 credit | |
+| Nov 4, to 9 AM ET | $6.85 | $1.49 | `te spend`: the API smoke ($0.0013) and the fridge teach runs (Muse Image $3.36, Spark labels $2.98, Wonder $0.32, SAM $0.18, Voice $0.0003); Modal: four two-step smokes $0.48, base serving $1.01 (an upper bound: deployed time). The image builds, the CPU base download and the preflight are not in the ledger; the Modal dashboard has the bill |
+| Total | $6.85 (the author's budget for Nov 4: $100) | $1.49 at config prices (budget for Nov 4: $100) | |

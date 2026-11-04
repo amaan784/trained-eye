@@ -448,34 +448,43 @@ def test_the_default_watcher_follows_the_served_run_and_the_settings(tmp_path, m
     assert watcher.log.fields == {"run": "exp1-mixed"}
 
 
-def test_waking_the_model_retries_until_it_answers_and_stops_when_asked(monkeypatch):
-    import threading
-
+def test_the_model_is_woken_once_and_its_state_is_shared(monkeypatch):
     from backend import server
     from backend.inference.student import StudentError
 
     monkeypatch.setattr(server, "WAKE_RETRY_S", 0)
+    calls = []
 
-    class Cold:
-        calls = 0
+    def ping():  # a cold endpoint times out twice while its container starts
+        calls.append(1)
+        if len(calls) < 3:
+            raise StudentError("student endpoint failed: ReadTimeout")
 
-        def score(self, image, spec):
-            Cold.calls += 1
-            if Cold.calls < 3:  # a cold endpoint times out while its container starts
-                raise StudentError("student endpoint failed: ReadTimeout")
-            return 0.1
+    now = [100.0]
+    wake = server.ModelWake(ping, clock=lambda: now[0])
+    assert wake.state() == {"state": "asleep"}
+    wake.waking_since = 90.0  # as if wake() had started 10 s ago
+    assert wake.state() == {"state": "waking", "elapsed": 10.0, "expected": 180}
+    wake.waking_since = None
+    wake._run()  # what wake() runs in its thread
+    assert len(calls) == 3 and wake.state() == {"state": "ready"}
+    assert wake.wake() == {"state": "ready"} and len(calls) == 3  # ready: no new ping
+    now[0] += server.ModelWake.FRESH_S + 1  # idle long enough for Modal to scale it down
+    assert wake.state() == {"state": "asleep"}
+    assert server.ModelWake(None).state() == {"state": "unknown"}
 
-    class Skill:
-        spec = "spec"
 
-    class Watching:
-        def __init__(self):
-            self.skills = {"burner_left_on": Skill()}
-            self.scorer = Cold()
+def test_the_phone_can_ask_about_and_wake_the_model():
+    answered = []
 
-    assert server.wake_student(Watching(), threading.Event()) is True and Cold.calls == 3
-    stop = threading.Event()
-    stop.set()  # the phone left: no more tries
-    Cold.calls = -100
-    assert server.wake_student(Watching(), stop) is False and Cold.calls == -100
-    assert server.wake_student(Watching(), threading.Event(), give_up_s=0) is False
+    with TestClient(create_app(model_ping=lambda: answered.append(1))) as c:
+        assert c.get("/model").json() == {"state": "asleep"}
+        first = c.post("/model/wake").json()
+        assert first["state"] in ("waking", "ready")
+        for _ in range(50):
+            if c.get("/model").json()["state"] == "ready":
+                break
+            time.sleep(0.02)
+        assert c.get("/model").json() == {"state": "ready"} and answered == [1]
+    with TestClient(create_app()) as c:  # no way to ask the model: said plainly
+        assert c.get("/model").json() == {"state": "unknown"}

@@ -18,6 +18,7 @@ struct SkillsView: View {
       } else if app.skills.isEmpty {
         Notice(text: "No skills yet. Teach one, or check the Mac's address in Connect.")
       }
+      ModelLine(app: app)
       VStack(spacing: 0) {
         ForEach(app.skills) { skill in
           SkillRow(app: app, skill: skill)
@@ -30,7 +31,54 @@ struct SkillsView: View {
         .buttonStyle(SecondaryButtonStyle())
     }
     .refreshable { await app.refreshSkills() }
-    .task { await app.refreshSkills() }
+    .task {
+      await app.refreshSkills()
+      if !app.settings.watchedSkills.isEmpty { app.wakeModel() }
+    }
+  }
+}
+
+/// The model on Modal: asleep, waking (the time so far against the usual wait), ready, or
+/// what to check. Opening Skills with a skill switched on, or switching one on, wakes it.
+private struct ModelLine: View {
+  let app: AppModel
+
+  var body: some View {
+    TimelineView(.periodic(from: .now, by: 1)) { context in
+      VStack(alignment: .leading, spacing: 6) {
+        Text(text(now: context.date)).font(Theme.caption).foregroundStyle(Theme.secondary)
+        if let status = app.modelStatus, status.state == "waking" {
+          ThinBar(fraction: min(0.95, elapsed(status, now: context.date)
+            / max(1, status.expected ?? 180)))
+        }
+      }
+    }
+    .accessibilityElement(children: .combine)
+  }
+
+  private func elapsed(_ status: ModelStatus, now: Date) -> Double {
+    (status.elapsed ?? 0) + now.timeIntervalSince(app.modelStatusAt)
+  }
+
+  private func text(now: Date) -> String {
+    guard let status = app.modelStatus else {
+      return "The model on Modal wakes when you switch a skill on or start watching."
+    }
+    switch status.state {
+    case "ready":
+      return "The model on Modal is awake and ready."
+    case "waking":
+      let seconds = Int(elapsed(status, now: now))
+      let minutes = Int(((status.expected ?? 180) / 60).rounded())
+      return String(format: "Waking the model on Modal: %d:%02d so far, usually about %d "
+        + "minutes the first time.", seconds / 60, seconds % 60, minutes)
+    case "failed":
+      return "The model on Modal did not answer. On the Mac, check te serve-student."
+    case "unknown":
+      return "The Mac has no model endpoint set (TE_STUDENT_URL), so watching cannot score."
+    default:
+      return "The model on Modal is asleep; it wakes when you switch a skill on."
+    }
   }
 }
 
@@ -88,6 +136,7 @@ private struct SkillRow: View {
       set: { on in
         if on {
           app.settings.watchedSkills.insert(skill.name)
+          app.wakeModel()
         } else {
           app.settings.watchedSkills.remove(skill.name)
         }

@@ -42,6 +42,8 @@ struct ServerMessage: Decodable {
   /// or "failed" if it never answered; with "expected", the usual wait in seconds.
   let model: String?
   let expected: Double?
+  /// How long the backend has been waking the model, in seconds.
+  let elapsed: Double?
   let error: String?
   let skill: String?
   let text: String?
@@ -49,6 +51,13 @@ struct ServerMessage: Decodable {
   let p: Double?
   /// Whether Muse Spark agreed with the alert; nil when there was no cloud check or it failed.
   let confirmed: Bool?
+}
+
+/// GET /model and POST /model/wake: {"state": "waking", "elapsed": 42.0, "expected": 180}
+struct ModelStatus: Decodable, Equatable {
+  let state: String
+  let elapsed: Double?
+  let expected: Double?
 }
 
 /// GET /health

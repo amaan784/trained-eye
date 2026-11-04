@@ -29,7 +29,7 @@ struct WatchView: View {
           }
           ForEach(skillLines, id: \.self) { line in Text(line).font(Theme.body) }
           ForEach(holdBars, id: \.name) { bar in
-            HoldBar(fraction: bar.fraction)
+            ThinBar(fraction: bar.fraction)
               .accessibilityLabel("\(plain(bar.name)) hold")
               .accessibilityValue("\(Int(bar.fraction * 100)) percent")
           }
@@ -226,7 +226,7 @@ private struct WakingModel: View {
         Text("Waking the model on Modal: \(clock(elapsed)) so far. The first time takes "
           + "about \(Int((expected / 60).rounded())) minutes; frames are scored once it answers.")
           .font(Theme.body)
-        HoldBar(fraction: min(0.95, elapsed / max(1, expected)))
+        ThinBar(fraction: min(0.95, elapsed / max(1, expected)))
       }
     }
     .accessibilityElement(children: .combine)
@@ -235,22 +235,6 @@ private struct WakingModel: View {
   private func clock(_ seconds: TimeInterval) -> String {
     let whole = Int(seconds)
     return String(format: "%d:%02d", whole / 60, whole % 60)
-  }
-}
-
-/// A thin bar filling as the condition holds: Ink on a hairline track.
-private struct HoldBar: View {
-  let fraction: Double
-
-  var body: some View {
-    GeometryReader { geo in
-      ZStack(alignment: .leading) {
-        Rectangle().fill(Theme.rule)
-        Rectangle().fill(Theme.text).frame(width: geo.size.width * fraction)
-      }
-    }
-    .frame(height: 4)
-    .animation(.linear(duration: 0.9), value: fraction)
   }
 }
 

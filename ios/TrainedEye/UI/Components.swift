@@ -120,6 +120,22 @@ struct InkSwitchStyle: ToggleStyle {
   }
 }
 
+/// A thin bar filling to `fraction`: Ink on a hairline track (a hold, a wait).
+struct ThinBar: View {
+  let fraction: Double
+
+  var body: some View {
+    GeometryReader { geo in
+      ZStack(alignment: .leading) {
+        Rectangle().fill(Theme.rule)
+        Rectangle().fill(Theme.text).frame(width: geo.size.width * max(0, min(1, fraction)))
+      }
+    }
+    .frame(height: 4)
+    .animation(.linear(duration: 0.9), value: fraction)
+  }
+}
+
 /// The camera-on dot: Marker while the camera is live.
 struct StatusDot: View {
   let on: Bool

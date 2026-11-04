@@ -191,7 +191,8 @@ final class WatchSocket {
       if let held = message.held { self.held = held }
       if let model = message.model {
         if model == "waking" {
-          if wakingSince == nil { wakingSince = Date() }
+          // from the backend's own clock, so a wake started on Skills keeps its time
+          wakingSince = Date().addingTimeInterval(-(message.elapsed ?? 0))
           wakeExpected = message.expected ?? wakeExpected
         } else {
           wakingSince = nil

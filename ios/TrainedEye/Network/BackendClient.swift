@@ -44,6 +44,21 @@ struct BackendClient {
     return list.skills
   }
 
+  /// GET /model: the model behind watch mode, asleep, waking, ready, failed or unknown.
+  func model() async throws -> ModelStatus {
+    try await get("model")
+  }
+
+  /// POST /model/wake: starts waking the model on Modal (it stays up while used).
+  func wakeModel() async throws -> ModelStatus {
+    var urlRequest = request("model/wake")
+    urlRequest.httpMethod = "POST"
+    urlRequest.timeoutInterval = 10
+    let (data, response) = try await session.data(for: urlRequest)
+    try Self.check(response, data)
+    return try JSONDecoder().decode(ModelStatus.self, from: data)
+  }
+
   func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
     var urlRequest = request(path, query: query)
     urlRequest.timeoutInterval = 10

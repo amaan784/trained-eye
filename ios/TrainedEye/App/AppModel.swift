@@ -371,6 +371,30 @@ final class AppModel {
 
   // MARK: - Skills
 
+  /// The model behind watch mode, as the backend last said, and when that was.
+  private(set) var modelStatus: ModelStatus?
+  private(set) var modelStatusAt = Date()
+  @ObservationIgnored private var modelPoll: Task<Void, Never>?
+
+  /// Wakes the model on Modal ahead of watching (the Skills screen calls this), then asks
+  /// how it is going every 2 s until it is ready or has failed.
+  func wakeModel() {
+    guard let backend, modelPoll == nil else { return }
+    modelPoll = Task { [weak self] in
+      var status = try? await backend.wakeModel()
+      while !Task.isCancelled {
+        await MainActor.run {
+          self?.modelStatus = status
+          self?.modelStatusAt = Date()
+        }
+        guard let current = status, current.state == "waking" else { break }
+        try? await Task.sleep(for: .seconds(2))
+        status = try? await backend.model()
+      }
+      await MainActor.run { self?.modelPoll = nil }
+    }
+  }
+
   func refreshSkills() async {
     guard let backend else {
       skillsError = BackendError.noAddress.localizedDescription

@@ -1,0 +1,338 @@
+{
+ "footage": "other kitchens (EPIC-KITCHENS-100, head-mounted camera)",
+ "threshold_objective": "frames",
+ "evaluations": [
+  {
+   "name": "epic-exp4-finetuned-fridge_left_open",
+   "experiment": 4,
+   "skill": "fridge_left_open",
+   "variant": "finetuned",
+   "run": "exp1-mixed",
+   "scorer": "student",
+   "clips": [
+    {
+     "clip": "../data/epic/windows/fridge/test/P02_06_00294",
+     "labels": "../data/epic/windows/fridge/test/P02_06_00294.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P02_06_00294.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P02_132_00000",
+     "labels": "../data/epic/windows/fridge/test/P02_132_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P02_132_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P02_15_00010",
+     "labels": "../data/epic/windows/fridge/test/P02_15_00010.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P02_15_00010.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_05_00394",
+     "labels": "../data/epic/windows/fridge/test/P22_05_00394.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_05_00394.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_05_00570",
+     "labels": "../data/epic/windows/fridge/test/P22_05_00570.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_05_00570.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_104_00000",
+     "labels": "../data/epic/windows/fridge/test/P22_104_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_104_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_107_00046",
+     "labels": "../data/epic/windows/fridge/test/P22_107_00046.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_107_00046.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_10_00000",
+     "labels": "../data/epic/windows/fridge/test/P22_10_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_10_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_111_00000",
+     "labels": "../data/epic/windows/fridge/test/P22_111_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_111_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_111_00150",
+     "labels": "../data/epic/windows/fridge/test/P22_111_00150.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_111_00150.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_14_00099",
+     "labels": "../data/epic/windows/fridge/test/P22_14_00099.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_14_00099.jsonl"
+    }
+   ],
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004534,
+   "highlight": true,
+   "alert_text": "Heads up \u2014 your fridge door is open!"
+  },
+  {
+   "name": "epic-exp4-base-fridge_left_open",
+   "experiment": 4,
+   "skill": "fridge_left_open",
+   "variant": "base",
+   "run": "exp4-base",
+   "scorer": "student",
+   "clips": [
+    {
+     "clip": "../data/epic/windows/fridge/test/P02_06_00294",
+     "labels": "../data/epic/windows/fridge/test/P02_06_00294.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P02_06_00294.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P02_132_00000",
+     "labels": "../data/epic/windows/fridge/test/P02_132_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P02_132_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P02_15_00010",
+     "labels": "../data/epic/windows/fridge/test/P02_15_00010.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P02_15_00010.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_05_00394",
+     "labels": "../data/epic/windows/fridge/test/P22_05_00394.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P22_05_00394.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_05_00570",
+     "labels": "../data/epic/windows/fridge/test/P22_05_00570.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P22_05_00570.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_104_00000",
+     "labels": "../data/epic/windows/fridge/test/P22_104_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P22_104_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_107_00046",
+     "labels": "../data/epic/windows/fridge/test/P22_107_00046.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P22_107_00046.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_10_00000",
+     "labels": "../data/epic/windows/fridge/test/P22_10_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P22_10_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_111_00000",
+     "labels": "../data/epic/windows/fridge/test/P22_111_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P22_111_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_111_00150",
+     "labels": "../data/epic/windows/fridge/test/P22_111_00150.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P22_111_00150.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_14_00099",
+     "labels": "../data/epic/windows/fridge/test/P22_14_00099.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P22_14_00099.jsonl"
+    }
+   ],
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004534,
+   "highlight": false,
+   "alert_text": "Heads up \u2014 your fridge door is open!"
+  },
+  {
+   "name": "epic-exp4-spark-fridge_left_open",
+   "experiment": 4,
+   "skill": "fridge_left_open",
+   "variant": "spark",
+   "run": "exp4-spark",
+   "scorer": "spark",
+   "clips": [
+    {
+     "clip": "../data/epic/windows/fridge/test/P02_06_00294",
+     "labels": "../data/epic/windows/fridge/test/P02_06_00294.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/epic-P02_06_00294.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P02_132_00000",
+     "labels": "../data/epic/windows/fridge/test/P02_132_00000.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/epic-P02_132_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P02_15_00010",
+     "labels": "../data/epic/windows/fridge/test/P02_15_00010.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/epic-P02_15_00010.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_05_00394",
+     "labels": "../data/epic/windows/fridge/test/P22_05_00394.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/epic-P22_05_00394.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_05_00570",
+     "labels": "../data/epic/windows/fridge/test/P22_05_00570.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/epic-P22_05_00570.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_104_00000",
+     "labels": "../data/epic/windows/fridge/test/P22_104_00000.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/epic-P22_104_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_107_00046",
+     "labels": "../data/epic/windows/fridge/test/P22_107_00046.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/epic-P22_107_00046.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_10_00000",
+     "labels": "../data/epic/windows/fridge/test/P22_10_00000.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/epic-P22_10_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_111_00000",
+     "labels": "../data/epic/windows/fridge/test/P22_111_00000.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/epic-P22_111_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_111_00150",
+     "labels": "../data/epic/windows/fridge/test/P22_111_00150.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/epic-P22_111_00150.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_14_00099",
+     "labels": "../data/epic/windows/fridge/test/P22_14_00099.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/epic-P22_14_00099.jsonl"
+    }
+   ],
+   "gpu_usd_per_hour": 0.0,
+   "spark_usd_per_check": 0.0,
+   "highlight": false,
+   "alert_text": "Heads up \u2014 your fridge door is open!",
+   "scorer_usd_per_frame": 0.004534
+  }
+ ],
+ "calibration": [
+  {
+   "run": "exp1-mixed",
+   "skill": "fridge_left_open",
+   "clips": [
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_08_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_08_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P03_08_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_102_00030",
+     "labels": "../data/epic/windows/fridge/calibration/P03_102_00030.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P03_102_00030.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_10_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_10_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P03_10_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_114_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_114_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P03_114_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_115_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_115_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P03_115_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_116_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_116_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P03_116_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_120_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_120_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P03_120_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_18_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_18_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P03_18_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_19_00093",
+     "labels": "../data/epic/windows/fridge/calibration/P03_19_00093.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P03_19_00093.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_21_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_21_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P03_21_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_26_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_26_00000.labels.json",
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P03_26_00000.jsonl"
+    }
+   ]
+  },
+  {
+   "run": "exp4-base",
+   "skill": "fridge_left_open",
+   "clips": [
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_08_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_08_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P03_08_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_102_00030",
+     "labels": "../data/epic/windows/fridge/calibration/P03_102_00030.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P03_102_00030.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_10_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_10_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P03_10_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_114_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_114_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P03_114_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_115_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_115_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P03_115_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_116_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_116_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P03_116_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_120_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_120_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P03_120_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_18_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_18_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P03_18_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_19_00093",
+     "labels": "../data/epic/windows/fridge/calibration/P03_19_00093.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P03_19_00093.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_21_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_21_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P03_21_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/calibration/P03_26_00000",
+     "labels": "../data/epic/windows/fridge/calibration/P03_26_00000.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/epic-P03_26_00000.jsonl"
+    }
+   ]
+  }
+ ]
+}

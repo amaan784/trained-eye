@@ -63,6 +63,18 @@ def test_the_block_copies_results_json_and_names_its_hash(scored, tmp_path):
     assert text.isascii() and "--" not in text.replace("|---", "").replace("--readme", "")
 
 
+def test_the_block_names_the_footage_and_a_frame_calibration(scored, tmp_path):
+    results = json.loads(scored.read_text())
+    assert "Test footage" not in block(scored, tmp_path / "README.md")
+    results.update(footage="other kitchens (EPIC-KITCHENS-100, head-mounted camera)",
+                   threshold_objective="frames")
+    scored.write_text(json.dumps(results))
+    text = block(scored, tmp_path / "README.md")
+    assert ("Test footage: other kitchens (EPIC-KITCHENS-100, head-mounted camera). Results "
+            "on other footage are reported apart.") in text
+    assert "calibrated for frame F1" in text
+
+
 def test_the_block_goes_between_the_markers_and_nothing_else_changes(scored, tmp_path):
     readme = tmp_path / "README.md"
     readme.write_text("# Trained Eye\n\nIntro.\n")

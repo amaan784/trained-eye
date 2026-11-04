@@ -108,6 +108,11 @@ def block(results_path: Path, readme_path: Path) -> str:
              (f"Written by `te eval --readme` from `{source}` (SHA-256 `{digest}`): "
               f"{len(scored)} of {len(evaluations)} evaluations scored. Every number here is "
               "copied from that file; n/a means there was nothing to compute it from."), "",
+             *([(f"Test footage: {results['footage']}. Results on other footage are reported "
+                "apart."), ""] if results.get("footage") else []),
+             *([("Thresholds were calibrated for frame F1 on calibration clips (this footage has "
+                "too few events past the skill's hold to judge alerts), so read the frame "
+                "columns."), ""] if results.get("threshold_objective") == "frames" else []),
              ("An event is caught on time when its alert comes within the skill's window after "
               "the skill's hold ends (the condition must stay true that long before it alerts): "
               f"{on_time_text(results)}"), ""]

@@ -162,7 +162,8 @@ def cmd_calibrate(args) -> int:
               f"{minutes:.0f} minutes: the student needs more training", file=sys.stderr)
         return 1
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps({**result, **({"run": args.run} if args.run else {}),
+    target.write_text(json.dumps({**result, "hold_s": spec.hold_s,
+                                  **({"run": args.run} if args.run else {}),
                                   "clips": sources}, indent=1) + "\n")
     delay = result["median_delay_s"]
     for_run = f" for run {args.run}" if args.run else ""

@@ -58,7 +58,8 @@ def test_frame_event_and_latency_metrics_for_one_clip():
 def test_a_late_alert_is_caught_but_not_within_the_window():
     rows = [row(t, 0.1) for t in range(30)]
     rows[20] = row(20, 0.9, alert=True)
-    c = count_clip(rows, "burner_left_on", [[12, 25], [27, 28]])
+    # two frames apart (26 and 27), so two events; one frame apart would be bridged into one
+    c = count_clip(rows, "burner_left_on", [[12, 25], [28, 29]])
     assert (c.events, c.caught, c.caught_in_window, c.false_alarms) == (2, 1, 0, 0)
     m = summarize([c])
     assert m["event_recall_any"] == 0.5 and m["event_recall_in_window"] == 0.0

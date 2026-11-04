@@ -176,7 +176,7 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
 - `CONTRIBUTIONS.md`: credits, licenses and the copied Meta sample files.
-- `tests/`: 1033 tests, all offline; none calls a paid API.
+- `tests/`: 1039 tests, all offline; none calls a paid API.
 
 ## Next
 

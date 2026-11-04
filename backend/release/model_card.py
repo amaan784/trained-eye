@@ -19,6 +19,7 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from backend.config import DEFAULT_MODELS, STUDENT_BASE_REVISION
+from backend.eval.writeup import on_time_text
 from backend.training.axolotl import GLOBAL_BATCH, RECIPE
 
 RECIPE_KEYS = ("adapter", "load_in_4bit", "lora_r", "lora_alpha", "lora_dropout",
@@ -185,9 +186,14 @@ def results_section(results: Path | None) -> str:
     scored = [e for e in evaluations if e["status"] == "scored"]
     if not scored:
         return f"Not evaluated yet: `{Path(results).name}` has no scored evaluation."
+    on_time = on_time_text(json.loads(body))
     source = (f"From `te eval`'s `{Path(results).name}` (SHA-256 "
               f"`{hashlib.sha256(body).hexdigest()}`); evaluations scored: {len(scored)}, pending: "
-              f"{len(evaluations) - len(scored)}. n/a means there was nothing to compute it from.")
+              f"{len(evaluations) - len(scored)}. n/a means there was nothing to compute it from. "
+              "Each skill alerts only once its condition has stayed true for its hold: "
+              "event_recall_in_window counts an alert within the skill's window after the hold "
+              "ends, and time_to_alert_median_s is counted from the end of the hold. Holds and "
+              f"windows: {on_time}")
     columns = ("evaluation", "experiment", "skill", "variant", *METRICS, "usd_per_hour")
     rows = [[e["name"], e["experiment"], e["skill"], e["variant"],
              *(e["metrics"].get(k) for k in METRICS), e["cost_per_hour"].get("total_usd")]

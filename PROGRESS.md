@@ -9,7 +9,7 @@ v1 to v93 are on main.
 
 M0 and M1 code are done and tested offline. M2 to M4 are written and tested offline too
 (stages v31 to v92, then the kitchen skills with a hold per skill, committed directly to
-main; 1033 tests pass and one skips without OpenCV, none calls a paid API);
+main; 1039 tests pass and one skips without OpenCV, none calls a paid API);
 none of it has run against Meta, Modal or a phone yet, and the iOS app has never been
 compiled. A full review after M1 (bugs, version compatibility, functionality against
 SPEC.md, the UI) found 27 confirmed problems in F1 to F29, fixed in stages v23 to v30. The

@@ -156,6 +156,8 @@ class Plan(BaseModel):
         names = [e.name for e in self.evaluations]
         if twice := sorted({n for n in names if names.count(n) > 1}):
             raise ValueError(f"evaluation names must be unique: {', '.join(twice)}")
+        if unknown := sorted(set(self.on_time_s) - {e.skill for e in self.evaluations}):
+            raise ValueError(f"on_time_s names skills no evaluation scores: {', '.join(unknown)}")
         pairs = [(c.run, c.skill) for c in self.calibration]
         if twice := sorted({f"{r} {s}" for r, s in pairs if pairs.count((r, s)) > 1}):
             raise ValueError(f"one calibration entry per run and skill: {', '.join(twice)}")

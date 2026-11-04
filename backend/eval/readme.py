@@ -17,7 +17,7 @@ import json
 import os
 from pathlib import Path
 
-from backend.eval.writeup import EXPERIMENTS, judge_label
+from backend.eval.writeup import EXPERIMENTS, judge_label, on_time_text
 
 START = "<!-- te eval: results start (written by te eval --readme; edits here are lost) -->"
 END = "<!-- te eval: results end -->"
@@ -107,7 +107,10 @@ def block(results_path: Path, readme_path: Path) -> str:
     lines = ["## Results", "",
              (f"Written by `te eval --readme` from `{source}` (SHA-256 `{digest}`): "
               f"{len(scored)} of {len(evaluations)} evaluations scored. Every number here is "
-              "copied from that file; n/a means there was nothing to compute it from."), ""]
+              "copied from that file; n/a means there was nothing to compute it from."), "",
+             ("An event is caught on time when its alert comes within the skill's window after "
+              "the skill's hold ends (the condition must stay true that long before it alerts): "
+              f"{on_time_text(results)}"), ""]
     for exp, title in EXPERIMENTS.items():
         table = headline(exp, results)
         if table:

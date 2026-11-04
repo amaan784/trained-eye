@@ -27,7 +27,9 @@ def pending(name, experiment, variant):
 
 
 def results(*evaluations, charts=None):
-    return {"plan": "plan.json", "window_s": 5.0, "evaluations": list(evaluations),
+    skills = sorted({e["skill"] for e in evaluations})
+    on_time = {s: {"window_s": 5.0, "hold_s": [10.0]} for s in skills}  # as run_eval writes it
+    return {"plan": "plan.json", "on_time": on_time, "evaluations": list(evaluations),
             "charts": charts or {}}
 
 

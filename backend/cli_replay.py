@@ -78,9 +78,22 @@ def _held(jobs, todo, calibrates, settings, run: str, threshold) -> dict:
             and not can_calibrate(j.skill)}
 
 
+def _spec_hold(settings, skill: str) -> float | None:
+    """The hold the skill's spec has now (data/skills/<skill>/spec.json), None if unreadable."""
+    from backend.skills.spec import SkillSpec
+
+    try:
+        path = settings.data_dir / "skills" / skill / "spec.json"
+        return float(SkillSpec.model_validate_json(path.read_text(encoding="utf-8")).hold_s)
+    except (OSError, ValueError):
+        return None
+
+
 def _stale(jobs, calibrates, settings, run: str, held: dict) -> dict:
     """Test logs scored at another threshold than the run's calibrated one (it was
-    calibrated again, or the log came from te watch): replayed again only by hand."""
+    calibrated again, or the log came from te watch), or fired with another hold than the
+    skill's spec has now: replayed again only by hand."""
+    from backend.eval.metrics import hold_of
     from backend.watch.watcher import read_threshold, run_threshold_file
 
     out = {}
@@ -90,11 +103,17 @@ def _stale(jobs, calibrates, settings, run: str, held: dict) -> dict:
             continue
         try:
             now = read_threshold(run_threshold_file(settings.data_dir, run, job.skill))
-            used = {round(float(r["threshold"]), 4) for r in map(json.loads, job.log.read_text(
-                encoding="utf-8").splitlines()) if r.get("skill") == job.skill}
+            rows = [json.loads(line) for line in job.log.read_text(
+                encoding="utf-8").splitlines() if line.strip()]
+            used = {round(float(r["threshold"]), 4) for r in rows if r.get("skill") == job.skill}
+            hold_used = hold_of(rows, job.skill)
         except (OSError, ValueError, KeyError, TypeError):
             continue
-        if now is not None and used and used != {round(now, 4)}:
+        hold_now = _spec_hold(settings, job.skill)
+        if hold_now is not None and used and hold_used != hold_now:
+            out[job.log] = (f"fired with a {hold_used:g} s hold, but {job.skill}'s spec has "
+                            f"{hold_now:g} s now: delete this log and run te replay again")
+        elif now is not None and used and used != {round(now, 4)}:
             out[job.log] = (f"scored at {', '.join(f'{u:.3f}' for u in sorted(used))}, but "
                             f"{run}'s threshold for {job.skill} is {now:.3f} now: delete this "
                             "log and run te replay again to score it at that")
@@ -247,7 +266,8 @@ def cmd_replay(args) -> int:
         if not all(p.is_file() for p in logs + labels):
             continue
         if target.is_file() and not (any(log in replayed for log in logs)
-                                     or _calibration_changed(target, logs, labels)):
+                                     or _calibration_changed(
+                                         target, logs, labels, _spec_hold(settings, cal.skill))):
             continue
         if cmd_calibrate(Namespace(skill=cal.skill, run=run, log=[str(p) for p in logs],
                                    labels=[str(p) for p in labels])) != 0:
@@ -269,13 +289,19 @@ def cmd_replay(args) -> int:
     return 1 if failed or uncalibrated else 0
 
 
-def _calibration_changed(target: Path, logs: list[Path], labels: list[Path]) -> bool:
+def _calibration_changed(target: Path, logs: list[Path], labels: list[Path],
+                         hold_s: float | None = None) -> bool:
     """Whether a run threshold was computed on other validation clips than the plan's now,
-    or before one of their logs or labels changed (labels added after a replay)."""
+    before one of their logs or labels changed (labels added after a replay), or with
+    another hold than the skill's spec has now (`hold_s`, when known)."""
     try:
-        used = json.loads(target.read_text(encoding="utf-8")).get("clips") or []
+        saved = json.loads(target.read_text(encoding="utf-8"))
+        used = saved.get("clips") or []
         recorded = {(c.get("log"), c.get("labels")) for c in used}
+        hold_then = saved.get("hold_s")
     except (OSError, ValueError, AttributeError):
+        return True
+    if hold_s is not None and (hold_then is None or float(hold_then) != hold_s):
         return True
     if recorded != {(log.name, lab.name) for log, lab in zip(logs, labels, strict=True)}:
         return True

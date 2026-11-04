@@ -24,6 +24,8 @@ WINDOW = 4
 NEEDED = 3
 MAX_GAP_S = 10.0  # frames further apart than this do not count together
 MAX_FALSE_ALARMS_PER_HOUR = 1.0
+BRIDGE = WINDOW - NEEDED  # frames under the threshold a condition that stays on rides over
+EPS = 1e-6  # seconds: frame times and holds compared with this much slack
 
 
 @dataclass
@@ -59,7 +61,9 @@ class Trigger:
             return False
         if self.since is None:  # on from the first frame over the threshold in the window
             self.since = next(ft for ft, over in self.recent if over)
-        if t < self.quiet_until or t - self.since < self.hold_s:
+        if not self.recent[-1][1]:  # this frame is under: the condition may have just ended
+            return False  # (the hold carries on through it, but nothing fires on it)
+        if t < self.quiet_until or t - self.since < self.hold_s - EPS:
             return False
         self.quiet_until = t + self.cooldown_s
         self.clear()
@@ -89,29 +93,53 @@ def alerts(frames: Sequence[Frame], threshold: float, cooldown_s: float,
     return [f for f in frames if trigger.update(f.p, f.t)]
 
 
-def events(frames: Sequence[Frame]) -> list[tuple[float, float]]:
-    """(start, end) times of each run of frames labelled true."""
-    out, start, prev = [], None, None
-    for f in frames:
-        if f.truth and start is None:
-            start = f.t
-        elif not f.truth and start is not None:
-            out.append((start, prev.t))
-            start = None
-        prev = f
+def runs(points: Iterable[tuple[float, bool]], bridge: int = 0) -> list[tuple[float, float]]:
+    """(first, last) times of each run of true points, from (t, truth) pairs in time order.
+    Runs apart by at most `bridge` false points are one run, as the 3-of-4 smoothing rides
+    over one frame under the threshold (evaluate and the metrics bridge BRIDGE)."""
+    out: list[tuple[float, float]] = []
+    start = end = None
+    gap = 0
+    for t, truth in points:
+        if truth:
+            start = t if start is None else start
+            end, gap = t, 0
+        elif start is not None:
+            gap += 1
+            if gap > bridge:
+                out.append((start, end))
+                start, gap = None, 0
     if start is not None:
-        out.append((start, prev.t))
+        out.append((start, end))
     return out
+
+
+def events(frames: Sequence[Frame], bridge: int = 0) -> list[tuple[float, float]]:
+    """(start, end) times of each run of frames labelled true (see runs)."""
+    return runs(((f.t, f.truth) for f in frames), bridge)
+
+
+def due_spans(spans: Iterable[tuple[float, float]], hold_s: float) -> list[tuple[float, float]]:
+    """For each run that lasts at least the hold, (when its alert is due, its end): the
+    stretch where an alert is right. A shorter run expects none."""
+    return [(a + hold_s, b) for a, b in spans if b >= a + hold_s - EPS]
+
+
+def explained(t: float, due: Iterable[tuple[float, float]]) -> bool:
+    """Whether an alert at `t` falls in one of those stretches (else it is a false alarm)."""
+    return any(d - EPS <= t <= b for d, b in due)
 
 
 def evaluate(clips: Iterable[Sequence[Frame]], threshold: float, cooldown_s: float,
              hold_s: float = 0.0) -> dict:
     """False alarms, caught events and delays for one threshold over labelled clips.
 
-    An event is a run of true frames that lasts at least the hold; its alert is due when
-    the hold ends (its first true frame plus hold_s). An alert from then to the event's
-    end catches it, and the delay is from when it was due. Any other alert is a false
-    alarm: on a frame labelled false, or before the condition had lasted the hold."""
+    An event is a run of true frames (one false frame inside it bridged, as the smoothing
+    bridges it) that lasts at least the hold; its alert is due when the hold ends (its
+    first true frame plus hold_s). An alert from then to the event's last frame catches
+    it, and the delay is from when it was due. Any other alert is a false alarm: on a
+    frame labelled false, or before the condition had lasted the hold. The evaluation
+    (backend/eval/metrics.py) counts the same way."""
     false_alarms = caught = total_events = fired_total = 0
     delays: list[float] = []
     seconds = 0.0
@@ -122,17 +150,14 @@ def evaluate(clips: Iterable[Sequence[Frame]], threshold: float, cooldown_s: flo
         seconds += frames[-1].t - frames[0].t
         fired = alerts(frames, threshold, cooldown_s, hold_s)
         fired_total += len(fired)
-        runs = events(frames)
-        false_alarms += sum(not any(a + hold_s <= f.t <= b for a, b in runs) for f in fired)
-        for start, end in runs:
-            due = start + hold_s
-            if end < due:
-                continue  # shorter than the hold: nothing should fire
+        due = due_spans(events(frames, BRIDGE), hold_s)  # shorter runs expect nothing
+        false_alarms += sum(not explained(f.t, due) for f in fired)
+        for when, end in due:
             total_events += 1
-            hits = [f.t for f in fired if due <= f.t <= end]
+            hits = [f.t for f in fired if when - EPS <= f.t <= end]
             if hits:
                 caught += 1
-                delays.append(hits[0] - due)
+                delays.append(max(0.0, hits[0] - when))
     return {"threshold": threshold, "alerts": fired_total, "false_alarms": false_alarms,
             "hours": seconds / 3600,
             "events": total_events, "caught": caught,

@@ -64,7 +64,7 @@ Code map (all under `backend/`, namespace packages without `__init__.py`):
 | `dataengine/dataset.py` | Axolotl JSONL in Meta's recipe format, 512x512 padded PNGs, manifest with provenance index |
 | `teach.py` | The teach flow end to end, cached; fallback switch `TE_TRAIN_ON_MODEL_OUTPUTS=0` |
 
-Other files: `tests/` (1033 tests pass, all offline; one more skips without OpenCV),
+Other files: `tests/` (1039 tests pass, all offline; one more skips without OpenCV),
 `docs/glasses-check.md`, `docs/recording-protocol.md`, `.env.example`,
 `.github/workflows/ci.yml` (ruff and pytest on every push), `CLAUDE.md` (short
 conventions file the author asked for).

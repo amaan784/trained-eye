@@ -14,7 +14,8 @@ EVAL_URL = "https://wandb.ai/someone/trained-eye/runs/abc123"
 
 def results(**extra):
     """results.json as te eval --wandb leaves it, with one pending evaluation."""
-    return {"plan": "plan.json", "window_s": 5,
+    return {"plan": "plan.json",
+            "on_time": {"burner_left_on": {"window_s": 5.0, "hold_s": []}},
             "evaluations": [{"name": "exp1-mixed-burner_left_on", "experiment": 1,
                              "status": "pending", "missing": ["../data/watch/a.jsonl"]}],
             "charts": {"1": ["exp1_f1.svg"], "4": ["exp4_cost.svg"]}, "wandb": EVAL_URL,

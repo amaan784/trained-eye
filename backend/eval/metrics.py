@@ -13,12 +13,16 @@ Per skill, over one or more clips:
 - frame precision, recall, F1 and accuracy: a frame says "yes" when it scored at or over
   the threshold the watcher used (the log's `over`), and it is true when its time is
   inside a labelled range (ends included);
-- event recall: an event is one labelled true range that lasts at least the hold
-  (shorter ones are short_events: nothing should fire for them). It is caught on time
-  ("in window") when its first alert after the hold ends comes within the skill's
-  on-time window of it, and caught at all when one fires before the event ends;
+- event recall: an event is a run of the clip's frames inside the labelled ranges (one
+  frame outside bridged, as watch mode's 3-of-4 smoothing bridges it), timed by its first
+  and last frame, that lasts at least the hold (shorter runs are short_events: nothing
+  should fire for them). Its alert is due at its first frame plus the hold. It is caught
+  on time ("in window") when its first alert from then comes within the skill's on-time
+  window, and caught at all when one fires before its last frame. trigger.evaluate, which
+  te calibrate uses, counts events the same way;
 - false alarms per hour: alerts that no event explains, per hour of clip: on frames
-  labelled false, or inside a range before its hold ended (early_alerts counts those).
+  labelled false, or before an event's hold ended (early_alerts counts those inside a
+  range).
   A clip lasts from its first frame to one frame step after its last: 3600 frames at
   1 fps, one hour;
 - time to alert: seconds from the end of an event's hold to its first alert after that,
@@ -42,6 +46,8 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 import numpy as np
+
+from backend.watch.trigger import BRIDGE, EPS, due_spans, explained, runs
 
 EVENT_WINDOW_S = 5.0  # the on-time window for a skill not in ON_TIME_S
 # How long after the end of its hold an alert still counts as on time, per skill. The
@@ -144,10 +150,15 @@ def count_clip(rows: Iterable[dict], skill: str, true_ranges: Iterable[Sequence[
     if window_s <= 0 or hold_s < 0:
         raise ValueError("the on-time window must be over 0 and the hold 0 or more")
     c = ClipCounts(clips=1, seconds=duration_s(float(r["t"]) for r in rows))
+    truths = [(float(r["t"]), any(a <= float(r["t"]) <= b for a, b in ranges)) for r in rows]
+    # Events as watch mode sees them (trigger.evaluate counts the same way): runs of the
+    # frames inside the labelled ranges, a single frame outside one bridged, timed by
+    # their first and last frame; a run that lasts the hold is due at its end.
+    spans = runs(truths, BRIDGE)
+    due = due_spans(spans, hold_s)
+    c.short_events = len(spans) - len(due)
     alert_times = []
-    for r in rows:
-        t = float(r["t"])
-        truth = any(a <= t <= b for a, b in ranges)
+    for r, (t, truth) in zip(rows, truths, strict=True):
         if r.get("p") is None:
             c.errors += 1
             continue
@@ -163,21 +174,18 @@ def count_clip(rows: Iterable[dict], skill: str, true_ranges: Iterable[Sequence[
             c.cloud_checks += 1
         if r.get("alert"):
             c.alerts += 1
-            due = any(a + hold_s <= t <= b for a, b in ranges)
-            c.false_alarms += not due
-            c.early_alerts += truth and not due
+            ok = explained(t, due)
+            c.false_alarms += not ok
+            c.early_alerts += truth and not ok
             alert_times.append(t)
-    for start, end in ranges:
-        due = start + hold_s
-        if end < due:
-            c.short_events += 1
-            continue
+    for when, end in due:
         c.events += 1
-        hits = [t for t in alert_times if due <= t <= end]
+        hits = [t for t in alert_times if when - EPS <= t <= end]
         if hits:
+            delay = max(0.0, hits[0] - when)
             c.caught += 1
-            c.delays.append(hits[0] - due)
-            c.caught_in_window += hits[0] - due <= window_s
+            c.delays.append(delay)
+            c.caught_in_window += delay <= window_s + EPS
     return c
 
 

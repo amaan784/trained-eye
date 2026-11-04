@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from backend.config import load_settings
+from backend.dataengine.labels import Label
 from backend.eval import metrics
 from backend.eval.metrics import ON_TIME_S, count_clip, hold_of, on_time_window, summarize
 from backend.eval.report import Plan, run_eval
@@ -16,7 +17,7 @@ from backend.inference.student import Score
 from backend.meta.client import MetaClient
 from backend.skills.compiler import COMPILE_SCHEMA, SYSTEM, compile_skill, hold_for
 from backend.skills.spec import MAX_HOLD_S, SKILL_HOLDS, SkillSpec, Target
-from backend.watch.trigger import Frame, Trigger, alerts, calibrate, evaluate
+from backend.watch.trigger import Frame, Trigger, alerts, calibrate, evaluate, labelled_frames
 from backend.watch.watcher import FrameLog, Watcher, load_skill
 
 
@@ -67,12 +68,49 @@ def test_the_cooldown_still_follows_an_alert_after_a_hold():
     assert run(Trigger(0.5, cooldown_s=30, hold_s=10), [0.9] * 75) == [10.0, 40.0, 70.0]
 
 
-def test_a_cloud_no_snoozes_a_held_alert_like_any_other():
-    trigger = Trigger(0.5, cooldown_s=600, hold_s=10)
-    assert run(trigger, [0.9] * 11) == [10.0]
-    trigger.quiet_until = 10  # as if Spark said no to that alert
-    trigger.snooze(10, 60)
-    assert run(trigger, [0.9] * 70, start=11) == [70.0]  # after the minute, still held
+def test_a_held_alert_after_a_spark_no_waits_for_the_hold_again(tmp_path):
+    asked = []
+
+    def spark(image, s):
+        asked.append(1)
+        return Label("no" if len(asked) == 1 else "yes", "", 0.003, False)
+
+    folder = tmp_path / "skills" / "fridge_left_open"
+    folder.mkdir(parents=True)
+    (folder / "spec.json").write_text(spec("fridge_left_open", hold=90).model_dump_json())
+    watcher = Watcher([load_skill(folder)], Always(), confirm=spark)
+    fired = [a.t for i in range(200) for a in watcher.on_frame(b"jpeg", t=float(i))[1]]
+    # Spark says no at 90 s: a minute's snooze, and the hold starts again from 91 s, so the
+    # next check is at 181 s, not when the snooze ends at 150 s
+    assert fired == [181.0] and len(asked) == 2
+
+
+def test_a_run_exactly_as_long_as_the_hold_fires_only_on_a_frame_still_over():
+    # over for 10 frames (0 to 9 s), then off: at 10 s three of the last four are still
+    # over, but that frame is under, so nothing fires for a burner lit 10 s at most
+    assert run(Trigger(0.5, 600, hold_s=10), [0.9] * 10 + [0.1] * 5) == []
+    assert run(Trigger(0.5, 600, hold_s=10), [0.9] * 11 + [0.1] * 5) == [10.0]
+    # and a cooldown that ends on an under frame fires on the next frame over
+    trigger = Trigger(0.5, cooldown_s=5)
+    assert run(trigger, [0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.1, 0.9, 0.9]) == [2.0, 8.0]
+
+
+def test_a_burner_lit_just_under_its_hold_is_never_announced(tmp_path):
+    folder = tmp_path / "skills" / "burner_left_on"
+    folder.mkdir(parents=True)
+    (folder / "spec.json").write_text(spec(hold=10).model_dump_json())
+
+    class Lit:  # a perfect student: the burner is lit from 10.4 s to 20.3 s
+        def score(self, image, s):
+            return Score(0.98 if 10.4 <= self.t <= 20.3 else 0.02, "", 0.2)
+
+    student = Lit()
+    watcher = Watcher([load_skill(folder)], student)
+    fired = []
+    for i in range(40):
+        student.t = float(i)
+        fired += watcher.on_frame(b"jpeg", t=float(i))[1]
+    assert fired == []
 
 
 def test_a_negative_hold_is_refused():
@@ -154,7 +192,7 @@ REPLY = {
 }
 
 
-def compiled(reply, name):
+def compiled(reply, name, data):
     """Compile with a fake Muse Wonder giving `reply`; each call has its own cache."""
     requests = []
 
@@ -164,8 +202,8 @@ def compiled(reply, name):
             "choices": [{"message": {"content": json.dumps(reply)}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 5000, "completion_tokens": 600}})
 
-    settings = load_settings(env={"MODEL_API_KEY": "sk-test", "TE_DATA_DIR": f"data-{name}"},
-                             env_file=None)
+    settings = load_settings(env={"MODEL_API_KEY": "sk-test",
+                                  "TE_DATA_DIR": str(data / f"data-{name}")}, env_file=None)
     client = MetaClient(settings, transport=httpx.MockTransport(handler), sleep=lambda s: None)
     return compile_skill(client, "tell me when the fridge is left open", [b"\xff\xd8x"],
                          name=name), requests
@@ -175,12 +213,13 @@ def test_the_compiler_asks_for_a_hold_and_the_project_skills_keep_theirs(tmp_pat
                                                                          monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert "hold_s" in COMPILE_SCHEMA["required"] and "hold_s:" in SYSTEM
-    fridge, requests = compiled(REPLY, "fridge_left_open")
+    fridge, requests = compiled(REPLY, "fridge_left_open", tmp_path)
     assert fridge.hold_s == 30  # the author's hold, not the model's 5
     assert requests[0]["response_format"]["json_schema"]["schema"] == COMPILE_SCHEMA
-    other, _ = compiled({**REPLY, "hold_s": 12}, "freezer_door")
+    other, _ = compiled({**REPLY, "hold_s": 12}, "freezer_door", tmp_path)
     assert other.hold_s == 12
-    without, _ = compiled({k: v for k, v in REPLY.items() if k != "hold_s"}, "freezer_lid")
+    without, _ = compiled({k: v for k, v in REPLY.items() if k != "hold_s"}, "freezer_lid",
+                          tmp_path)
     assert without.hold_s == 0
 
 
@@ -267,11 +306,15 @@ def test_the_hold_comes_from_the_log_and_one_evaluation_has_one():
 
 
 def test_a_plan_can_change_a_skills_window_but_not_to_nothing():
-    plan = Plan.model_validate({"on_time_s": {"fridge_left_open": 12}, "evaluations": []})
+    fridge = [{"name": "exp1-fridge", "experiment": 1, "skill": "fridge_left_open",
+               "clips": [{"log": "a.jsonl", "labels": "a.json"}]}]
+    plan = Plan.model_validate({"on_time_s": {"fridge_left_open": 12}, "evaluations": fridge})
     assert (plan.window("fridge_left_open"), plan.window("burner_left_on")) == (12.0, 5.0)
     for bad in ({"fridge_left_open": 0}, {"Fridge Door": 5}):
         with pytest.raises(ValidationError):
-            Plan.model_validate({"on_time_s": bad, "evaluations": []})
+            Plan.model_validate({"on_time_s": bad, "evaluations": fridge})
+    with pytest.raises(ValidationError, match="no evaluation scores: fridge_left_opne"):
+        Plan.model_validate({"on_time_s": {"fridge_left_opne": 30}, "evaluations": fridge})
     with pytest.raises(ValidationError):  # the old single window is gone
         Plan.model_validate({"window_s": 5, "evaluations": []})
 
@@ -303,3 +346,62 @@ def test_results_and_the_write_up_give_each_skills_hold_and_window(tmp_path):
     assert "burner_left_on, a 10 s hold and a 5 s window" in text
     assert "fridge_left_open, a 30 s hold and a 10 s window" in text
     assert "Events caught on time" in text and "within 5 s" not in text
+
+
+def frames_of(rows, ranges):
+    """The rows as te calibrate reads them, with the same labels."""
+    return labelled_frames(rows, rows[0]["skill"], ranges)
+
+
+def test_labels_between_frames_are_timed_by_their_frames_as_te_calibrate_times_them():
+    # [32.12, 42.12] holds the frames 33 to 42: 9 s of frames, under the 10 s hold, so no
+    # alert can be due (the trigger could only fire at 43 s, after the burner went off)
+    rows = [row(t, 0.9 if 33 <= t <= 42 else 0.1) for t in range(60)]
+    c = count_clip(rows, "burner_left_on", [[32.12, 42.12]])
+    assert (c.events, c.short_events, c.false_alarms) == (0, 1, 0)
+    assert evaluate([frames_of(rows, [[32.12, 42.12]])], 0.5, 600, 10)["events"] == 0
+    # one more frame and it is an event, due at 43 s, in both
+    c = count_clip(rows, "burner_left_on", [[32.12, 43.12]])
+    assert (c.events, c.short_events) == (1, 0)
+    assert evaluate([frames_of(rows, [[32.12, 43.12]])], 0.5, 600, 10)["events"] == 1
+
+
+def test_a_one_frame_gap_in_the_labels_is_one_event_as_the_smoothing_sees_it():
+    ranges = [[10, 20.5], [21.5, 70]]  # frame 21 falls in the gap
+    truth = [any(a <= t <= b for a, b in ranges) for t in range(90)]
+    trigger = Trigger(0.5, 600, hold_s=30)
+    fired = {t for t in range(90) if trigger.update(0.9 if truth[t] else 0.1, float(t))}
+    assert fired == {40}  # a perfect student: on from 10 s, through the dip at 21 s
+    rows = [row(t, 0.9 if truth[t] else 0.1, "fridge_left_open", 30, t in fired)
+            for t in range(90)]
+    c = count_clip(rows, "fridge_left_open", ranges)
+    assert (c.events, c.short_events, c.caught, c.caught_in_window, c.false_alarms) == (
+        1, 0, 1, 1, 0)
+    result = evaluate([frames_of(rows, ranges)], 0.5, 600, 30)
+    assert (result["events"], result["caught"], result["false_alarms"]) == (1, 1, 0)
+
+
+def test_a_threshold_records_its_hold_and_te_replay_recalibrates_when_it_changes(tmp_path):
+    from backend.cli_replay import _calibration_changed
+
+    log, labels = tmp_path / "v.jsonl", tmp_path / "v.json"
+    log.write_text("")
+    labels.write_text("")
+    target = tmp_path / "threshold.json"
+    saved = {"threshold": 0.7, "hold_s": 10, "clips": [{"log": "v.jsonl", "labels": "v.json"}]}
+    target.write_text(json.dumps(saved))
+    assert not _calibration_changed(target, [log], [labels], 10.0)
+    assert _calibration_changed(target, [log], [labels], 30.0)  # the spec's hold changed
+    target.write_text(json.dumps({k: v for k, v in saved.items() if k != "hold_s"}))
+    assert _calibration_changed(target, [log], [labels], 10.0)  # calibrated before holds
+
+
+def test_the_app_is_told_each_skills_hold(tmp_path):
+    from backend.server import taught_skills
+
+    for name, hold in (("fridge_left_open", 30), ("burner_left_on", 10)):
+        folder = tmp_path / "skills" / name
+        folder.mkdir(parents=True)
+        (folder / "spec.json").write_text(spec(name, hold=hold).model_dump_json())
+    assert {s["name"]: s["hold_s"] for s in taught_skills(tmp_path)} == {
+        "burner_left_on": 10, "fridge_left_open": 30}

@@ -1,0 +1,5 @@
+{
+ "status": 303,
+ "reason": "See Other",
+ "location": "https://aas2438--trained-eye-student-serve.us-east.modal.run/v1/chat/completions?__modal_attempt_token=REDACTED"
+}

@@ -100,8 +100,10 @@ class OpenAIStudent:
                  system_in_user: bool = False, extra_body: dict | None = None,
                  transport: httpx.BaseTransport | None = None):
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        # Modal answers a request still running after 150 s with a 303 to its result URL
         self._http = httpx.Client(base_url=base_url.rstrip("/"), headers=headers,
-                                  timeout=timeout_s, transport=transport)
+                                  timeout=timeout_s, transport=transport,
+                                  follow_redirects=True)
         self.model = model
         self.max_tokens = max_tokens
         self.top_logprobs = top_logprobs

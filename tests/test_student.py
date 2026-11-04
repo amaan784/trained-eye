@@ -133,3 +133,23 @@ def test_max_tokens_and_the_folded_prompt_reach_the_request():
     [body] = sent
     assert body["max_tokens"] == 2048 and [m["role"] for m in body["messages"]] == ["user"]
     assert body["messages"][0]["content"][1]["text"].startswith(SYSTEM_PROMPT)
+
+
+def test_a_cold_modal_endpoint_redirects_and_the_answer_is_fetched_from_its_result_url():
+    # Modal's reply when the request is still running at 150 s (seen live on Nov 4)
+    with open("tests/fixtures/modal/redirect_303.json") as f:
+        real = json.load(f)
+    seen = []
+
+    def handler(request):
+        seen.append((request.method, str(request.url)))
+        if "__modal_attempt_token" not in str(request.url):
+            return httpx.Response(real["status"], headers={"location": real["location"]})
+        return httpx.Response(200, json=reply([token("yes", math.log(0.8),
+                                                      [("no", math.log(0.2))])]))
+
+    student = OpenAIStudent("https://aas2438--trained-eye-student-serve.us-east.modal.run/v1",
+                            "trained-eye", transport=httpx.MockTransport(handler))
+    score = student.score(jpeg(), SPEC)
+    assert score.answer == "yes" and score.p == pytest.approx(0.8)
+    assert seen[0][0] == "POST" and seen[1] == ("GET", real["location"])

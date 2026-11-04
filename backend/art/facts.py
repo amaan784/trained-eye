@@ -152,21 +152,24 @@ class Headline:
 
 
 def headline(results_path: Path) -> Headline:
-    """The banner's result: Experiment 4's fine-tuned Glimmer against base Glimmer and Muse
-    Spark per frame, from te eval's results.json. MissingFact until all three are scored."""
+    """The banner's result: Experiment 4's three judges pooled (te eval's results.json,
+    "experiment4"): fine-tuned Glimmer's frame F1 and latency, against base Glimmer and
+    Muse Spark judging every frame. MissingFact until all three are scored."""
     results = _json(results_path)
-    scored = {e.get("variant"): e for e in results.get("evaluations", [])
-              if e.get("experiment") == 4 and e.get("status") == "scored"}
+    judges = {j.get("variant"): j for j in results.get("experiment4") or []}
     need = ("finetuned", "base", "spark")
-    if not all(v in scored for v in need):
+    if not all(v in judges for v in need):
         raise MissingFact(f"Experiment 4 is not scored for all three judges in {results_path}")
-    f1 = {v: scored[v]["metrics"].get("f1") for v in need}
-    usd = {v: scored[v].get("usd_per_hour") for v in need}
-    if any(f1[v] is None for v in need) or any(usd[v] is None for v in need):
-        raise MissingFact(f"frame F1 or dollars per hour missing in {results_path}")
+    m = {v: judges[v].get("metrics") or {} for v in need}
+    f1 = {v: m[v].get("f1") for v in need}
+    lat = {v: m[v].get("latency_median_s") for v in need}
+    usd = {v: judges[v].get("usd_per_hour") for v in need}
+    if any(x is None for d in (f1, lat, usd) for x in d.values()):
+        raise MissingFact(f"frame F1, latency or dollars per hour missing in {results_path}")
     footage = results.get("footage") or "the test footage"
-    text = f"Frame F1 {f1['finetuned']:.2f} on {footage.split(' (')[0]}"
-    detail = (f"fine-tuned Glimmer, against {f1['base']:.2f} for base Glimmer and "
-              f"{f1['spark']:.2f} for Muse Spark per frame, at ${usd['finetuned']:.2f} an hour "
-              f"against ${usd['spark']:.2f}")
+    text = f"Frame F1 {f1['finetuned']:.2f} on {footage.split(' (')[0]}, {lat['finetuned']:.1f} s a frame"
+    detail = (f"Fine-tuned Glimmer, against base Glimmer ({f1['base']:.2f}, "
+              f"{lat['base']:.1f} s) and Muse Spark on every frame ({f1['spark']:.2f}, "
+              f"{lat['spark']:.1f} s), at ${usd['finetuned']:.2f} an hour against "
+              f"${usd['spark']:.2f} for Spark.")
     return Headline(text, detail, footage)

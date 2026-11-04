@@ -81,11 +81,12 @@ def test_nothing_is_drawn_while_a_fact_is_missing(tmp_path, change):
 
 
 def results(*judges):
-    variants = {"finetuned": (0.81, 3.95), "base": (0.42, 3.95), "spark": (0.77, 9.6)}
+    values = {"finetuned": (0.88, 0.98, 3.95), "base": (0.89, 2.07, 3.95),
+              "spark": (0.86, 11.16, 16.32)}
     return {"footage": "other kitchens (EPIC-KITCHENS-100, head-mounted camera)",
-            "evaluations": [{"experiment": 4, "variant": v, "status": "scored",
-                             "metrics": {"f1": variants[v][0]},
-                             "usd_per_hour": variants[v][1]} for v in judges]}
+            "experiment4": [{"variant": v, "usd_per_hour": values[v][2],
+                             "metrics": {"f1": values[v][0], "latency_median_s": values[v][1]}}
+                            for v in judges]}
 
 
 def test_the_headline_waits_for_all_three_judges(tmp_path):
@@ -97,9 +98,10 @@ def test_the_headline_waits_for_all_three_judges(tmp_path):
         F.headline(path)
     path.write_text(json.dumps(results("finetuned", "base", "spark")))
     head = F.headline(path)
-    assert head.text == "Frame F1 0.81 on other kitchens"
-    assert "0.42 for base Glimmer and 0.77 for Muse Spark" in head.detail
-    assert "$3.95 an hour against $9.60" in head.detail
+    assert head.text == "Frame F1 0.88 on other kitchens, 1.0 s a frame"
+    assert head.detail == ("Fine-tuned Glimmer, against base Glimmer (0.89, 2.1 s) and Muse "
+                           "Spark on every frame (0.86, 11.2 s), at $3.95 an hour against "
+                           "$16.32 for Spark.")
 
 
 def test_a_page_with_an_unfilled_field_is_refused(tmp_path, monkeypatch):

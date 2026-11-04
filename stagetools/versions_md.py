@@ -75,7 +75,8 @@ live only on the `build-stages` branch; they are not part of the project itself.
   rule is by size instead: a stage changes 200 to 400 lines of code compared with the
   stage before it, counting added plus removed lines. Its tests, docs, license texts and
   binary files (fonts, the mock video) ride along with the code and are not counted, nor
-  is its README.
+  is its README. v93 changes docs only and no code, so by the author's choice it is
+  outside this rule.
 - Stages are cumulative: vN holds everything in v(N-1) plus what stage N adds.
 - No stage deletes or renames a file the previous stage had, so each folder can be copied
   over the repository and committed.
@@ -125,7 +126,7 @@ engine, the teach flow, te teach, then the docs. Each changes only files the ear
 stages already have, so `git diff --no-index` against the stage before shows exactly
 one fix.
 
-From v31 on each stage adds finished files whole, 200 to 400 lines of code, so a file
+From v31 to v92 each stage adds finished files whole, 200 to 400 lines of code, so a file
 is written once in its final form, with the later fixes to it already in. v31 to v40
 come first because the rest stands on them: the settings and the spend ledger every
 later stage reads, the policy check before anything that compiles a skill, the Meta
@@ -155,6 +156,9 @@ the page to the app, its commands, and the notes and credits last.
 A file whose later parts need a later module arrives in parts: backend/cli.py gets each
 command module's registration with the stage that adds that module, and a few tests
 arrive with the stage whose module they need (each stage's README says which).
+
+v93 comes after M4 and changes no code: it brings the docs up to date once v31 to v92
+had replaced the old stages and every stage was committed to `main`.
 
 ## How to review a stage
 
@@ -201,13 +205,13 @@ you can push it.
   exact blocks such as the media part of the client), working backwards. No code outside
   a layer was rewritten. M1's stages were peeled from the finished M1 tree, and peeling
   v12 once more gives v11 byte for byte (README aside), so M1 sits exactly on M0; the
-  same holds for v22 on v21 and v23 on v22. From v31 on the stages were built forward
-  instead, from v30: each adds finished files whole, and a file that arrives in parts is
-  the finished file with its later parts left out (`stagetools/forward.py` with
+  same holds for v22 on v21 and v23 on v22. From v31 to v92 the stages were built
+  forward instead, from v30: each adds finished files whole, and a file that arrives in
+  parts is the finished file with its later parts left out (`stagetools/forward.py` with
   `stagetools/specs/forward_v41.py` from v41; `stagetools/specs/pushed_main.md` lists
-  what v31 to v40 hold). The last folder was checked to equal the repository root. Each
-  folder was then tested as its own project. The READMEs were written per stage, from
-  commands run inside each folder.
+  what v31 to v40 hold). v93 changes docs only. The last folder was checked to equal the
+  repository root. Each folder was then tested as its own project. The READMEs were
+  written per stage, from commands run inside each folder.
 - **Files from the first commit.** `.gitignore` enters at v2 as the original Python
   template plus Trained Eye's own entries. `LICENSE` (MIT, the original) and
   `.gitattributes` enter unchanged at v10, so the last folder matches the repository.
@@ -228,7 +232,8 @@ you can push it.
     every package with `AttributeError: install_layout`. The `te` entry point was checked
     instead by calling `backend.cli:main` from each stage's `[project.scripts]`.
   - the GitHub Actions workflow itself; the same `ruff check .` and `pytest` were run in
-    every folder (GitHub ran it on the branch root after each push).
+    every folder (GitHub ran it on the branch root after each push, and on each stage's
+    commit to `main`, v1 to v92, where it passed every time).
   - `te serve` on a real network: its phone address and log setup were tested with
     uvicorn's run replaced.
   - training on Modal (M2): the Modal app was read by its tests, not run, and `te train`
@@ -236,9 +241,10 @@ you can push it.
     are unchecked.
   - the student endpoint: no trained model exists yet, so the scorer, `te watch` and
     watch mode were tested against fake endpoints.
-  - Python 3.11 and 3.12, and macOS: everything ran on Python 3.13 on Linux. For the
-    review after M1 the code was also compiled with Python 3.11 and 3.12 and type-checked
-    against the 3.11 standard library, but not run there.
+  - Python 3.11 and macOS: the build machine ran everything on Python 3.13 on Linux, and
+    GitHub's CI ran ruff and pytest for v1 to v92 on Python 3.12 on Linux. For the review
+    after M1 the code was also compiled with Python 3.11 and 3.12 and type-checked
+    against the 3.11 standard library, but not run on 3.11.
   - the glasses guide: written from Meta's SDK docs and samples; nobody has followed it
     on real glasses yet.
   - the teach flow against the real API (M1): every test uses a fake Meta API, so the
@@ -250,11 +256,12 @@ you can push it.
 
 ## How the folders were checked
 
-A script (kept outside the repository) checked every folder after it was built:
+The scripts in `stagetools/` checked every folder after it was built:
 
 1. v1 has at most 5 files; v2 to v30 each add or change at most 5 files compared with
    the one before (README included); from v31 each changes 200 to 400 lines of code
-   (tests, docs, license texts, binaries and the README left out).
+   (tests, docs, license texts, binaries and the README left out), except v93, which
+   changes docs only and no code.
 2. Every folder contains every file of the folder before it.
 3. v{last} matches the repository root byte for byte (local-only things excluded).
 4. Every file a README names, in backticks or as a bare file name, exists in that folder.

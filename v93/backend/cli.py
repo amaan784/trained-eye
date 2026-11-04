@@ -1,0 +1,504 @@
+"""The `te` command line. The M0 and M1 commands (te spend to te teach) are here, with the
+helpers the other modules share; build_parser also registers the commands of the modules
+named below.
+
+  te spend          print Meta API spend from the ledger, and Modal GPU spend
+  te models         list the models your MODEL_API_KEY can use (free)
+  te api-smoke      one tiny paid Muse Spark call through the cache and ledger
+  te serve          run the backend (WebSocket at /ws)
+  te ws-selftest    stream synthetic frames through the WebSocket, in process
+  te policy         check a request against the local policy rules (free, offline)
+  te teach          teach a skill: request + 10 s clip -> spec, generated data, labels, dataset
+  te train          bundle taught skills and train the student on Modal (asks first)
+                    (backend/cli_train.py)
+  te watch          replay a clip through watch mode: scores, alerts and the frame log
+  te calibrate      set a skill's threshold from replayed, labelled validation clips
+                    (backend/cli_watch.py)
+  te export         merge a trained adapter on Modal and check it answers as before (asks)
+  te serve-student  deploy or stop the trained model's endpoint on Modal (asks)
+                    (backend/cli_serving.py)
+  te eval           score replayed, labelled clips: results.md and the charts (make eval)
+  te label          mark where a clip's condition is true, or hand-label generated images
+                    (backend/cli_eval.py)
+  te clips          labelled session 1 and 2 clips as training and validation frames (free)
+  te experiments, te unfiltered, te spark-errors, te regress: M3
+                    (te clips too: backend/cli_experiments.py)
+  te replay         replay a run's pending clips of eval/plan.json into the plan's logs
+                    (backend/cli_replay.py)
+  te manifests, te regenerate, te blur, te release, te fetch-weights, te release-test-set,
+  te release-collection, te wandb-report: M4
+                    (backend/cli_release.py)
+  te playground, te playground-clip: M4's web playground
+                    (backend/cli_playground.py)
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import io
+import json
+import shutil
+import socket
+import subprocess
+import sys
+from pathlib import Path
+
+# The cli_* modules take their settings imports from here, so PROJECT_ROOT and ASK_ABOVE_USD
+# are the values they had when backend.cli was loaded, as for the commands in this module.
+from backend.config import (  # noqa: F401 - some are used only by the cli_* modules
+    ASK_ABOVE_USD,
+    MODAL_GPU_USD_PER_HOUR,
+    PROJECT_ROOT,
+    ConfigError,
+    load_settings,
+    shown_path,
+)
+from backend.meta.client import MetaAPIError, MetaClient, OutputError
+from backend.meta.ledger import BudgetExceeded, Ledger, format_report, token_cost
+from backend.training import gpu_ledger
+
+SMOKE_SCHEMA = {
+    "type": "object",
+    "properties": {"ok": {"type": "boolean"}},
+    "required": ["ok"],
+    "additionalProperties": False,
+}
+
+
+def make_ledger(settings) -> Ledger:
+    return Ledger(settings.ledger_path, settings.skill_cap_usd, settings.global_cap_usd)
+
+
+def make_client(settings) -> MetaClient:
+    return MetaClient(settings)
+
+
+def cmd_spend(args) -> int:
+    settings = load_settings()
+    print(format_report(make_ledger(settings)))
+    print(gpu_ledger.format_report(settings.data_dir))  # data/modal_ledger.jsonl
+    return 0
+
+
+def cmd_models(args) -> int:
+    settings = load_settings()
+    offered = make_client(settings).list_models()
+    for model_id in offered:
+        print(model_id)
+    wanted = {m for job, m in settings.models.items() if job != "student_base"}
+    missing = sorted(wanted - set(offered))
+    print(f"configured models missing for this key: {', '.join(missing) or 'none'}")
+    return 1 if missing else 0
+
+
+def check_smoke_reply(data) -> None:
+    """Raise for any reply other than {"ok": true}, so a failed smoke check is never cached."""
+    if not (isinstance(data, dict) and data.get("ok") is True):
+        raise OutputError(f"unexpected smoke reply: {json.dumps(data)[:100]}")
+
+
+def cmd_api_smoke(args) -> int:
+    settings = load_settings()
+    model = settings.model("labeler")
+    bound = token_cost(settings.price(model), 200, args.max_tokens)
+    print(f"one structured call to {model}, at most about ${bound:.4f}")
+    result = make_client(settings).structured(
+        model, "Reply with ok set to true.", SMOKE_SCHEMA, name="smoke", skill="smoke",
+        max_tokens=args.max_tokens, validate=check_smoke_reply,
+    )
+    note = "  (cache hit: no call made)" if result.info.cached else ""
+    print(f"result: {json.dumps(result.data)}")
+    print(f"cost: ${result.info.cost_usd:.6f}{note}")
+    print(f"usage: {json.dumps(result.info.usage, sort_keys=True)}")
+    return 0
+
+
+def lan_address() -> str | None:
+    """This machine's address on the local network, as the phone would reach it. No
+    packet is sent: connecting a UDP socket only picks the outgoing interface."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))
+            address = s.getsockname()[0]
+    except OSError:
+        return None
+    return None if address.startswith("127.") or address == "0.0.0.0" else address
+
+
+def server_log_config() -> dict:
+    """uvicorn's logging, plus the server's own lines (session opened, frames, closed)."""
+    import uvicorn.config
+
+    config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
+    config["loggers"]["trained_eye"] = {"handlers": ["default"], "level": "INFO",
+                                        "propagate": False}
+    return config
+
+
+def cmd_serve(args) -> int:
+    import uvicorn
+
+    host = args.host
+    if host in ("0.0.0.0", "::"):
+        host = lan_address() or "<this Mac's Wi-Fi IP>"
+    print(f"Trained Eye backend: ws://{host}:{args.port}/ws  (check: "
+          f"http://{host}:{args.port}/health; Ctrl+C to stop)")
+    try:
+        settings = load_settings()
+        teach = "off (set SERVER_TOKEN in .env to turn it on)"
+        if settings.has_secret("SERVER_TOKEN"):
+            settings.secret("SERVER_TOKEN")  # a token with spaces or smart quotes stops here
+            teach = "on (the app needs SERVER_TOKEN)"
+    except ConfigError as err:
+        teach = f"off ({err})"
+    print(f"teaching from the phone: {teach}")
+    uvicorn.run("backend.server:app", host=args.host, port=args.port, log_level="info",
+                log_config=server_log_config())
+    return 0
+
+
+def synthetic_jpeg(i: int, size: tuple[int, int] = (640, 480)) -> bytes:
+    from PIL import Image
+
+    shade = 40 + (i * 50) % 200
+    buf = io.BytesIO()
+    Image.new("RGB", size, (shade, shade, shade)).save(buf, format="JPEG", quality=80)
+    return buf.getvalue()
+
+
+def cmd_ws_selftest(args) -> int:
+    from starlette.testclient import TestClient
+
+    from backend.server import create_app
+
+    acks = 0
+    with TestClient(create_app()) as client, client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "hello", "client": "cli", "source": "mock", "fps": 1})
+        welcome = ws.receive_json()
+        print(f"connected: session {welcome['session']}, protocol {welcome['protocol']}")
+        for i in range(args.frames):
+            ws.send_bytes(synthetic_jpeg(i))
+            reply = ws.receive_json()
+            if reply["type"] == "ack":
+                acks += 1
+                print(f"frame {reply['seq']}: ack {reply['width']}x{reply['height']}, "
+                      f"{reply['bytes']} bytes")
+            else:
+                print(f"frame {i + 1}: {reply}")
+        ws.send_json({"type": "bye"})
+    print(f"sent {args.frames} frames, got {acks} acks")
+    return 0 if acks == args.frames else 1
+
+
+def cmd_policy(args) -> int:
+    from backend.skills.spec import policy_check
+
+    refusal = policy_check(args.request)
+    if refusal:
+        print(f"refused: {refusal}")
+        return 1
+    print("ok: no local policy objection (the skill compiler checks again)")
+    return 0
+
+
+def audio_duration_s(path: Path) -> float | None:
+    """Duration via ffprobe, for audio formats the client cannot measure itself."""
+    if shutil.which("ffprobe") is None:
+        return None
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+         str(path)], capture_output=True, text=True, check=False,
+    )
+    try:
+        return float(out.stdout.strip())
+    except ValueError:
+        return None
+
+
+def ask(question: str) -> bool:
+    try:
+        answer = input(f"{question} [y/N] ")
+    except (EOFError, RuntimeError, OSError):  # stdin empty, closed or not readable: "no"
+        print()
+        return False
+    return answer.strip().lower() in ("y", "yes")
+
+
+RESUME_HINT = ("finished calls are cached, so running the same command again continues "
+               "without paying for them twice")
+FAILURES_HINT = ("failed calls are not cached and are paid for again on a rerun: look at "
+                 "the reason above (and the skill folder) before running it again")
+
+
+class Stopped(ValueError):
+    """te teach cannot go on with these inputs; found before anything is spent."""
+
+
+class Refused(Stopped):
+    """The local policy check refused the request text."""
+
+
+def _unique_keys(pairs: list[tuple]) -> dict:
+    keys = [k for k, _ in pairs]
+    repeated = sorted({k for k in keys if keys.count(k) > 1})
+    if repeated:
+        raise ValueError(f"--labels names {', '.join(map(repr, repeated))} more than once")
+    return dict(pairs)
+
+
+def teach_inputs(args, settings) -> tuple[list, dict[str, str], float]:
+    """Check everything te teach needs before any money is mentioned: (keyframes, your
+    labels, audio seconds). Raises ValueError with a message for the user."""
+    from backend.dataengine.keyframes import load_frames, select_keyframes
+    from backend.skills.compiler import MAX_REQUEST
+    from backend.skills.spec import check_name, policy_check
+    from backend.teach import (
+        check_clip,
+        keyframe_name,
+        labels_problem,
+        normalise_labels,
+        save_keyframes,
+    )
+
+    check_name(args.skill)
+    request = " ".join((args.request or "").split())
+    if not (args.audio or request):
+        raise ValueError("pass --audio or --request")
+    if args.request and len(request) > MAX_REQUEST:
+        raise ValueError(f"--request is {len(request)} characters, over the {MAX_REQUEST} "
+                         "allowed: say it in one sentence")
+    if args.request and policy_check(request):
+        raise Refused(policy_check(request))
+    if args.audio and not Path(args.audio).is_file():
+        raise ValueError(f"no audio file at {args.audio}")
+    clip = Path(args.clip)
+    if not clip.exists():
+        raise ValueError(f"no clip at {clip}")
+    skill_root = settings.data_dir / "skills" / args.skill
+    check_clip(clip, skill_root)
+    try:
+        frames = select_keyframes(load_frames(clip))
+    except (RuntimeError, subprocess.CalledProcessError) as err:
+        raise ValueError(f"cannot read the clip {clip}: {err}") from None
+    if not frames:
+        raise ValueError(f"no usable frames in {clip} (a video, or a folder of .jpg, .png or "
+                         ".webp frames)")
+    names = [keyframe_name(i, f.data) for i, f in enumerate(frames)]
+    labels = {}
+    if args.labels:  # checked before the estimate, so a typo never costs anything
+        try:
+            raw = json.loads(Path(args.labels).read_text(), object_pairs_hook=_unique_keys)
+            labels = normalise_labels(raw, names)
+        except (OSError, TypeError) as err:
+            raise ValueError(str(err)) from None
+    problem = labels_problem(settings.train_on_model_outputs, labels, skill_root / "keyframes")
+    if problem:
+        save_keyframes(skill_root / "keyframes", frames)  # so they can be labelled, for free
+        raise Stopped(problem)
+    audio_s = (audio_duration_s(Path(args.audio)) or 10.0) if args.audio else 0.0
+    return frames, labels, audio_s
+
+
+def cmd_teach(args) -> int:
+    from backend.dataengine.synth import TooManyFailures
+    from backend.meta.ledger import image_tokens
+    from backend.teach import TeachOptions, estimate, run_teach
+
+    settings = load_settings()
+    try:
+        frames, labels, audio_s = teach_inputs(args, settings)
+    except Refused as err:
+        print(f"I can't learn that one. {err}")
+        print('stopped: refused (nothing was spent). te policy "<request>" checks a wording '
+              "for free.")
+        return 1
+    except Stopped as err:
+        print(f"stopped: {err} (nothing was spent)")
+        return 1
+    except ValueError as err:
+        print(f"te: {err}", file=sys.stderr)
+        return 2
+    client = make_client(settings)
+    parts = estimate(client, audio_s=audio_s, keyframes=len(frames),
+                     positives=args.positives, negatives=args.negatives)
+    at_most = parts.pop("at_most")
+    print(f"estimate for {args.skill} (before cache hits): " + ", ".join(
+        f"{k} ${v:.2f}" for k, v in parts.items()))
+    print(f"  at most ${at_most:.2f} if every label has to be asked again with a larger budget")
+    print(f"  {image_tokens(settings, client.ledger).describe()}")  # what estimate() used
+    print("train on model outputs: " + ("yes" if settings.train_on_model_outputs else
+                                        "no (the dataset uses real frames with your own labels)"))
+    ledger = make_ledger(settings)
+    room = min(settings.skill_cap_usd - ledger.spent(args.skill),
+               settings.global_cap_usd - ledger.spent())
+    if parts["total"] > room:
+        print(f"te: warning: only ${max(room, 0):.2f} is left under the spend caps for "
+              f"{args.skill}. Cached steps are free, but uncached calls past that stop the "
+              "run partway, before the dataset. Raise TE_SKILL_CAP_USD or TE_GLOBAL_CAP_USD, "
+              "or lower --positives and --negatives.", file=sys.stderr)
+    elif at_most > room:
+        print(f"te: note: ${max(room, 0):.2f} is left under the spend caps for {args.skill}. "
+              "If many labels need the larger budget the run could pass that, and the cap "
+              "would stop it partway (a rerun with a higher cap continues).", file=sys.stderr)
+    if args.estimate_only:
+        return 0
+    settings.secret("MODEL_API_KEY")  # a missing key stops here, before the question
+    over = at_most > ASK_ABOVE_USD
+    if over:
+        print(f"te: this could cost up to ${at_most:.2f}, over ${ASK_ABOVE_USD:.0f}, so it needs "
+              "your yes even with --yes")
+    if (over or not args.yes) and not ask(f"Spend up to about ${parts['total']:.2f} "
+                                          f"(at most ${at_most:.2f})?"):
+        return 1
+    opts = TeachOptions(skill=args.skill, clip=Path(args.clip),
+                        audio=Path(args.audio) if args.audio else None, request=args.request,
+                        positives=args.positives, negatives=args.negatives, real_labels=labels,
+                        audio_s=audio_s or None, correction=args.correct)
+    confirm = (lambda sentence: True) if args.yes else (lambda sentence: ask("Is that right?"))
+    try:
+        report = run_teach(client, opts, settings.data_dir / "skills", confirm=confirm)
+    except KeyboardInterrupt:
+        print(f"\nte: stopped; {RESUME_HINT}", file=sys.stderr)
+        return 130
+    except TooManyFailures as err:
+        print(f"te: {err}\nte: teach stopped; {FAILURES_HINT}", file=sys.stderr)
+        return 2
+    except MetaAPIError:
+        print(f"te: teach stopped; {RESUME_HINT}", file=sys.stderr)
+        raise
+    except ValueError as err:  # e.g. a spoken request over 500 characters
+        print(f"te: {err}", file=sys.stderr)
+        return 2
+    if report.get("stopped"):
+        print(f"stopped: {report['stopped']}")
+        if report["stopped"] == "not confirmed":
+            print('To fix the read-back, run the same command with --correct "what is wrong" '
+                  "(or a reworded --request); the clip and transcript are reused for free.")
+        elif report["stopped"] == "refused":
+            print('To try another wording first, te policy "<request>" checks it for free.')
+        return 1
+    print(format_report(make_ledger(settings)))
+    return 0
+
+
+def modal_ready() -> bool:
+    if shutil.which("modal") is None:
+        print('te: the modal command is missing: pip install -e ".[train]", then modal token '
+              "set", file=sys.stderr)
+        return False
+    return True
+
+
+def positive(text: str) -> int:
+    """An argparse type: a whole number, 1 or more."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be 1 or more, got {value}")
+    return value
+
+
+def fraction(text: str) -> float:
+    """An argparse type: a number from 0 to 1."""
+    value = float(text)
+    if not 0.0 <= value <= 1.0:  # also false for nan
+        raise argparse.ArgumentTypeError(f"must be from 0 to 1, got {text}")
+    return value
+
+
+def count(text: str) -> int:
+    """An argparse type: a whole number, 0 or more."""
+    value = int(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be 0 or more, got {value}")
+    return value
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="te", description="Trained Eye")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("spend", help="print Meta API spend").set_defaults(func=cmd_spend)
+    sub.add_parser("models", help="list models for this key").set_defaults(func=cmd_models)
+
+    smoke = sub.add_parser("api-smoke", help="one tiny paid call to check the key")
+    smoke.add_argument("--max-tokens", type=int, default=512)
+    smoke.set_defaults(func=cmd_api_smoke)
+
+    serve = sub.add_parser("serve", help="run the backend server")
+    serve.add_argument("--host", default="0.0.0.0")
+    serve.add_argument("--port", type=int, default=8765)
+    serve.set_defaults(func=cmd_serve)
+
+    selftest = sub.add_parser("ws-selftest", help="send synthetic frames over the WebSocket")
+    selftest.add_argument("--frames", type=int, default=3)
+    selftest.set_defaults(func=cmd_ws_selftest)
+
+    policy = sub.add_parser("policy", help="check a request against the local policy rules")
+    policy.add_argument("request")
+    policy.set_defaults(func=cmd_policy)
+
+    teach = sub.add_parser("teach", help="teach a skill from a request and a 10 s clip")
+    teach.add_argument("--skill", required=True, help="skill name, e.g. washer_done")
+    teach.add_argument("--clip", required=True, help="video file or folder of JPEG frames")
+    said = teach.add_mutually_exclusive_group()
+    said.add_argument("--audio", help="the spoken request (wav, m4a, ...)")
+    said.add_argument("--request", help="the request as text, instead of --audio")
+    teach.add_argument("--correct", help='fix a wrong read-back, e.g. "the light on the lid"')
+    teach.add_argument("--positives", type=count, default=150)
+    teach.add_argument("--negatives", type=count, default=150)
+    teach.add_argument("--labels", help='JSON of your own keyframe labels {"kf_00_1a2b3c4d.jpg": '
+                       '"yes" or "no"}, names as in data/skills/<skill>/keyframes/')
+    teach.add_argument("--estimate-only", action="store_true", help="print the cost estimate")
+    teach.add_argument("--yes", action="store_true", help="skip both confirmations")
+    teach.set_defaults(func=cmd_teach)
+
+    from backend.cli_train import add_parsers as train_parsers
+
+    train_parsers(sub)
+
+    from backend.cli_watch import add_parsers as watch_parsers
+
+    watch_parsers(sub)
+
+    from backend.cli_serving import add_parsers as serving_parsers
+
+    serving_parsers(sub)
+
+    from backend.cli_eval import add_parsers as eval_parsers
+
+    eval_parsers(sub)
+
+    from backend.cli_experiments import add_parsers as experiment_parsers
+
+    experiment_parsers(sub)
+
+    from backend.cli_replay import add_parsers as replay_parsers
+
+    replay_parsers(sub)
+
+    from backend.cli_release import add_parsers as release_parsers
+
+    release_parsers(sub)
+
+    from backend.cli_playground import add_parsers as playground_parsers
+
+    playground_parsers(sub)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        return args.func(args)
+    except BudgetExceeded as err:
+        print(f"te: {err}\nte: raise TE_SKILL_CAP_USD (or TE_GLOBAL_CAP_USD) and run the same "
+              f"command to continue; {RESUME_HINT}", file=sys.stderr)
+        return 2
+    except (ConfigError, MetaAPIError) as err:
+        print(f"te: {err}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1727,7 +1727,7 @@ STAGES.update({
     ),
     92: stage(
         next='te playground and te playground-clip, the public playground on Modal, and the '
-             'notes in their final form, with the credits, licenses and copied Meta sample '
+             'notes for the finished code, with the credits, licenses and copied Meta sample '
              'files.',
         layer='Playground commands, Modal app and notes',
         adds='This is the last stage. backend/cli_playground.py adds te playground, which '
@@ -1756,6 +1756,34 @@ STAGES.update({
                   "the deploy's question and file list, the clip checks, and the Modal app's "
                   'settings read from its syntax tree.',
         commands=[PYTEST, RUFF, 'python -m backend.cli playground --help', 'python -m backend.cli playground-clip --help'],
+    ),
+    93: stage(
+        next='the notes brought up to date after the re-cut, with no code changed: the stage '
+             'numbers and rules, the test count, how stages go to main, and the Modal '
+             'Secrets the jobs need.',
+        layer='Notes brought up to date',
+        adds='This is the last stage, and it changes no code, so by the author\'s choice it is '
+             'outside the 200 to 400 line rule. HANDOVER.md and PROGRESS.md give the stage '
+             'numbers after the re-cut (M2 is v31 to v63, M3 v64 to v77, M4 v78 to v92), the '
+             'line rule from v31, the test count, the rule that stages go to main only when '
+             'the author asks, a session log entry for Nov 3 and the spend through M4, and '
+             'they no longer list as still to build what is built: the SAM box reader, the '
+             'phone\'s teach route, te manifests and te regenerate, the release license and '
+             'the student key kept off the vLLM command line. SETUP.md lists every Modal '
+             'Secret the jobs attach (huggingface before the first te train, student, meta) '
+             'and the two values you make up (STUDENT_API_KEY, SERVER_TOKEN), and says how a '
+             'stage goes to main. CLAUDE.md names the four Modal Secrets and adds te replay. '
+             'ios/README.md and docs/glasses-check.md point at the right step of the glasses '
+             'check.',
+        summary='Bring the notes up to date after the re-cut',
+        paragraph='Changes no code. HANDOVER.md and PROGRESS.md take the stage numbers and the '
+                  '200 to 400 line rule of the re-cut, the current test count, the rule that '
+                  'stages go to main only when the author asks, a session log entry for Nov 3 '
+                  'and the spend through M4, and stop listing as still to build what is built. '
+                  'SETUP.md and CLAUDE.md name every Modal Secret the jobs use, SETUP.md says '
+                  'how a stage goes to main and CLAUDE.md adds te replay. ios/README.md and '
+                  'docs/glasses-check.md fix their pointers into the glasses check.',
+        commands=[PYTEST, RUFF],
     ),
 })
 

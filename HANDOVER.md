@@ -2,7 +2,8 @@
 
 Read this first when picking the project up in a new session, local or cloud. It says
 where everything is, what is done, what is not, the rules the author set, and what to
-build next. Last updated 2026-10-29, at the end of milestone M1 (code).
+build next. Last updated 2026-11-03: the code for M0 to M4 is written and tested offline
+(never run against Meta, Modal or a phone), and every stage, v1 to v93, is on `main`.
 
 ## 1. Read in this order
 
@@ -20,9 +21,8 @@ build next. Last updated 2026-10-29, at the end of milestone M1 (code).
 
 - Repository: github.com/amaan784/trained-eye. All work is on the branch
   `build-stages` (the author chose the name). Its root is the finished code. The folders
-  v1 to v105 are the same code in cumulative stages, for the author to commit to `main`
-  one at a time. `main` holds only what the author has committed from the stages so far;
-  check with `git log origin/main`.
+  v1 to v93 are the same code in cumulative stages, each on `main` as one commit, so
+  `main` matches the newest folder (v93 now); check with `git log origin/main`.
 - Hackathon: Meta Global AI Developer Hackathon, solo. Submission is due Wed Nov 4, 9 PM
   ET; the plan is to submit by 6 PM ET. The repo, video, weights and playground must be
   public by then.
@@ -64,7 +64,7 @@ Code map (all under `backend/`, namespace packages without `__init__.py`):
 | `dataengine/dataset.py` | Axolotl JSONL in Meta's recipe format, 512x512 padded PNGs, manifest with provenance index |
 | `teach.py` | The teach flow end to end, cached; fallback switch `TE_TRAIN_ON_MODEL_OUTPUTS=0` |
 
-Other files: `tests/` (707 tests, all offline; one skips without OpenCV),
+Other files: `tests/` (1012 tests pass, all offline; one more skips without OpenCV),
 `docs/glasses-check.md`, `docs/recording-protocol.md`, `.env.example`,
 `.github/workflows/ci.yml` (ruff and pytest on every push), `CLAUDE.md` (short
 conventions file the author asked for).
@@ -90,10 +90,10 @@ Local data, all under `data/` and gitignored: `cache/`, `ledger.jsonl`, and
   cut (see the Decisions in PROGRESS.md).
 - **Review after M1 (Oct 31):** bugs, version compatibility, functionality against
   SPEC.md and the UI, every finding checked by one reviewer who reproduced it and one who
-  tried to refute it. The 27 confirmed in F1 to F29 are fixed in stages v23 to v30, and
-  the confirmed ones in F30 to F62, with the faults that review found in those fixes, in
-  stages v31 to v38, and what a review of those found in v39 and v40 (PROGRESS.md,
-  "Review after M1"). Two open questions from it are in item 9 below.
+  tried to refute it. The 27 confirmed in F1 to F29 are fixed in stages v23 to v30. The
+  fixes for the confirmed ones in F30 to F62, for the faults that review found in those
+  fixes, and for what a review of those found are in the stages from v31 on that add that
+  code (PROGRESS.md, "Review after M1"). Two open questions from it are in item 9 below.
 - **Teaching changes for the author:** keyframes are now named
   `kf_<position>_<hash>.jpg`, so a `--labels` file uses those names (from
   `data/skills/<skill>/keyframes/`); a wrong read-back is fixed with
@@ -146,11 +146,12 @@ PROGRESS.md.
    them in `client.py` if the API disagrees. Keep tests offline: turn real responses
    into fixtures in the tests, never call the API from a test.
 5. **SAM parser.** After step 4, the raw SAM text is in `roi.json` and in the cache
-   (`data/cache/*/*.json` with endpoint `/responses`). Write `parse_sam_output` in
-   `backend/dataengine/roi.py` against it (boxes are x1, y1, x2, y2 in source pixels;
-   masks are base85 per SPEC.md) and add a test with that text as a fixture. The
-   `meta-sam-parser` package could not be installed or read; installing it is a
-   download, so ask first.
+   (`data/cache/*/*.json` with endpoint `/responses`). `parse_sam_output` in
+   `backend/dataengine/roi.py` reads the boxes with our own reader of Meta's SAM 3
+   protocol (`backend/dataengine/sam_text.py`), which has never seen a real reply: check
+   the boxes in `roi.json` against that text, fix the reader if they disagree, and add a
+   test with the text as a fixture. Masks are not decoded; that needs Meta's
+   `meta-sam-parser` package, a download, so ask first.
 6. **Full washer run:** the same command with the default 150 and 150. The estimator
    prints about $5.25 to $5.28 for 20 to 24 keyframes, and at most $11.52 to $11.63 if
    every label is asked again with the larger budget. That worst case is under the $15
@@ -200,8 +201,8 @@ PROGRESS.md.
      so the student is served from Modal. Make up a long random `STUDENT_API_KEY`, put it
      in `.env` and in a Modal Secret named "student", then `te serve-student --run
      exp1-mixed` (asks; billed while a container is up, `--stop` stops it). Check in the
-     first container log that the key is not printed (vLLM may log its arguments; if it
-     is, pass it as `VLLM_API_KEY` instead), and that a request returns `logprobs` with
+     first container log that the key is not printed (vLLM logs its arguments, so the
+     app passes the key in `VLLM_API_KEY`), and that a request returns `logprobs` with
      `top_logprobs`. Then set `TE_STUDENT_URL` (the printed URL plus `/v1`).
      `te serve-student --base` serves base Glimmer (Experiment 4, te regress) on its own
      app; `--runs a,b,c` serves several adapters on one base, each run a model name
@@ -228,7 +229,8 @@ PROGRESS.md.
    frame; asks) and with the base endpoint; the regression check is `te regress`.
    `make eval` writes `eval/results.md` (with Spark's error rate, the regression check and
    links to the local Experiment 1 failure galleries in `eval/galleries/`, which may show
-   faces) and the SVG charts; `te eval --readme README.md` writes the results block.
+   faces) and the SVG charts; `te eval --plan eval/plan.json --out eval --readme
+   README.md` also writes the results block.
 12. **M4, after asking:** in this order: `te manifests` (commit `manifests/`);
    `te fetch-weights --run <final>`; `te blur --src data/skills/<s>/keyframes --dst
    data/skills/<s>/keyframes_blurred` for each skill (needs `pip install
@@ -256,8 +258,8 @@ PROGRESS.md.
   stages built, checked and pushed to `build-stages`.
 - If SPEC.md and the docs disagree, follow the docs and record it in PROGRESS.md.
 - Tests never call paid APIs. Use `httpx.MockTransport` fakes or cached fixtures.
-- Keys live in `.env`, environment variables or Modal Secrets (`wandb`, `huggingface`).
-  Never commit, print or log them.
+- Keys live in `.env`, environment variables or Modal Secrets (`wandb`, `huggingface`,
+  `student`, `meta`). Never commit, print or log them.
 - Ask the author before: any single job estimated over $15 (API or GPU); deleting data;
   publishing anything (Hugging Face uploads, making the W&B project or report public,
   the playground, footage); anything physical (recording, wearing the glasses, creating
@@ -291,25 +293,30 @@ PROGRESS.md.
 ### Version stages
 
 The author reviews and commits the project one layer at a time. New work becomes new
-stages after the newest folder (v105 now). The rules, as the author gave them:
+stages after the newest folder (v93 now). The rules, as the author gave them:
 
 - Stages v1 to vN live in the root of `build-stages`, in the order a developer would
   build them: foundations first, docs and UI late.
-- Each stage is one commit. From v50 on (the author's newer rule, Nov 2) a stage changes
-  150 to 300 lines compared with the stage before, counting added plus removed lines and
-  leaving out its README; `stagetools/check_stages.py` checks it. v1 to v49 were cut
+- Each stage is one commit. From v31 on (the author's newer rule) a stage changes 200 to
+  400 lines of code compared with the stage before, counting added plus removed lines;
+  its tests, docs, .md files, license texts, .txt and binary files ride along uncounted,
+  and so does its README. `stagetools/check_stages.py` checks it. v1 to v30 were cut
   under the earlier rule (at most 5 files per stage, README included) and stay as they
-  are. If a layer is bigger, split it into stages that each still run; if a small fix is
-  under 150 lines, put it in a stage with related work. If a change cannot fit without
-  breaking a stage, tell the author first.
+  are. v93 changes docs only, no code, so it is outside the line rule by the author's
+  choice. If a layer is bigger, split it into stages that each still run; if a small fix
+  is under 200 lines of code, put it in a stage with related work. If a change cannot
+  fit without breaking a stage, tell the author first.
 - Cumulative: vN has everything from v(N-1) plus what stage N adds. No stage deletes or
   renames a file the previous one had.
 - Each folder runs on its own: its own README, `pyproject.toml`, tests and CI file;
   nothing points into another folder; its tests and README commands pass from inside it.
 - The last folder is byte-identical to the root except for local-only things: `.claude/`,
   `.env`, `data/`, outputs, caches, `VERSIONS.md`, `stagetools/` and the v folders.
-- Build earlier stages by peeling layers off the finished code with exact edits, so the
-  diff between two stages is exactly that layer. Do not rewrite code outside the layer.
+- Build stages from the finished code with exact edits, so the diff between two stages
+  is exactly that layer: v1 to v30 were peeled back from it (`stagetools/peel.py`), and
+  v31 to v93 were built forward from the last committed stage with finished files
+  added whole (v41 to v93 by `stagetools/forward.py`). Do not rewrite code outside the
+  layer.
 - Folders hold code and docs only: no caches, generated data or secrets.
 - Each stage README: what it adds, which files, the commands to run, what they printed
   (measured, never invented), and what the next stage adds.
@@ -318,8 +325,9 @@ stages after the newest folder (v105 now). The rules, as the author gave them:
   with a short imperative summary and one-paragraph description per stage; notes; how
   the folders were checked.
 - Before saying a milestone is done: run every stage's tests and README commands inside
-  it; confirm the 5-file limit, that each folder contains the previous one, that the last
-  folder matches the root byte for byte, and that every file a README names exists.
+  it; confirm the size rule (at most 5 files per stage up to v30, 200 to 400 lines of code
+  from v31), that each folder contains the previous one, that the last folder matches the
+  root byte for byte, and that every file a README names exists.
 - If a real bug turns up, fix it at the root, carry the fix into every stage that has
   that code, and tell the author.
 - Plain wording, no emoji or em dashes, in READMEs, VERSIONS.md and the other docs.
@@ -327,9 +335,11 @@ stages after the newest folder (v105 now). The rules, as the author gave them:
 
 ### Git
 
-- Commit only to `build-stages`, with the author as author and committer, unsigned, with
-  no attribution trailers (SETUP.md section 5 has the exact command). Push with
-  `git push -u origin build-stages`. Never push to `main`; the author does that. Do not
+- Commit to `build-stages`, with the author as author and committer, unsigned, with no
+  attribution trailers (SETUP.md section 5 has the exact command). Push with
+  `git push -u origin build-stages`. Stages go to `main` only when the author asks: one
+  commit per stage, copied from the stage folder, with the author's identity, the
+  stage's summary and description from VERSIONS.md, and no attribution trailers. Do not
   open pull requests unless asked.
 
 ## 5. Facts from the docs that the next milestones depend on
@@ -420,7 +430,7 @@ copied files, and list them in CONTRIBUTIONS.md.
 ### M2 (Fri to Sat): training, serving, watching
 
 - `backend/training/`: a Modal function with Axolotl in the image and data on a Modal
-  volume; `te train --skills washer_done --variant mixed`. One multi-skill adapter (the
+  volume; `te train --skills washer_done --run exp1-mixed`. One multi-skill adapter (the
   condition is in the prompt). W&B through Axolotl (`wandb_project: trained-eye`,
   `wandb_name` like `exp1-mixed`, tags for experiment, skills, mix, image count, seed and
   git commit), WANDB_API_KEY from the Modal Secret. Log the full config, the dataset
@@ -446,8 +456,9 @@ copied files, and list them in CONTRIBUTIONS.md.
   capture with a countdown, read-back, confirm), Skills (list, on/off toggles, status:
   training or ready), Watch (live indicator, last alert, battery), Clips (saved by the
   user only). Configurable WebSocket URL (local Wi-Fi or a tunnel). Follow "Visual
-  design" above. The backend needs an endpoint that takes the 10 second capture
-  (frames and audio) and runs `teach.run_teach`; today teaching is CLI only.
+  design" above. The backend endpoint that takes the 10 second capture (frames and
+  audio) and runs `teach.run_teach` is `/teach/start` (`backend/teach_api.py`), behind
+  `SERVER_TOKEN`.
 
 ### M3 (Sat to Sun): all skills, evaluation, experiments
 
@@ -462,7 +473,7 @@ copied files, and list them in CONTRIBUTIONS.md.
   Experiment 2: hand-label 200 random training images to measure Spark's error rate;
   filtered vs unfiltered labels (`label_stats.json` already records agreement).
   Experiment 3: 25, 50, 100, 200, 300 synthetic images per skill, F1 against count with
-  generation cost (decide whether steps or epochs stay fixed for the small points).
+  generation cost (steps stay fixed for the small points, see `backend/eval/plan.py`).
   Experiment 4: fine-tuned Glimmer vs base Glimmer zero-shot vs Muse Spark per frame:
   accuracy, latency, cost per hour, and the accuracy-vs-cost chart. Regression check: 50
   general visual questions written by the author (plus a few text-only ones), base vs
@@ -479,12 +490,13 @@ copied files, and list them in CONTRIBUTIONS.md.
   say so on the page.
 - Hugging Face collection (ask before every upload): the final LoRA adapter, the Mac
   build, the experiment adapters, the human-labelled test set (faces blurred, approved
-  footage only); never generated images. Apache-2.0 if the Glimmer model card allows it
-  (check the card). Model card contents are listed in SPEC.md.
+  footage only); never generated images. Apache-2.0, the license the Glimmer model card
+  gives at the pinned revision (`backend/release/model_card.py`). Model card contents
+  are listed in SPEC.md.
 - Generated images are never published, so ship what regenerates them: copy each
-  skill's `synthetic/manifest.jsonl` out of `data/` into a committed folder, and add a
-  `te regenerate` that rebuilds the images from a manifest and the (face-blurred)
-  keyframes through `synth.generate`, with the usual estimate and ledger.
+  skill's `synthetic/manifest.jsonl` out of `data/` into a committed folder (`te
+  manifests`), and `te regenerate` rebuilds the images from a manifest and the
+  (face-blurred) keyframes through `synth.generate`, with the usual estimate and ledger.
 - A public W&B report "Trained Eye: experiments" (ask first), the README with results,
   architecture, the Meta-model table, privacy notes, limitations, and CONTRIBUTIONS.md
   crediting the cookbook recipe and any DAT sample code.
@@ -504,18 +516,29 @@ copied files, and list them in CONTRIBUTIONS.md.
   handover (stage v22).
 - 2026-10-31, cloud session 1 (continued): the author asked for a scan for bugs and
   version compatibility issues, a functionality check against the plan and a UI check,
-  with fixes as stages v23 and later and M2 after them. There is no UI yet (the iOS app
+  with fixes as stages v23 and later and M2 after them. There was no UI yet (the iOS app
   and the playground are M2 and M4). Fixes for F1 to F29: stages v23 to v30. The second
-  half of the review, F30 to F62, and a check of the v23 to v30 fixes themselves: stages
-  v31 to v38. A review of those: v39 and v40. Then the parts of M2 that need neither the
-  Mac nor Modal: v41 to v48. The review's last small fixes to te teach: v49.
+  half of the review, F30 to F62, a check of the v23 to v30 fixes themselves, a review of
+  those, the parts of M2 that need neither the Mac nor Modal, and the review's last small
+  fixes to te teach followed as stages too; since the re-cut on Nov 3 (below) they are
+  spread over the new stages from v31 on.
 - 2026-11-02, cloud session 1 (continued): the author asked for the remaining
-  implementations, with stages from v50 on cut at 150 to 300 changed lines. The rest of
-  M2 (teaching from the phone, export and serving): v50 to v58; the iOS app, never
-  compiled: v59 to v74; M3 (labelling, evaluation, the four experiments): v75 to v89; M4
-  (release tools, the playground, these notes and CONTRIBUTIONS.md): v90 to v105.
+  implementations, first cut as stages of 150 to 300 changed lines (re-cut on Nov 3,
+  below). Since the re-cut, the rest of M2 (teaching from the phone, export and serving)
+  is in v41 to v48; the iOS app, never compiled: v49 to v63; M3 (labelling, evaluation,
+  the four experiments): v64 to v77; M4 (release tools, the playground, these notes and
+  CONTRIBUTIONS.md): v78 to v92.
   Reviews of the teach API, the iOS code and the playground ran before staging, and
   their fixes are in those stages: a token on the teach routes (SERVER_TOKEN), a clean
   stop on shutdown, size and shape limits on uploads, one watch frame in flight on the
   phone, cross-site and IPv6 checks in the playground, and a shared in-flight total for
   its ledger cap.
+- 2026-11-03, cloud session 1 (continued): the author asked for the old stages v31 to
+  v105, with the code completed since, to be re-cut as 62 stages, v31 to v92, each
+  changing 200 to 400 lines of code; v1 to v30 stay as they were. Six large files
+  (`cli.py`, `cli_experiments.py`, `cli_release.py`, `eval/plan.py`,
+  `release/model_card.py` and `GlassesCamera.swift`) were first split into modules, with
+  no change in behaviour, so each file arrives whole (`stagetools/CONSOLIDATED_PLAN.md`
+  maps the old stage numbers to the new ones). Then, at the author's request, v31 to v92
+  went to `main` after v1 to v30, one commit per stage, with CI green on each (v92 at
+  1:21 pm EST). v93 brings these notes up to date and changes no code.

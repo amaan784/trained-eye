@@ -1,6 +1,6 @@
 # Version stages
 
-The finished project split into stages v1 to v92, in the order a developer would build
+The finished project split into stages v1 to v93, in the order a developer would build
 it, so it can be reviewed and committed one layer at a time. These folders and this file
 live only on the `build-stages` branch; they are not part of the project itself.
 
@@ -11,13 +11,14 @@ live only on the `build-stages` branch; they are not part of the project itself.
   rule is by size instead: a stage changes 200 to 400 lines of code compared with the
   stage before it, counting added plus removed lines. Its tests, docs, license texts and
   binary files (fonts, the mock video) ride along with the code and are not counted, nor
-  is its README.
+  is its README. v93 changes docs only and no code, so by the author's choice it is
+  outside this rule.
 - Stages are cumulative: vN holds everything in v(N-1) plus what stage N adds.
 - No stage deletes or renames a file the previous stage had, so each folder can be copied
   over the repository and committed.
 - Every folder runs on its own: it has its own README, `pyproject.toml` (requirements and
   tool settings), tests and CI workflow, and nothing in it points into another folder.
-- The last folder, v92, is the finished project: byte for byte the same as the
+- The last folder, v93, is the finished project: byte for byte the same as the
   repository root, apart from local-only things (this file, the v folders,
   `stagetools/`, caches, `.env`, `data/`).
 - Folders hold code and docs only: no caches, generated data or secrets.
@@ -117,7 +118,8 @@ live only on the `build-stages` branch; they are not part of the project itself.
 | v89 | M4: Playground: the timeline and the wall | The playground's two drawings: the live timeline of a clip's scores against the threshold with its spoken alerts, and the training wall of labelled variations. | `backend/playground/static/timeline.js`, `backend/playground/static/wall.js`, `README.md` (changed) | `python -m pytest` | 988 passed |
 | v90 | M4: Playground: the page script | The page script that ties the playground together: the clip and skill pickers, SAM's outline, a live teach run followed as it goes, the cost and the caps, and the results. | `backend/playground/static/app.js`, `README.md` (changed) | `python -m pytest` | 988 passed |
 | v91 | M4: The playground app | The playground app: one page and a JSON API over the local results, a visitor cookie for the budget, live runs refused from other sites, and a public copy for the open web. | `backend/playground/app.py`, `tests/test_playground_app.py`, `README.md` (changed) | `python -m pytest` | 1000 passed |
-| v92 | M4: Playground commands, Modal app and notes | te playground and te playground-clip, the public playground on Modal, and the notes in their final form, with the credits, licenses and copied Meta sample files. | `CLAUDE.md` (changed), `CONTRIBUTIONS.md`, `HANDOVER.md` (changed), `PROGRESS.md` (changed), `backend/cli.py` (changed), `backend/cli_playground.py`, `backend/playground/modal_app.py`, `tests/test_cli_playground.py`, `tests/test_playground_modal.py`, `README.md` (changed) | `python -m backend.cli playground --help` | 1012 passed |
+| v92 | M4: Playground commands, Modal app and notes | te playground and te playground-clip, the public playground on Modal, and the notes for the finished code, with the credits, licenses and copied Meta sample files. | `CLAUDE.md` (changed), `CONTRIBUTIONS.md`, `HANDOVER.md` (changed), `PROGRESS.md` (changed), `backend/cli.py` (changed), `backend/cli_playground.py`, `backend/playground/modal_app.py`, `tests/test_cli_playground.py`, `tests/test_playground_modal.py`, `README.md` (changed) | `python -m backend.cli playground --help` | 1012 passed |
+| v93 | M4: Notes brought up to date | The notes brought up to date after the re-cut, with no code changed: the stage numbers and rules, the test count, how stages go to main, and the Modal Secrets the jobs need. | `CLAUDE.md` (changed), `HANDOVER.md` (changed), `PROGRESS.md` (changed), `SETUP.md` (changed), `docs/glasses-check.md` (changed), `ios/README.md` (changed), `README.md` (changed) | `python -m pytest` | 1012 passed |
 
 Every README lists the exact commands and the output they printed when run inside that
 folder.
@@ -152,7 +154,7 @@ engine, the teach flow, te teach, then the docs. Each changes only files the ear
 stages already have, so `git diff --no-index` against the stage before shows exactly
 one fix.
 
-From v31 on each stage adds finished files whole, 200 to 400 lines of code, so a file
+From v31 to v92 each stage adds finished files whole, 200 to 400 lines of code, so a file
 is written once in its final form, with the later fixes to it already in. v31 to v40
 come first because the rest stands on them: the settings and the spend ledger every
 later stage reads, the policy check before anything that compiles a skill, the Meta
@@ -182,6 +184,9 @@ the page to the app, its commands, and the notes and credits last.
 A file whose later parts need a later module arrives in parts: backend/cli.py gets each
 command module's registration with the stage that adds that module, and a few tests
 arrive with the stage whose module they need (each stage's README says which).
+
+v93 comes after M4 and changes no code: it brings the docs up to date once v31 to v92
+had replaced the old stages and every stage was committed to `main`.
 
 ## How to review a stage
 
@@ -588,6 +593,10 @@ Adds backend/playground/app.py: the page, the static files and a JSON API over t
 
 Adds backend/cli_playground.py (te playground locally or as the public copy, te playground --deploy to a private Modal Volume after a question, and te playground-clip for blurred test clips) and backend/playground/modal_app.py (the public copy on Modal in one container, its state committed to the Volume), and registers both commands in backend/cli.py. Brings CLAUDE.md, HANDOVER.md and PROGRESS.md to their final form and adds CONTRIBUTIONS.md with the credits, licenses and copied Meta sample files. Tests cover the commands, the deploy's question and file list, the clip checks, and the Modal app's settings read from its syntax tree.
 
+**v93.** `Bring the notes up to date after the re-cut`
+
+Changes no code. HANDOVER.md and PROGRESS.md take the stage numbers and the 200 to 400 line rule of the re-cut, the current test count, the rule that stages go to main only when the author asks, a session log entry for Nov 3 and the spend through M4, and stop listing as still to build what is built. SETUP.md and CLAUDE.md name every Modal Secret the jobs use, SETUP.md says how a stage goes to main and CLAUDE.md adds te replay. ios/README.md and docs/glasses-check.md fix their pointers into the glasses check.
+
 ## Notes
 
 - **Reconstructed stages.** Each milestone was written as one finished tree, and its
@@ -595,20 +604,20 @@ Adds backend/cli_playground.py (te playground locally or as the public copy, te 
   exact blocks such as the media part of the client), working backwards. No code outside
   a layer was rewritten. M1's stages were peeled from the finished M1 tree, and peeling
   v12 once more gives v11 byte for byte (README aside), so M1 sits exactly on M0; the
-  same holds for v22 on v21 and v23 on v22. From v31 on the stages were built forward
-  instead, from v30: each adds finished files whole, and a file that arrives in parts is
-  the finished file with its later parts left out (`stagetools/forward.py` with
+  same holds for v22 on v21 and v23 on v22. From v31 to v92 the stages were built
+  forward instead, from v30: each adds finished files whole, and a file that arrives in
+  parts is the finished file with its later parts left out (`stagetools/forward.py` with
   `stagetools/specs/forward_v41.py` from v41; `stagetools/specs/pushed_main.md` lists
-  what v31 to v40 hold). The last folder was checked to equal the repository root. Each
-  folder was then tested as its own project. The READMEs were written per stage, from
-  commands run inside each folder.
+  what v31 to v40 hold). v93 changes docs only. The last folder was checked to equal the
+  repository root. Each folder was then tested as its own project. The READMEs were
+  written per stage, from commands run inside each folder.
 - **Files from the first commit.** `.gitignore` enters at v2 as the original Python
   template plus Trained Eye's own entries. `LICENSE` (MIT, the original) and
   `.gitattributes` enter unchanged at v10, so the last folder matches the repository.
 - **Branch-only tools.** `stagetools/` holds the scripts that built and checked these
   folders (see `stagetools/README.md`). Like this file, it lives only on this branch.
 - **Large files.** None. The largest file is `ios/TrainedEye/Fonts/Inter-Bold.ttf` at
-  about 410 KB; the whole of v92 is about 3945 KB.
+  about 410 KB; the whole of v93 is about 3947 KB.
 - **Untested paths.** The build machine had no API keys, no network access to Meta, and
   no PyPI, so these were not run:
   - live Meta API calls (`te models`, `te api-smoke`); all client tests use
@@ -622,7 +631,8 @@ Adds backend/cli_playground.py (te playground locally or as the public copy, te 
     every package with `AttributeError: install_layout`. The `te` entry point was checked
     instead by calling `backend.cli:main` from each stage's `[project.scripts]`.
   - the GitHub Actions workflow itself; the same `ruff check .` and `pytest` were run in
-    every folder (GitHub ran it on the branch root after each push).
+    every folder (GitHub ran it on the branch root after each push, and on each stage's
+    commit to `main`, v1 to v92, where it passed every time).
   - `te serve` on a real network: its phone address and log setup were tested with
     uvicorn's run replaced.
   - training on Modal (M2): the Modal app was read by its tests, not run, and `te train`
@@ -630,9 +640,10 @@ Adds backend/cli_playground.py (te playground locally or as the public copy, te 
     are unchecked.
   - the student endpoint: no trained model exists yet, so the scorer, `te watch` and
     watch mode were tested against fake endpoints.
-  - Python 3.11 and 3.12, and macOS: everything ran on Python 3.13 on Linux. For the
-    review after M1 the code was also compiled with Python 3.11 and 3.12 and type-checked
-    against the 3.11 standard library, but not run there.
+  - Python 3.11 and macOS: the build machine ran everything on Python 3.13 on Linux, and
+    GitHub's CI ran ruff and pytest for v1 to v92 on Python 3.12 on Linux. For the review
+    after M1 the code was also compiled with Python 3.11 and 3.12 and type-checked
+    against the 3.11 standard library, but not run on 3.11.
   - the glasses guide: written from Meta's SDK docs and samples; nobody has followed it
     on real glasses yet.
   - the teach flow against the real API (M1): every test uses a fake Meta API, so the
@@ -644,13 +655,14 @@ Adds backend/cli_playground.py (te playground locally or as the public copy, te 
 
 ## How the folders were checked
 
-A script (kept outside the repository) checked every folder after it was built:
+The scripts in `stagetools/` checked every folder after it was built:
 
 1. v1 has at most 5 files; v2 to v30 each add or change at most 5 files compared with
    the one before (README included); from v31 each changes 200 to 400 lines of code
-   (tests, docs, license texts, binaries and the README left out).
+   (tests, docs, license texts, binaries and the README left out), except v93, which
+   changes docs only and no code.
 2. Every folder contains every file of the folder before it.
-3. v92 matches the repository root byte for byte (local-only things excluded).
+3. v93 matches the repository root byte for byte (local-only things excluded).
 4. Every file a README names, in backticks or as a bare file name, exists in that folder.
 5. No folder holds caches, `.env`, `data/`, build output or secrets.
 6. Inside every folder: `ruff check .` and `python -m pytest` pass, and `backend` imports

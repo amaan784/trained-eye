@@ -42,6 +42,8 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
     te label --clip <clip>           # mark where the condition is true (writes <clip>.labels.json)
     te label --skill washer_done --sample 200   # hand-label generated images (Experiment 2)
     te experiments --skills washer_done [--write-plan]  # every training run with its price
+    te replay --run exp1-mixed       # the run's clips in eval/plan.json: threshold from its
+                                     # session 2 replays, then the test clips into the logs
     te unfiltered / te spark-errors  # Experiment 2: the unfiltered arm, Spark's error rate
     te watch ... --scorer spark      # Experiment 4: Muse Spark on every frame (paid; asks)
     te regress                       # the regression check on general questions
@@ -58,7 +60,8 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
 
 - Model IDs and prices live in backend/config.py. Never use `-contributor` models.
 - Every Meta call goes through backend/meta/client.py (cache + spend ledger + retries).
-- Secrets: .env locally, Modal Secrets ("wandb", "huggingface") in Modal jobs. Never print them.
+- Secrets: .env locally, Modal Secrets ("wandb", "huggingface", "student", "meta") in
+  Modal jobs. Never print them.
 - Local data (footage, cache, ledger, generated images, weights) lives in data/ and is gitignored.
 - Packages under backend/ are namespace packages (no __init__.py files).
 - Ask before any job over $15, before publishing anything, and before anything physical.

@@ -7,10 +7,12 @@ cloud session. HANDOVER.md says what to do next; this file says how to get set u
 
 | What | Used for | Needed | Where it goes |
 |---|---|---|---|
-| Meta Model API key | every Meta call (`te models`, `te api-smoke`, `te teach`) | now | `MODEL_API_KEY` in `.env`. Also send the $150 credit claim form before Nov 4. |
+| Meta Model API key | every Meta call (`te models`, `te api-smoke`, `te teach`) | now | `MODEL_API_KEY` in `.env`, and for `te playground --deploy` (M4) a Modal Secret named `meta` with it. Also send the $150 credit claim form before Nov 4. |
 | Modal account and token | the W&B smoke run now, training from M2 | now | `modal setup` (or `modal token set`) on the Mac |
 | Weights & Biases API key | the smoke run, training logs | now | `WANDB_API_KEY` in `.env`, and a Modal Secret named `wandb` |
-| Hugging Face write token | publishing weights in M4, only after the author approves | later | `HF_TOKEN` in `.env`, and a Modal Secret named `huggingface` |
+| Hugging Face token | the Modal jobs that read the base model from the Hub (training and its preflight from M2, export, serving the base); with write access, publishing in M4, only after the author approves | before the first `te train` | a Modal Secret named `huggingface` with `HF_TOKEN`, and `HF_TOKEN` in `.env` for publishing |
+| Student endpoint key | the trained model's endpoint on Modal (`te serve-student`) and every call to it (`te watch`, `te replay`, `te regress`, watching from the phone) | M2, before serving | a long random value you make up: `STUDENT_API_KEY` in `.env` and in a Modal Secret named `student` |
+| Phone teach token | teaching from the phone (`te serve`'s /teach routes) | before teaching from the phone | a long random value you make up: `SERVER_TOKEN` in `.env`, typed into the app's Connect screen |
 | Apple ID in Xcode | building apps onto the iPhone | now (glasses check) | Xcode, Settings, Accounts |
 | Wearables Developer Center | not needed for Developer Mode builds; maybe for camera approval or release channels | only if the glasses check asks for it | wearables.developer.meta.com |
 
@@ -35,8 +37,10 @@ recommended), ffmpeg, git.
 
 Modal: run `modal setup` (it opens the browser) or `modal token set` with a token from
 the Modal dashboard. Then, in the dashboard under Secrets, create a secret named `wandb`
-with the key `WANDB_API_KEY`. Later, for publishing, a secret named `huggingface` with
-`HF_TOKEN`.
+with the key `WANDB_API_KEY`, and before the first `te train` one named `huggingface`
+with `HF_TOKEN` (the preflight, training, export and base serving jobs attach it). Later,
+one named `student` with `STUDENT_API_KEY` for `te serve-student`, and one named `meta`
+with `MODEL_API_KEY` for `te playground --deploy`.
 
 Check that everything works. On the stage branch, run these at the repository root, not
 inside a v folder:
@@ -101,11 +105,13 @@ Other quirks seen there:
   v1 to vN are the same work in cumulative stages, and `VERSIONS.md` explains them.
   `stagetools/` holds the scripts that build and check the stages. VERSIONS.md, the v
   folders and stagetools/ exist only on this branch.
-- The author copies each stage folder onto `main` and commits it there:
-  `rsync -a ~/te-stages/vN/ ./`, then `git add -A` and `git commit` with the summary and
-  description from VERSIONS.md. Sessions never push to `main`.
-- Commits a session makes on `build-stages` use the author's identity for both author and
-  committer, no signature, and no tool or AI attribution of any kind:
+- Stages go to `main` only when the author asks, one commit per stage, in order, from
+  the stage folder: in a checkout of `main`, `rsync -a ~/te-stages/vN/ ./`, then
+  `git add -A`, `git commit` with the summary and description from VERSIONS.md and the
+  author's identity as below (no attribution trailers), and `git push origin main`.
+  v1 to v93 are on `main` now (check with `git log origin/main`).
+- Commits a session makes, on `build-stages` or on `main`, use the author's identity for
+  both author and committer, no signature, and no tool or AI attribution of any kind:
 
       GIT_AUTHOR_NAME="Amaan Sheikh" \
       GIT_AUTHOR_EMAIL="100550299+amaan784@users.noreply.github.com" \

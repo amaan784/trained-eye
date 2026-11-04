@@ -3,6 +3,7 @@
 Each stage adds whole files in their final form, with their tests. cli.py and a few test
 files arrive in parts (PIECES): until a piece's stage, its final text reads as it did
 before (for cli.py, as in v30, or without the registration of a module not added yet).
+v93 changes only notes; the rev pieces keep them as committed in the stages before it.
 """
 
 from pathlib import Path
@@ -117,6 +118,8 @@ FILES = {
     # the notes, in their final form, with the last stage
     "CLAUDE.md": 92, "HANDOVER.md": 92, "PROGRESS.md": 92,
     "CONTRIBUTIONS.md": 92,
+    # v93: the notes brought up to date after the re-cut, docs only
+    "SETUP.md": 93, "docs/glasses-check.md": 93,
 }
 
 _DOC_HEAD = between(CLI, "The `te` command line. The M0", "\n  te spend") + "\n"
@@ -203,3 +206,7 @@ PIECES = {
         ("test", 73, "test_clips_from_another_spec_or_tampered_ones_are_refused"),
     ],
 }
+# v93 changes these notes; before it they read as committed to main up to v92 (338048a).
+NOTES_BEFORE_V93 = "338048a"
+for _path in ("CLAUDE.md", "HANDOVER.md", "PROGRESS.md", "ios/README.md"):
+    PIECES.setdefault(_path, []).insert(0, ("rev", 93, NOTES_BEFORE_V93))

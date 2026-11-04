@@ -1,8 +1,8 @@
 # Consolidated stages already on main
 
-These stage folders were committed to `main` one at a time. The full re-cut (the peel
-from the root) must rebuild them byte for byte; check with `diff -r` against
-`git show origin/main` before committing the re-cut.
+These stage folders were committed to `main` one at a time, before the rest. The re-cut
+built v41 to v92 forward from v40 with `stagetools/forward.py` and left these folders as
+they were: each equals its commit on `origin/main`.
 
 Each is the stage before it plus these files exactly as at build-stages 3b71962:
 
@@ -29,9 +29,13 @@ Each is the stage before it plus these files exactly as at build-stages 3b71962:
 - v39: backend/training/preflight.py, tests/test_training_preflight.py without
   test_run_preflight_renders_on_modal_and_saves_the_verdict (reads modal_train.py; it comes
   back with that stage) and so without its now unused `import types`.
+- v40: backend/training/modal_train.py, tests/test_modal_train.py without its
+  `cli.TRAIN_VOLUME` check and the `cli` import (the check comes back, reading
+  `cli_train`, with te train in v42), and the whole tests/test_training_preflight.py.
 
 READMEs: v31 to v34 rendered with TE_RENDER_STAGES unset (all of 31 to 35 at the time),
 v35 to v39 with TE_RENDER_STAGES=35-39. The re-cut keeps the READMEs already on main
 (they hold measured timings) and renders only the stages after them.
 
-The teach flow (plan A5) and the training app (B5) follow once cli.py's split is settled.
+The training app (plan B5) followed as v40, and the teach flow (A5) as v41 once cli.py's
+split was settled; `stagetools/CONSOLIDATED_PLAN.md` has every stage from v31 to v92.

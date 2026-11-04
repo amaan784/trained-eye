@@ -146,7 +146,7 @@ Connect the iPhone, pick it as the run destination and press Run. On the first l
    to "Ready".
 4. Watch, Start watching. The first time, the app asks before it opens Meta AI for the
    camera permission (Allow once or Allow always). Watch the capture LED on the glasses: it
-   should stay on while the camera streams (not checked yet, see step 7 of
+   should stay on while the camera streams (not checked yet, see section 4, step 7 of
    `docs/glasses-check.md`), and the app never touches it.
 
 A single tap on the glasses' touchpad pauses the stream; tap again to resume. Folding the
@@ -277,8 +277,8 @@ glasses, and each needs one check on the glasses (and in the simulator where it 
   `App/AppModel.swift`): during a capture with the glasses, the Teach screen's frame size
   should read 504x896 (less if the SDK lowers it for bandwidth), and the Watch screen's
   360x640 when watching again afterwards. Compare a skill taught at medium with one at low
-  before keeping medium: AGENTS.md says lower settings give better quality per frame over
-  Bluetooth.
+  before keeping medium: the DAT repository's AGENTS.md says lower settings give better
+  quality per frame over Bluetooth.
 - **Skills status** (`Models/Protocol.swift`, `UI/SkillsView.swift`): while `te train` runs,
   the Skills screen should say "Training on Modal" with the run's name; after it, "Trained";
   after `te serve-student` and `te calibrate`, "Ready, threshold" and the number. A backend
@@ -296,6 +296,6 @@ Unverified, because nothing was compiled or run:
 - The two calls no sample makes: the `AVAudioEngineConfigurationChange` observer in
   `Audio/RequestRecorder.swift` and `URLSessionWebSocketTask.sendPing` in
   `Network/WatchSocket.swift`.
-- How the capture LED behaves (step 7 of `docs/glasses-check.md` records it).
+- How the capture LED behaves (section 4, step 7 of `docs/glasses-check.md` records it).
 - That Meta Adventurer works as DAT's "Meta Glasses" model; the mock pairs `.metaGlasses`.
 - That Info.plist merging (the file plus Xcode's generated keys) gives no duplicate keys.

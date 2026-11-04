@@ -1,7 +1,9 @@
 # Consolidated stages v31 to v92 (as built)
 
 The 75 planned stages v31 to v105, plus the code completed since (Nov 2 and 3), became
-**62 stages, v31 to v92**. Stages v1 to v30 are unchanged, as committed to `main`.
+**62 stages, v31 to v92**. Stages v1 to v30 are unchanged, as committed to `main`. v93
+followed with docs only and no code, so by the author's choice it is outside the line
+rule below. Every stage, v1 to v93, is on `main`, one commit per stage.
 
 ## Rules
 
@@ -20,19 +22,21 @@ The 75 planned stages v31 to v105, plus the code completed since (Nov 2 and 3), 
   registration and docstring lines with the stage that adds that module, and its
   `te serve` changes with the server (v45); and a few tests arrive with the stage whose
   module they need (each stage's README says which). `stagetools/specs/forward_v41.py`
-  lists every such piece.
-- The docs (HANDOVER, PROGRESS, CLAUDE.md, CONTRIBUTIONS.md) arrive in their final form
-  in the last stage; `ios/README.md` and `docs/recording-protocol.md` with the code they
-  describe.
+  lists every such piece from v41 on, and `stagetools/specs/pushed_main.md` the ones in
+  v31 to v40.
+- The docs (HANDOVER, PROGRESS, CLAUDE.md, CONTRIBUTIONS.md) are written for the finished
+  code in v92, the last stage that changes code, and v93 (docs only) corrects the ones
+  that went out of date; `ios/README.md` and `docs/recording-protocol.md` arrive with
+  the code they describe.
 
 ## How they were built
 
 v31 to v40 were built forward from v30 by hand and committed to `main` first
 (`stagetools/specs/pushed_main.md` lists what each holds). v41 to v92 were built forward
 from v40 by `stagetools/forward.py` with `stagetools/specs/forward_v41.py`, which also
-checks that its pieces give v40 back and that v92 equals the repository root. The
-README and commit texts (`stagetools/specs/stages_c.py`) were written from each
-stage's diff and then checked against the code.
+checks that its pieces give v40 back and that the last stage equals the repository
+root. The README and commit texts (`stagetools/specs/stages_c.py`) were written from
+each stage's diff and then checked against the code.
 
 Changes from the proposal: one stage fewer (63 became 62) after the split of the large
 files; the policy check comes before the Meta client, because image edits use one of
@@ -47,13 +51,13 @@ split.
 | v31 | M2 | Settings and the spend ledger | 274 | backend/config.py, .env.example, backend/meta/ledger.py, .github/workflows/ci.yml | test_config, test_ledger | v32, v37, v39, v44, v47, v48, v54 |
 | v32 | M2 | Policy and the skill compiler | 324 | backend/skills/spec.py, backend/skills/compiler.py | test_skills, test_compiler | v33, v40 |
 | v33 | M2 | Meta calls: client, labels and image edits | 330 | backend/meta/client.py, backend/dataengine/labels.py, backend/dataengine/synth.py | test_client, test_labels, test_synth | v31, v34, v35, v39, v50 |
-| v34 | M2 | Keyframes, SAM boxes and the dataset | 334 | backend/dataengine/keyframes.py, backend/dataengine/sam_text.py, backend/dataengine/roi.py, backend/dataengine/dataset.py | test_keyframes, test_sam_text, test_roi, test_dataset | v34, v35 |
-| v35 | M2 | Watch trigger and the student scorer | 277 | backend/watch/trigger.py, backend/inference/student.py | test_trigger, test_student | v41, v42, v54 |
+| v34 | M2 | Keyframes, SAM boxes and the dataset | 334 | backend/dataengine/keyframes.py, backend/dataengine/sam_text.py, backend/dataengine/roi.py, backend/dataengine/dataset.py | test_keyframes, test_sam_text, test_roi | v34, v35 |
+| v35 | M2 | Watch trigger and the student scorer | 277 | backend/watch/trigger.py, backend/inference/student.py | test_trigger, test_student, test_config | v41, v42, v54 |
 | v36 | M2 | Training run records and the Modal spend ledger | 335 | backend/training/runs.py, backend/training/gpu_ledger.py | test_training_runs, test_gpu_ledger | new |
 | v37 | M2 | The watcher | 303 | backend/watch/watcher.py | test_watcher | v43, v88 |
 | v38 | M2 | Training bundle and the recipe's config | 332 | backend/training/prepare.py, backend/training/axolotl.py | test_training_prep | v45, v54, v89 |
 | v39 | M2 | The processor preflight | 226 | backend/training/preflight.py | test_training_preflight | new |
-| v40 | M2 | The Modal training app | 240 | backend/training/modal_train.py | test_modal_train | v46, v88 |
+| v40 | M2 | The Modal training app | 240 | backend/training/modal_train.py | test_modal_train, test_training_preflight | v46, v88 |
 | v41 | M2 | Teach checks, worst case and crops | 357 | backend/cli.py, backend/teach.py | test_cli, test_teach | v36, v47, v49, v58, v88, v89, v103 |
 | v42 | M2 | te train on Modal | 370 | backend/cli.py, backend/cli_train.py | test_cli_train, test_modal_train | v36, v46, v47, v49, v58, v88, v89, v103 |
 | v43 | M2 | Teach sessions from the phone | 239 | backend/teach_session.py | test_teach_session | v50, v52 |

@@ -6,7 +6,8 @@ Checks:
   1. v1 has at most 5 files; stages v2 to v30 add or change at most 5 files; from v31 on
      (the author's newer rule) a stage changes 200 to 400 lines of code against the one
      before it, counting added plus removed lines. Its tests, docs, license texts and
-     binary files ride along and are not counted, nor is its README.
+     binary files ride along and are not counted, nor is its README. A docs-only stage
+     (DOCS_ONLY, by the author's choice) must change no code at all.
   2. every stage contains every file of the previous stage (no deletes or renames).
   3. the last stage matches the root byte for byte (local-only paths excluded).
   4. every file path a stage README names exists in that stage.
@@ -87,6 +88,7 @@ def same(a: Path, b: Path) -> bool:
 
 LINE_RULE_FROM = 31  # stages before this were built under the 5-file rule
 MIN_LINES, MAX_LINES = 200, 400
+DOCS_ONLY = {93}  # stages that only bring the docs up to date, outside the line rule
 NOT_CODE = re.compile(r"(^tests/|^docs/|\.md$|(^|/)LICENSE[^/]*$|\.txt$)")
 
 
@@ -175,7 +177,11 @@ def main() -> int:
                 count = changed_lines(prev, cur, changed, code_only=True)
                 print(f"{stage.name}: {count} lines of code changed (tests, docs, licenses, "
                       "binaries and the README left out)")
-                if not MIN_LINES <= count <= MAX_LINES:
+                if number in DOCS_ONLY:
+                    if count:
+                        problems.append(f"{stage.name}: a docs-only stage changes {count} "
+                                        "lines of code")
+                elif not MIN_LINES <= count <= MAX_LINES:
                     problems.append(f"{stage.name}: changes {count} lines of code "
                                     f"({MIN_LINES} to {MAX_LINES} allowed)")
             elif len(changed) > 5:

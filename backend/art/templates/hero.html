@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+$css
+body { width: 1100px; height: 560px; overflow: hidden; padding: 28px 32px; display: flex; gap: 28px; }
+.video { position: relative; width: 378px; flex: none; border-radius: 16px; overflow: hidden;
+         background: var(--surface); border: 1px solid var(--rule); }
+.video img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.live { position: absolute; top: 14px; left: 14px; display: flex; align-items: center; gap: 8px;
+        padding: 6px 12px; border-radius: 999px; background: rgba(13,15,18,0.85);
+        font-size: 12px; font-weight: 600; letter-spacing: 0.06em; }
+.spoken { position: absolute; left: 14px; right: 14px; bottom: 14px; padding: 12px 14px;
+          border-radius: var(--corner); background: rgba(13,15,18,0.92);
+          border: 1px solid var(--accent); font-size: 17px; font-weight: 600;
+          display: flex; gap: 10px; align-items: center; }
+.spoken[hidden] { display: none; }
+.side { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.title { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+.sub { margin-top: 6px; font-size: 15px; color: var(--secondary); line-height: 1.4; }
+.timeline { margin-top: auto; background: var(--surface); border: 1px solid var(--rule);
+            border-radius: var(--corner); padding: 10px 6px 4px; }
+.timeline svg { display: block; width: 100%; height: auto; }
+.timeline text { fill: var(--secondary); font-size: 12px; font-family: Inter, sans-serif; }
+.timeline .grid { stroke: rgba(255,255,255,0.08); stroke-width: 1; }
+.timeline .truth { fill: var(--text); opacity: 0.08; }
+.timeline .line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; }
+.timeline .threshold { stroke: var(--text); stroke-width: 1.5; stroke-dasharray: 6 5; opacity: 0.7; }
+.timeline .alert line { stroke: var(--accent); stroke-width: 1.5; }
+.timeline .alert circle, .timeline .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.timeline .alert text, .timeline text.value { fill: var(--text); font-weight: 600; }
+.timeline .playhead { stroke: var(--text); stroke-width: 1; }
+.readout { margin-top: 12px; font-size: 14px; color: var(--secondary); min-height: 20px; }
+.legend { margin-top: 14px; display: flex; gap: 18px; font-size: 13px; color: var(--secondary); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 18px; height: 3px; background: var(--accent); }
+.sw.dash { background: none; border-top: 2px dashed var(--text); opacity: 0.7; }
+.sw.box { height: 12px; background: var(--text); opacity: 0.12; }
+</style></head><body>
+<div class="video"><img src="$frame" alt="">
+  <div class="live"><span class="dot"></span>WATCHING</div>
+  <div class="spoken" id="spoken" $spoken_hidden><span class="dot"></span>$alert</div></div>
+<div class="side">
+  <div class="title">$title</div>
+  <div class="sub">$subtitle</div>
+  <div class="legend"><span><i class="sw"></i>yes-probability</span><span><i class="sw dash"></i>threshold</span><span><i class="sw box"></i>condition true</span></div>
+  <div class="timeline" id="timeline"></div>
+  <div class="readout num" id="readout"></div>
+</div>
+<script src="$timeline_src"></script>
+<script>
+  var clip = $clip_json;
+  var t = $t;
+  var video = { currentTime: t, duration: clip.duration };
+  Timeline.mount(document.getElementById("timeline"), clip, "$skill",
+                 { video: video, readout: document.getElementById("readout") });
+</script>
+</body></html>

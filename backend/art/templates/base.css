@@ -1,0 +1,20 @@
+/* The README art in the app's look (ios/TrainedEye/UI/Theme.swift): dark, flat, one
+   accent, Inter, no gradients. Fonts come from the app's Fonts folder ($font_dir). */
+@font-face { font-family: Inter; font-weight: 400; src: url("$font_dir/Inter-Regular.ttf"); }
+@font-face { font-family: Inter; font-weight: 500; src: url("$font_dir/Inter-Medium.ttf"); }
+@font-face { font-family: Inter; font-weight: 600; src: url("$font_dir/Inter-SemiBold.ttf"); }
+@font-face { font-family: Inter; font-weight: 700; src: url("$font_dir/Inter-Bold.ttf"); }
+:root { --ground: #0d0f12; --surface: #1a1c21; --rule: rgba(255,255,255,0.10);
+        --text: #f0f0f0; --secondary: #999999; --accent: #3ddb99; --on-accent: #0d0f12;
+        --corner: 12px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--ground); color: var(--text);
+             font-family: Inter, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+.label { font-size: 13px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
+         color: var(--secondary); }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px;
+        border-radius: 999px; background: var(--surface); border: 1px solid var(--rule);
+        font-size: 15px; font-weight: 500; color: var(--text); white-space: nowrap; }
+.chip.on { border-color: var(--accent); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }
+.num { font-variant-numeric: tabular-nums; }

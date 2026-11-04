@@ -81,8 +81,17 @@ Muse Spark's label error rate against hand labels (Experiment 2):
     te train --skills fridge_left_open --run exp1-mixed
     te serve                    # then connect the iPhone app
 
-Every paid step prints its price and asks first. [docs/setup.md](docs/setup.md) has the
-details and [SETUP.md](SETUP.md) the accounts and keys.
+Every paid step prints its price and asks first. [docs/developer-guide.md](docs/developer-guide.md)
+walks the whole path, from a fresh Mac to an alert spoken on your glasses;
+[docs/setup.md](docs/setup.md) and [SETUP.md](SETUP.md) have the accounts and keys.
+
+## Try it
+
+- **In a browser:** the playground replays recorded clips with the model's scores, shows
+  how a skill was learned, and lets you teach one live.
+- **On your own glasses:** the iPhone app is a developer build for now. It needs Xcode,
+  your own keys and Modal, a Mac running `te serve`, and Developer Mode in the Meta AI app
+  ([docs/developer-guide.md](docs/developer-guide.md)).
 
 ## Documentation
 

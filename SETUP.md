@@ -29,8 +29,7 @@ recommended), ffmpeg, git.
     brew install python@3.12 ffmpeg
 
     git clone https://github.com/amaan784/trained-eye ~/trained-eye
-    cd ~/trained-eye
-    git checkout build-stages                # the finished code is at the root of this branch
+    cd ~/trained-eye                         # stay on main: it has the newest code
     python3.12 -m venv .venv && source .venv/bin/activate
     pip install -e ".[dev,train]"
     cp .env.example .env                     # fill in MODEL_API_KEY and WANDB_API_KEY
@@ -42,8 +41,8 @@ with `HF_TOKEN` (the preflight, training, export and base serving jobs attach it
 one named `student` with `STUDENT_API_KEY` for `te serve-student`, and one named `meta`
 with `MODEL_API_KEY` for `te playground --deploy`.
 
-Check that everything works. On the stage branch, run these at the repository root, not
-inside a v folder:
+Check that everything works, from the repository root (in each new Terminal window, first
+`cd ~/trained-eye && source .venv/bin/activate`):
 
     pytest                                   # all offline; none calls a paid API
     ruff check .
@@ -101,10 +100,11 @@ Other quirks seen there:
 
 ## 5. Git and the stage branch
 
-- Work happens on the branch `build-stages`. Its root is the finished project; the folders
-  v1 to vN are the same work in cumulative stages, and `VERSIONS.md` explains them.
-  `stagetools/` holds the scripts that build and check the stages. VERSIONS.md, the v
-  folders and stagetools/ exist only on this branch.
+- `main` has the newest code. Since Nov 3 changes go straight to `main` at the author's
+  request (the kitchen skills and their holds came that way), so `main` is ahead of the
+  `build-stages` root. `build-stages` holds the stage folders v1 to v93 (the same work in
+  cumulative stages, explained in `VERSIONS.md`) and `stagetools/`, the scripts that build
+  and check them; those exist only on that branch.
 - Stages go to `main` only when the author asks, one commit per stage, in order, from
   the stage folder: in a checkout of `main`, `rsync -a ~/te-stages/vN/ ./`, then
   `git add -A`, `git commit` with the summary and description from VERSIONS.md and the

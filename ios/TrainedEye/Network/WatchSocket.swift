@@ -48,6 +48,8 @@ final class WatchSocket {
 
   /// Called on the main actor for every alert message.
   @ObservationIgnored var onAlert: ((ServerMessage) -> Void)?
+  /// Each ack's scores, in the order the frames were sent (the Watch screen's strip).
+  @ObservationIgnored var onScores: (([String: Double?]) -> Void)?
 
   @ObservationIgnored private var task: URLSessionWebSocketTask?
   @ObservationIgnored private var runner: Task<Void, Never>?
@@ -176,6 +178,7 @@ final class WatchSocket {
       framesAcked += 1
       awaitingAckSince = nil
       if let scores = message.scores { self.scores = scores }
+      onScores?(message.scores ?? [:])
     case "alert":
       onAlert?(message)
     case "error":

@@ -62,6 +62,9 @@ final class AppModel {
   private(set) var source: FrameSourceKind?
   private(set) var isWatching = false
   private(set) var lastAlert: AlertEvent?
+  /// The last five frames the backend scored, each with its highest score, for the
+  /// Watch screen's film strip (in memory only, like every frame).
+  private(set) var scoredFrames: [ScoredFrame] = []
   /// The newest frame (JPEG, in memory only), for the preview on the Watch and Teach screens.
   private(set) var lastFrame: Data?
   /// The newest frame's size in pixels, as "504x896".
@@ -78,6 +81,9 @@ final class AppModel {
 
   @ObservationIgnored private let throttle: FrameThrottle
   @ObservationIgnored private var recentFrames: [Data] = []
+  /// Frames sent and not yet acked, oldest first: each ack belongs to the oldest.
+  @ObservationIgnored private var unacked: [Data] = []
+  @ObservationIgnored private var watchStarted = Date()
   /// Frames that reached the app from any camera, for the background counts.
   @ObservationIgnored private var framesReceived = 0
   /// The counters when the app went to the background while watching.
@@ -98,6 +104,9 @@ final class AppModel {
     }
     socket.onAlert = { [weak self] message in
       self?.handleAlert(message)
+    }
+    socket.onScores = { [weak self] scores in
+      self?.scored(scores)
     }
     startLifecycleMonitoring()
     // Once at launch: a session waiting on its spend or read-back question would otherwise
@@ -141,6 +150,9 @@ final class AppModel {
     throttle.setInterval(1)
     isWatching = true
     message = nil
+    scoredFrames = []
+    unacked = []
+    watchStarted = Date()
     lastBackgroundStay = nil
     backgroundStays = 0
     socket.connect(to: url, hello: Hello(source: source.rawValue, watch: watchList()))
@@ -151,6 +163,7 @@ final class AppModel {
     backgroundStart = nil
     socket.disconnect()
     recentFrames.removeAll()
+    unacked.removeAll()
     if !teach.isCapturing { stopCamera() }
   }
 
@@ -289,6 +302,19 @@ final class AppModel {
       recentFrames.removeFirst(recentFrames.count - Self.clipFrames)
     }
     socket.send(jpeg: frame.jpeg)
+    unacked.append(frame.jpeg)
+    if unacked.count > 10 { unacked.removeFirst(unacked.count - 10) }
+  }
+
+  /// An ack came back: its frame is the oldest one not yet acked.
+  private func scored(_ scores: [String: Double?]) {
+    guard !unacked.isEmpty else { return }
+    let jpeg = unacked.removeFirst()
+    let best = scores.values.compactMap { $0 }.max()
+    scoredFrames.append(
+      ScoredFrame(id: (scoredFrames.last?.id ?? 0) + 1, jpeg: jpeg,
+                  seconds: Date().timeIntervalSince(watchStarted), score: best))
+    if scoredFrames.count > 5 { scoredFrames.removeFirst(scoredFrames.count - 5) }
   }
 
   private func handleAlert(_ alert: ServerMessage) {
@@ -356,4 +382,12 @@ final class AppModel {
       skillsError = error.localizedDescription
     }
   }
+}
+
+/// A frame the backend scored: its time since watching started and its highest score.
+struct ScoredFrame: Identifiable, Equatable {
+  let id: Int
+  let jpeg: Data
+  let seconds: TimeInterval
+  let score: Double?
 }

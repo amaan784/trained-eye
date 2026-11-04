@@ -45,7 +45,7 @@ private struct ClipRow: View {
       HStack(spacing: Theme.gap) {
         Thumbnail(url: clip.frames.first)
           .frame(width: 56, height: 72)
-          .clipShape(RoundedRectangle(cornerRadius: 8))
+          .clipped()
         VStack(alignment: .leading, spacing: 4) {
           Text(clip.savedAt.formatted(date: .abbreviated, time: .shortened))
             .font(Theme.headline)
@@ -71,7 +71,7 @@ private struct ClipDetail: View {
         ForEach(clip.frames, id: \.self) { url in
           Thumbnail(url: url)
             .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.corner))
+            .clipped()
         }
         Button("Delete this clip") { confirmDelete = true }
           .buttonStyle(SecondaryButtonStyle())
@@ -97,7 +97,7 @@ private struct Thumbnail: View {
     if let url, let image = UIImage(contentsOfFile: url.path(percentEncoded: false)) {
       Image(uiImage: image).resizable().scaledToFit()
     } else {
-      Theme.surface
+      Theme.film
     }
   }
 }

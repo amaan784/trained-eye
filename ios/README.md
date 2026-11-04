@@ -132,10 +132,10 @@ keeps its own) holds:
 - `NSAppTransportSecurity` `NSAllowsLocalNetworking`, for plain `http` and `ws` to the Mac.
 - `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace`, so saved clips show in
   the Files app.
-- `UIAppFonts`: Inter 4.1's four static faces in `TrainedEye/Fonts/` (SIL Open Font
-  License, `Fonts/LICENSE.txt`). The folder is added with the rest of `TrainedEye/`; check
-  that the four `.ttf` files show under the target's Copy Bundle Resources. Without them
-  the app falls back to the system font.
+- `UIAppFonts`: Archivo's four static instances in `TrainedEye/Fonts/` (SIL Open Font
+  License, `Fonts/Archivo-OFL.txt`), cut by `python -m backend.art.fonts`. The folder is
+  added with the rest of `TrainedEye/`; check that the four `.ttf` files show under the
+  target's Copy Bundle Resources. Without them the app falls back to the system font.
 
 `TrainedEye.entitlements` has the keychain group both samples declare. CameraAccess also
 has Hotspot Configuration and Access Wi-Fi Information; BirdSpotter streams without them,
@@ -227,7 +227,7 @@ rooms.
 | 7. Teach client and recorder | `Models/TeachModels.swift`, `Network/TeachClient.swift`, `Audio/RequestRecorder.swift` |
 | 8. Teach flow | `Teach/TeachFlow.swift` |
 | 9. App model | `App/AppModel.swift` |
-| 10. Theme and components | `UI/Theme.swift`, `UI/Components.swift`, `Fonts/` (Inter) |
+| 10. Theme and components | `UI/Theme.swift`, `UI/Components.swift`, `Fonts/` (Archivo) |
 | 11. App entry and project files | `App/TrainedEyeApp.swift`, `../TrainedEye-Info.plist`, `../TrainedEye.entitlements` |
 | 12. Tabs and Connect screen | `UI/RootView.swift`, `UI/ConnectView.swift` |
 | 13. Teach screen | `UI/TeachView.swift` |

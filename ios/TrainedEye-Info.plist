@@ -57,13 +57,13 @@
 	<array>
 		<string>com.meta.ar.wearable</string>
 	</array>
-	<!-- Inter 4.1's static faces in TrainedEye/Fonts/ (SIL Open Font License). -->
+	<!-- Archivo's static instances in TrainedEye/Fonts/ (SIL Open Font License). -->
 	<key>UIAppFonts</key>
 	<array>
-		<string>Inter-Regular.ttf</string>
-		<string>Inter-Medium.ttf</string>
-		<string>Inter-SemiBold.ttf</string>
-		<string>Inter-Bold.ttf</string>
+		<string>Archivo-Display.ttf</string>
+		<string>Archivo-Text.ttf</string>
+		<string>Archivo-TextSemibold.ttf</string>
+		<string>Archivo-Edge.ttf</string>
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Needed to connect to Meta AI Glasses</string>

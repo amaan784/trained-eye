@@ -1,11 +1,12 @@
 //
 // TeachView.swift
 //
-// Teaching a new skill: a name, the request (hold to talk, or type it), a 10 second
-// capture with a countdown, then the Mac's estimate to agree to, the read-back to confirm
-// or correct, and the run's progress lines. A session picked up again after a relaunch
-// shows the same way. The capture card shows the frames' size (504x896 asked from the
-// glasses; the SDK lowers it when Bluetooth bandwidth is short).
+// Teaching a new skill, as numbered steps (a real sequence, DESIGN.md): say what to watch
+// for (hold to talk, or type it), look at it for 10 seconds with the countdown shown as a
+// strip of film filling frame by frame, name it and send it. Then the Mac's two questions as
+// sentences: the cost ("Teach it" or "Cancel") and the read-back ("That's right" or "Fix
+// it"), and the run's progress. A session picked up again after a relaunch shows the same
+// way. The glasses stream 504x896 for the capture; the SDK lowers it when Bluetooth is short.
 //
 
 import SwiftUI
@@ -17,9 +18,9 @@ struct TeachView: View {
   var body: some View {
     Screen(title: "Teach") {
       if flow.phase == .onServer, let status = flow.status {
-        ServerCard(flow: flow, status: status)
+        ServerSteps(flow: flow, status: status)
       } else {
-        composeCards
+        composeSteps
       }
       if let error = flow.errorMessage { Notice(text: error, isError: true) }
       if flow.canStartOver, flow.status != nil || flow.frameCount > 0 || flow.hasRequest {
@@ -29,127 +30,159 @@ struct TeachView: View {
     }
   }
 
-  @ViewBuilder private var composeCards: some View {
-    Card(title: "1. Name") {
-      TextField("burner_left_on", text: $flow.skillName)
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled()
-        .font(Theme.data)
-        .padding(10)
-        .background(Theme.ground, in: RoundedRectangle(cornerRadius: 8))
-      Notice(text: "Lower-case letters, digits and underscores, starting with a letter.")
-    }
-
-    Card(title: "2. What to notice") {
+  @ViewBuilder private var composeSteps: some View {
+    Step(number: 1, title: "Say what to watch for") {
       Text(flow.isRecording ? "Listening. Let go to stop." : "Hold to talk")
         .font(Theme.headline)
-        .foregroundStyle(flow.isRecording ? Theme.ground : Theme.text)
+        .foregroundStyle(flow.isRecording ? Theme.onText : Theme.text)
         .frame(maxWidth: .infinity, minHeight: 64)
-        .background(
-          flow.isRecording ? Theme.accent : Theme.ground,
-          in: RoundedRectangle(cornerRadius: Theme.corner)
-        )
+        .background(flow.isRecording ? Theme.text : Color.clear)
+        .overlay(Rectangle().stroke(Theme.text, lineWidth: 1.5))
         // Pressing stays true until the finger lifts or strays, or after 30 seconds.
         .onLongPressGesture(
           minimumDuration: 30, maximumDistance: 80, perform: {},
           onPressingChanged: { pressing in
             if pressing { flow.pressToTalk() } else { flow.releaseToTalk() }
           })
+        .accessibilityAddTraits(.isButton)
       if let seconds = flow.requestSeconds {
         HStack {
-          Notice(text: String(format: "Recorded %.1f s, %@ mic.", seconds, flow.requestMicrophone))
+          Notice(text: String(format: "Recorded %.1f s on the %@ mic.", seconds,
+                              flow.requestMicrophone))
           Spacer()
-          Button("Clear") { flow.clearRecording() }.font(Theme.label)
+          Button("Clear") { flow.clearRecording() }.buttonStyle(SecondaryButtonStyle())
         }
       } else {
         TextField("Or type it: tell me if I leave the burner on", text: $flow.typedRequest)
-          .padding(10)
-          .background(Theme.ground, in: RoundedRectangle(cornerRadius: 8))
+          .underlinedField()
       }
-      Notice(text: "Objects, displays, signs, text and vehicles only: never a person.")
+      Notice(text: "Objects, displays, signs, text and vehicles only, never a person.")
     }
 
-    Card(title: "3. Show it for 10 seconds") {
+    Step(number: 2, title: "Look at it for 10 seconds") {
       FramePreview(jpeg: app.lastFrame)
-      if let size = app.lastFrameSize, app.lastFrame != nil {
-        InfoRow(label: "Frame size", value: size)
-      }
-      Text(captureText).font(Theme.big).frame(maxWidth: .infinity)
-      Button("Start the capture") { flow.startCapture() }
-        .buttonStyle(PrimaryButtonStyle())
+        .padding(.horizontal, -Theme.gutter)
+      FilmStrip(frames: captureFrames, frameWidth: 28)
+        .padding(.horizontal, -Theme.gutter)
+      Text(captureText).font(Theme.title)
+      Button("Start looking") { flow.startCapture() }
+        .buttonStyle(SecondaryButtonStyle())
         .disabled(flow.phase != .compose || app.isWatching)
-      if app.isWatching {
-        Notice(text: "Stop watching first: one capture at a time.")
-      } else {
-        Notice(text: "Point the camera at the thing, moving a little. Frames stay in memory.")
-      }
+      Notice(
+        text: app.isWatching
+          ? "Stop watching first: one camera job at a time."
+          : "Point the camera at it and move a little. The frames stay on the phone until "
+            + "you send them.")
     }
 
-    Button(flow.phase == .uploading ? "Sending" : "Send to the Mac") { flow.send() }
-      .buttonStyle(PrimaryButtonStyle())
-      .disabled(!flow.canSend)
+    Step(number: 3, title: "Name it and send it") {
+      TextField("burner_left_on", text: $flow.skillName)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .font(Theme.data)
+        .underlinedField()
+      Notice(text: "Lower-case letters, digits and underscores, starting with a letter.")
+      Button(flow.phase == .uploading ? "Sending" : "Send to the Mac") { flow.send() }
+        .buttonStyle(PrimaryButtonStyle())
+        .disabled(!flow.canSend)
+    }
+  }
+
+  /// Ten frames of film, one a second, filling as the capture goes.
+  private var captureFrames: [FilmFrame] {
+    (0..<TeachFlow.captureSeconds).map { i in
+      FilmFrame(id: i, jpeg: i < flow.strip.count ? flow.strip[i] : nil,
+                edge: i < flow.strip.count ? "0:\(String(format: "%02d", i + 1))" : "")
+    }
   }
 
   private var captureText: String {
     switch flow.phase {
-    case .startingCamera: return "Starting"
+    case .startingCamera: return "Starting the camera"
     case .countdown(let n): return "Starting in \(n)"
-    case .capturing(let left): return "\(left) s"
-    default: return flow.frameCount > 0 ? "\(flow.frameCount) frames" : "Ready"
+    case .capturing(let left): return left == 1 ? "1 second left" : "\(left) seconds left"
+    default: return flow.frameCount > 0 ? "\(flow.frameCount) frames, ready to send" : "Ready"
     }
   }
 }
 
-/// The run on the Mac: its two questions, its progress and how it ended.
-private struct ServerCard: View {
-  @Bindable var flow: TeachFlow
-  let status: TeachStatus
+/// A numbered step: the numeral in Marker, Display width; the step a sentence.
+private struct Step<Content: View>: View {
+  let number: Int
+  let title: String
+  @ViewBuilder let content: Content
 
   var body: some View {
-    Card(title: "On the Mac: \(status.skill ?? flow.activeSkill ?? "")") {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(alignment: .firstTextBaseline, spacing: 12) {
+        Text("\(number)").font(Theme.display).foregroundStyle(Theme.marker)
+        Text(title).font(Theme.title)
+      }
+      content
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.top, 10)
+  }
+}
+
+/// The run on the Mac: its two questions as sentences, its progress and how it ended.
+private struct ServerSteps: View {
+  @Bindable var flow: TeachFlow
+  let status: TeachStatus
+  @State private var fixing = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text("Teaching \(status.skill ?? flow.activeSkill ?? "it") on the Mac")
+        .font(Theme.caption).foregroundStyle(Theme.secondary)
       if status.asksSpend {
-        Text(spendText).font(Theme.headline)
+        Text(spendText).font(Theme.title)
         if let warning = status.warning { Notice(text: warning) }
-        HStack {
-          Button("Spend it") { flow.answerSpend(true) }.buttonStyle(PrimaryButtonStyle())
-          Button("No") { flow.answerSpend(false) }.buttonStyle(SecondaryButtonStyle())
-        }
-        .disabled(flow.isAnswering)
+        Button("Teach it") { flow.answerSpend(true) }.buttonStyle(PrimaryButtonStyle())
+          .disabled(flow.isAnswering)
+        Button("Cancel") { flow.answerSpend(false) }.buttonStyle(SecondaryButtonStyle())
+          .disabled(flow.isAnswering)
       }
       if status.asksReadBack, let readBack = status.readBack {
-        Text(readBack).font(Theme.headline)
-        Button("Yes, that's it") { flow.confirmReadBack() }
-          .buttonStyle(PrimaryButtonStyle())
-        TextField("Or say what to change", text: $flow.correction)
-          .padding(10)
-          .background(Theme.ground, in: RoundedRectangle(cornerRadius: 8))
-        HStack {
-          Button("Correct it") { flow.sendCorrection() }.buttonStyle(SecondaryButtonStyle())
-            .disabled(flow.correction.trimmingCharacters(in: .whitespaces).isEmpty)
-          Button("Stop") { flow.rejectReadBack() }.buttonStyle(SecondaryButtonStyle())
+        Text(readBack).font(Theme.title)
+        Button("That's right") { flow.confirmReadBack() }.buttonStyle(PrimaryButtonStyle())
+          .disabled(flow.isAnswering)
+        if fixing {
+          TextField("Say what to change", text: $flow.correction).underlinedField()
+          Button("Send the fix") { flow.sendCorrection() }.buttonStyle(SecondaryButtonStyle())
+            .disabled(flow.isAnswering
+              || flow.correction.trimmingCharacters(in: .whitespaces).isEmpty)
+        } else {
+          Button("Fix it") { fixing = true }.buttonStyle(SecondaryButtonStyle())
         }
-        .disabled(flow.isAnswering)
+        Button("Stop teaching") { flow.rejectReadBack() }.buttonStyle(SecondaryButtonStyle())
+          .disabled(flow.isAnswering)
       }
-      InfoRow(label: "State", value: status.state.rawValue.replacingOccurrences(of: "_", with: " "))
+      Text(stateText).font(Theme.headline)
       ForEach(Array(status.lines.suffix(8).enumerated()), id: \.offset) { _, line in
         Text(line).font(Theme.caption).foregroundStyle(Theme.secondary)
       }
       if let stopped = status.stopped { Notice(text: "Stopped: \(stopped)") }
       if let error = status.error { Notice(text: error, isError: true) }
       if status.state == .done, let summary = status.summary {
-        InfoRow(label: "Examples", value: "\(summary.examples ?? 0)")
-        InfoRow(label: "Yes and no", value: "\(summary.yes ?? 0) and \(summary.no ?? 0)")
-        Notice(text: "Next, on the Mac: te train, then te calibrate.")
+        Text("It made \(summary.examples ?? 0) examples, \(summary.yes ?? 0) yes and "
+          + "\(summary.no ?? 0) no. Next, on the Mac: te train, then te calibrate.")
       }
       if let spent = status.spentUSD {
-        InfoRow(label: "Spent", value: String(format: "$%.2f", spent))
+        Notice(text: String(format: "It spent $%.2f on Meta API calls.", spent))
       }
     }
+    .padding(.top, 6)
+  }
+
+  private var stateText: String {
+    let words = status.state.rawValue.replacingOccurrences(of: "_", with: " ")
+    return words.prefix(1).uppercased() + words.dropFirst()
   }
 
   private var spendText: String {
     let total = status.estimateTotal.map { String(format: "$%.2f", $0) } ?? "an unknown amount"
-    let most = status.estimateAtMost.map { String(format: " (at most $%.2f)", $0) } ?? ""
-    return "This skill costs about \(total)\(most) in Meta API calls. Spend it?"
+    let most = status.estimateAtMost.map { String(format: ", at most $%.2f", $0) } ?? ""
+    return "This costs about \(total)\(most). Teach it?"
   }
 }

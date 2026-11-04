@@ -24,15 +24,13 @@ struct ConnectView: View {
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled()
           .font(Theme.data)
-          .padding(10)
-          .background(Theme.ground, in: RoundedRectangle(cornerRadius: 8))
+          .underlinedField()
         Notice(text: settings.addressKind)
         SecureField("Server token (SERVER_TOKEN)", text: $settings.serverToken)
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled()
           .font(Theme.data)
-          .padding(10)
-          .background(Theme.ground, in: RoundedRectangle(cornerRadius: 8))
+          .underlinedField()
         Notice(text: "Teaching needs the SERVER_TOKEN from the Mac's .env. It is kept in the "
           + "iPhone's keychain.")
         Button(isChecking ? "Checking" : "Check the connection") {

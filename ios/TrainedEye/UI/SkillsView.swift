@@ -1,10 +1,9 @@
 //
 // SkillsView.swift
 //
-// The taught skills from GET /skills, each with an on/off switch for watch mode and its
-// status: Training (a te train run on Modal is going), Trained (a run finished), Ready
-// (served by te serve-student and calibrated), else how far the teach flow got. Changing
-// a switch while watching says hello again.
+// The taught skills from GET /skills, as rows rather than cards (DESIGN.md): the skill as
+// a sentence, its state in plain words, and a switch for watching. Changing a switch while
+// watching says hello again.
 //
 
 import SwiftUI
@@ -17,15 +16,16 @@ struct SkillsView: View {
       if let error = app.skillsError {
         Notice(text: error, isError: true)
       } else if app.skills.isEmpty {
-        Notice(text: "No taught skills yet. Teach one, or check the backend address.")
+        Notice(text: "No skills yet. Teach one, or check the Mac's address in Connect.")
       }
-      ForEach(app.skills) { skill in
-        SkillRow(app: app, skill: skill)
+      VStack(spacing: 0) {
+        ForEach(app.skills) { skill in
+          SkillRow(app: app, skill: skill)
+        }
       }
       Notice(
-        text: "Switched-on skills are scored while watching. That needs the trained model's "
-          + "endpoint set on the Mac (TE_STUDENT_URL). Ready means the model te serve-student "
-          + "deployed knows the skill and te calibrate set its threshold.")
+        text: "Switched-on skills are watched for. A skill is ready once its model is "
+          + "trained, served from the Mac (te serve-student) and calibrated (te calibrate).")
       Button("Refresh") { Task { await app.refreshSkills() } }
         .buttonStyle(SecondaryButtonStyle())
     }
@@ -39,28 +39,47 @@ private struct SkillRow: View {
   let skill: SkillInfo
 
   var body: some View {
-    Card {
+    VStack(spacing: 0) {
+      Rectangle().fill(Theme.rule).frame(height: 1)
       Toggle(isOn: isOn) {
         VStack(alignment: .leading, spacing: 4) {
-          Text(skill.name).font(Theme.headline)
-          if let alert = skill.alert {
-            Text("Says: \(alert)").font(Theme.caption).foregroundStyle(Theme.secondary)
-          }
-          Text(skill.statusText)
-            .font(Theme.caption)
-            .foregroundStyle(skill.isReady ? Theme.accent : Theme.secondary)
-          if let time = skill.trainingTimeText {
-            Text(time).font(Theme.caption).foregroundStyle(Theme.secondary)
-          }
+          Text(sentence).font(Theme.headline)
+          Text(state).font(Theme.caption).foregroundStyle(Theme.secondary)
         }
       }
-      if let hold = skill.holdSeconds, hold > 0 {
-        InfoRow(label: "Waits before alerting", value: "\(hold) s")
-      }
-      if let cooldown = skill.cooldownSeconds, cooldown > 0 {
-        InfoRow(label: "Quiet after an alert", value: "\(max(1, cooldown / 60)) min")
-      }
+      .tint(Theme.text)
+      .padding(.vertical, 14)
     }
+    .accessibilityElement(children: .combine)
+  }
+
+  /// The skill as the user would say it: its name in words, and what it says.
+  private var sentence: String {
+    let words = skill.name.replacingOccurrences(of: "_", with: " ")
+    return words.prefix(1).uppercased() + words.dropFirst()
+  }
+
+  /// Its state in plain words.
+  private var state: String {
+    var parts: [String] = []
+    if let training = skill.training, training.state == .running {
+      parts.append(training.started.map { "Training, started \(TrainingRun.display($0))" }
+        ?? "Training")
+    } else if skill.isReady {
+      parts.append("Trained")
+    } else if skill.served == true {
+      parts.append("Trained; calibrate it on the Mac before watching")
+    } else if let training = skill.training, training.state == .done {
+      parts.append("Trained; serve and calibrate it on the Mac before watching")
+    } else if let training = skill.training, training.state == .failed {
+      parts.append("Training failed; see te train on the Mac")
+    } else if skill.dataset {
+      parts.append("Taught; train it on the Mac")
+    } else {
+      parts.append("Taught; its examples are not built yet")
+    }
+    if let hold = skill.holdSeconds, hold > 0 { parts.append("speaks after \(hold) s") }
+    return parts.joined(separator: ", ")
   }
 
   private var isOn: Binding<Bool> {

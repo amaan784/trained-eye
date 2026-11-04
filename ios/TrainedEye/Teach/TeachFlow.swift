@@ -40,6 +40,8 @@ final class TeachFlow {
   /// route changed part way ("glasses, then iPhone").
   private(set) var requestMicrophone = "iPhone"
   private(set) var frameCount = 0
+  /// About one captured frame a second, for the strip that fills during the capture.
+  private(set) var strip: [Data] = []
   private(set) var activeSkill: String?
   private(set) var status: TeachStatus?
   private(set) var isAnswering = false
@@ -130,6 +132,7 @@ final class TeachFlow {
       }
       frames = []
       frameCount = 0
+      strip = []
       for left in stride(from: Self.captureSeconds, through: 1, by: -1) {
         phase = .capturing(secondsLeft: left)
         try? await Task.sleep(for: .seconds(1))
@@ -145,6 +148,8 @@ final class TeachFlow {
     guard isCapturing else { return }
     frames.append(frame)
     frameCount = frames.count
+    let perSecond = Int((1 / Self.captureInterval).rounded())
+    if frameCount % perSecond == 1, strip.count < Self.captureSeconds { strip.append(frame.jpeg) }
   }
 
   // MARK: - On the Mac
@@ -186,6 +191,7 @@ final class TeachFlow {
         status = try await backend.startTeach(
           skill: skill, audio: audio, request: text, frames: jpegs)
         frames = []  // the Mac has them now
+        strip = []
         frameCount = 0
         requestAudio = nil
         activeSkill = skill
@@ -219,6 +225,7 @@ final class TeachFlow {
     activeSkill = nil
     frames = []
     frameCount = 0
+    strip = []
     clearRecording()
     typedRequest = ""
     correction = ""

@@ -54,9 +54,8 @@ repository is copied here, and Meta's `meta-sam-parser` package is not used.
 ## Inter
 
 github.com/rsms/inter, release 4.1, under the SIL Open Font License 1.1, which allows
-bundling with software. The four static faces (Regular, Medium, SemiBold, Bold) are in
-`ios/TrainedEye/Fonts/`, and the variable web font in `backend/labeltool/static/fonts/`,
-each with the license as `LICENSE.txt`.
+bundling with software. The variable web font is in `backend/labeltool/static/fonts/`
+with the license as `LICENSE.txt`; the app and the playground use Archivo.
 
 ## Archivo
 

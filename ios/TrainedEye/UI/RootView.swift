@@ -57,7 +57,8 @@ struct RootView: View {
   }
 }
 
-/// The always-visible indicator. Tapping it opens the Watch screen.
+/// The always-visible indicator: a Film band with a Marker dot and the words "Camera
+/// on". Tapping it opens the Watch screen.
 private struct CameraOnBar: View {
   let app: AppModel
   let open: () -> Void
@@ -66,18 +67,16 @@ private struct CameraOnBar: View {
     Button(action: open) {
       HStack(spacing: 8) {
         StatusDot(on: !app.isGlassesInterrupted)
-        Text(text).font(Theme.label)
+        Text(text).font(Theme.label).foregroundStyle(Theme.edge)
         Spacer()
         if app.isWatching {
-          Text(app.socket.status.label).font(Theme.caption).foregroundStyle(Theme.secondary)
+          Text(app.socket.status.label).font(Theme.edgePrint).tracking(1.3)
+            .foregroundStyle(Theme.edge)
         }
       }
       .padding(.horizontal, Theme.gutter)
-      .padding(.vertical, 8)
-      .background(Theme.surface)
-      .overlay(alignment: .bottom) {
-        Rectangle().fill(Theme.accent).frame(height: 1)
-      }
+      .padding(.vertical, 9)
+      .background(Theme.film)
     }
     .buttonStyle(.plain)
     .accessibilityLabel(text)
@@ -90,6 +89,6 @@ private struct CameraOnBar: View {
         : "Glasses folded or out of reach: the camera comes back with them"
     }
     let camera = app.source?.label ?? "camera"
-    return app.isWatching ? "Watching with the \(camera)" : "Camera on: the \(camera)"
+    return "Camera on: the \(camera)"
   }
 }

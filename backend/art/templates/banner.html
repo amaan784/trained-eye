@@ -1,38 +1,30 @@
 <!doctype html><html><head><meta charset="utf-8"><style>
 $css
-body { width: 1280px; height: 640px; overflow: hidden; display: flex; }
-.left { flex: 1; padding: 64px 0 56px 72px; display: flex; flex-direction: column; }
-h1 { font-size: 76px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
-.tag { margin-top: 18px; font-size: 30px; font-weight: 500; color: var(--secondary);
-       letter-spacing: -0.01em; }
-.result { margin-top: auto; margin-bottom: 34px; padding-left: 18px;
-          border-left: 4px solid var(--accent); max-width: 560px; }
-.result .big { font-size: 34px; font-weight: 600; letter-spacing: -0.01em; }
-.result .small { margin-top: 8px; font-size: 16px; line-height: 1.45; color: var(--secondary); }
-.chips { display: flex; flex-wrap: wrap; gap: 10px; max-width: 760px; }
-.right { width: 470px; padding: 48px 64px 48px 0; display: flex; align-items: center; }
-.shot { position: relative; width: 100%; height: 100%; border-radius: 20px; overflow: hidden;
-        background: var(--surface); border: 1px solid var(--rule); }
-.shot img { width: 100%; height: 100%; object-fit: cover; object-position: $focus; display: block; }
-.alert { position: absolute; left: 16px; right: 16px; bottom: 16px; display: flex;
-         align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--corner);
-         background: rgba(13,15,18,0.92); border: 1px solid var(--accent);
-         font-size: 20px; font-weight: 600; }
-.alert .small { display: block; font-size: 12px; font-weight: 500; color: var(--secondary);
-                letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 3px; }
-.live { position: absolute; top: 16px; left: 16px; display: flex; align-items: center; gap: 8px;
-        padding: 6px 12px; border-radius: 999px; background: rgba(13,15,18,0.85);
-        font-size: 13px; font-weight: 600; letter-spacing: 0.06em; }
+body { width: 1280px; height: 640px; }
+.title { position: absolute; left: 64px; top: 54px; font-size: 92px; line-height: 0.92;
+         letter-spacing: -0.025em; }
+.promise { position: absolute; left: 66px; top: 158px; font-size: 30px; letter-spacing: -0.005em; }
+.strip .edge { font-size: 11.5px; padding-left: 4px; }
+.strip .hole { width: 12px; height: 9px; border-radius: 2px; opacity: 0.92; }
+.strip .holes.top { top: 6px; }
+.strip .holes.bottom { bottom: 15px; }
+.note { position: absolute; left: ${note_left}px; top: ${note_top}px; width: 340px; }
+.note q { display: block; font-size: 32px; font-weight: 650; font-stretch: 112%;
+          letter-spacing: -0.01em; quotes: "\201C" "\201D"; }
+.note span { display: block; margin-top: 6px; font-size: 15px; line-height: 1.4;
+             color: var(--graphite); }
+.result { position: absolute; left: 64px; top: 548px; width: 620px; }
+.result b { display: block; font-size: 21px; font-weight: 650; }
+.result span { display: block; margin-top: 6px; font-size: 15.5px; line-height: 1.45;
+               color: var(--graphite); }
+.credits { position: absolute; right: 64px; top: 552px; width: 430px; text-align: right;
+           font-size: 14.5px; line-height: 1.45; color: var(--graphite); }
 </style></head><body>
-<div class="left">
-  <h1>Trained Eye</h1>
-  <div class="tag">Teach your glasses to notice anything.</div>
-  <div class="result"><div class="big num">$headline</div><div class="small num">$detail</div></div>
-  <div class="chips">$chips</div>
-</div>
-<div class="right"><div class="shot">
-  <img src="$frame" alt="">
-  <div class="live"><span class="dot"></span>WATCHING</div>
-  <div class="alert"><span class="dot"></span><div><span class="small">Spoken on the glasses</span>$alert</div></div>
-</div></div>
+<div class="title display">Trained Eye</div>
+<div class="promise">Teach your glasses to notice anything.</div>
+$strip
+$ring
+<div class="note"><q>$alert</q><span>$when</span></div>
+<div class="result"><b>$headline</b><span>$detail</span></div>
+<div class="credits">$credits</div>
 </body></html>

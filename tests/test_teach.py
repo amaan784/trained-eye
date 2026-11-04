@@ -576,3 +576,20 @@ def test_a_box_over_the_whole_frame_adds_no_crop(tmp_path):
     report, _ = teach(tmp_path, client_for(tmp_path, FakeMeta(sam=whole)))
     assert report["roi_frames_with_box"] > 0 and report["roi_frames_without_box"] == 0
     assert report["crop_examples"] == 0  # the same picture as its keyframe
+
+
+def test_keyframe_times_are_written_beside_the_keyframes_for_the_readme_art(tmp_path):
+    from backend.dataengine.keyframes import Frame
+    from backend.teach import save_keyframes
+
+    def image(shade):
+        buf = io.BytesIO()
+        Image.new("RGB", (8, 8), (shade, 0, 0)).save(buf, format="JPEG")
+        return buf.getvalue()
+
+    frames = [Frame(0, 5.6667, image(10), np.zeros((2, 2))),
+              Frame(3, 6.0, image(200), np.zeros((2, 2)))]
+    names = list(save_keyframes(tmp_path / "skill" / "keyframes", frames))
+    written = json.loads((tmp_path / "skill" / "keyframes.json").read_text())
+    assert written == {"keyframes": [{"name": names[0], "t_s": 5.667},
+                                     {"name": names[1], "t_s": 6.0}]}

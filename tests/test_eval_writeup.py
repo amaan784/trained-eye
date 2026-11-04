@@ -156,7 +156,7 @@ def test_experiment_4_draws_one_point_per_judge(tmp_path):
     root = ET.fromstring(svg)
     dots = [c.get("class") for c in root.iter("{http://www.w3.org/2000/svg}circle")
             if "ring" in (c.get("class") or "")]
-    assert dots == ["acc ring", "neu ring"]  # fine-tuned highlighted; spark has no numbers
+    assert dots == ["mark ring", "neu ring"]  # fine-tuned highlighted; spark has no numbers
     assert "Accuracy as frame F1, pooled over the skills" in svg
     assert "not plotted, no numbers yet: spark" in svg
     four = section(render({**rows, "charts": charts}), "Experiment 4")

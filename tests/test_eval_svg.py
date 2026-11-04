@@ -25,10 +25,11 @@ def test_escaping_keeps_markup_out_and_drops_what_xml_cannot_hold():
 def test_one_style_light_by_default_and_dark_under_the_media_query():
     light, _, dark = STYLE.partition("@media (prefers-color-scheme: dark){")
     assert dark.endswith("}") and "<" not in STYLE and "&" not in STYLE
-    for key in ("bg", "t1", "acc"):
+    for key in ("bg", "t1", "acc", "mark"):
         assert f".{key}{{fill:{LIGHT[key]}}}" in light
         assert f".{key}{{fill:{DARK[key]}}}" in dark
-    assert LIGHT["acc"] != DARK["acc"] and ".ring{stroke:#1a1a19}" in dark
+    assert LIGHT["acc"] != DARK["acc"] and ".ring{stroke:#000000}" in dark
+    assert LIGHT["bg"] == "#F4F5F2" and LIGHT["mark"] == DARK["mark"] == "#D1332B"
 
 
 def test_ticks_money_and_marks():

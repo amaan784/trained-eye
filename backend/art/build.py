@@ -1,20 +1,25 @@
-"""The README art, rendered from HTML with headless Chrome in the app's look and filled
-only from real run outputs:
+"""The README art, rendered from HTML with headless Chrome in the contact-sheet design
+(DESIGN.md: real frames on black film, edge print, one grease-pencil ring) and filled only
+from real run outputs:
 
-    python -m backend.art.build                       # every image whose facts exist
-    python -m backend.art.build --only strip,cards    # some of them
+    python -m backend.art.build                       # every part whose facts exist
+    python -m backend.art.build --only strip,models   # some of them
+    python -m backend.art.build --only banner --replay-clip <te playground-clip name>
 
-banner.png      the name, the promise, a real frame with the spoken alert, the headline
-                result from te eval (eval/results.json, written with results.md) and a
-                chip per Meta model the runs used
+banner.png      the name, the promise, a film strip of a real replay of the author's own
+                footage, edge-printed with each frame's time and score, the ring on the
+                frame where the alert fired, the spoken line, one result sentence from te
+                eval (eval/results.json, written with results.md) and the models it uses
+strip.png       "How it learned": 12 teaching frames as a two-row contact sheet with SAM's
+                boxes (roi.json), and the four steps with the teach run's numbers
+models          the README's table of Meta models, each with its job and what it did in
+                this run, written between the README's "art: models" markers
 hero.gif/.mp4   the playground's live timeline replaying a real clip until the alert fires
                 (a te playground-clip folder: its video is already blurred)
-strip.png       how a skill is built: the teaching frame with SAM's box, then the counts
-cards.png       one card per Meta model the runs used, fine-tuned Glimmer highlighted
 
-An image whose numbers or pictures do not exist yet is skipped with the reason, never
-drawn with a placeholder. Every real frame goes through te blur's face blurring first.
-Generated images are never drawn: the training wall belongs in the video only.
+A part whose numbers or pictures do not exist yet is skipped with the reason, never drawn
+with a placeholder. Every teaching frame goes through te blur's face blurring first, and
+replays use te blur's video. Generated images and EPIC-KITCHENS frames are never drawn.
 """
 
 from __future__ import annotations
@@ -29,14 +34,20 @@ import tempfile
 from pathlib import Path
 
 from backend.art import facts as F
+from backend.art import film
 from backend.art.render import RenderError, fill, gif, mp4, screenshot
 from backend.config import PROJECT_ROOT, load_settings
 
-FONT_DIR = PROJECT_ROOT / "ios" / "TrainedEye" / "Fonts"
+FONT_DIR = PROJECT_ROOT / "backend" / "playground" / "static" / "fonts"
 TIMELINE_JS = PROJECT_ROOT / "backend" / "playground" / "static" / "timeline.js"
-ALERT = "The fridge is open."
-PARTS = ("banner", "strip", "cards", "hero")
+README = PROJECT_ROOT / "README.md"
+PARTS = ("banner", "strip", "models", "hero")
 HERO_SECONDS, HERO_FPS, HERO_MAX_BYTES = 10.0, 10, 8_000_000
+MODELS_START = ("<!-- art: models start (written by python -m backend.art.build; edits here "
+                "are lost) -->")
+MODELS_END = "<!-- art: models end -->"
+SHEET = 12  # teaching frames on the strip, in two rows
+BANNER_BEFORE, BANNER_AFTER = 4, 3  # replay frames either side of the alert frame
 
 
 def css() -> str:
@@ -49,65 +60,155 @@ def css() -> str:
 F_TEMPLATES = Path(__file__).with_name("templates")
 
 
-def blurred_copy(src: Path, dst: Path) -> Path:
-    """`src` with every face te blur finds blurred (and its metadata dropped)."""
+def blurred_copy(src: Path, dst: Path) -> tuple[Path, int]:
+    """`src` with every face te blur finds blurred (and its metadata dropped), and how many
+    it found."""
     from backend.release.faces import blur_image
 
-    data, _ = blur_image(Path(src).read_bytes())
+    data, found = blur_image(Path(src).read_bytes())
     dst.write_bytes(data)
+    return dst, found
+
+
+def _and(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def pick_teaching(frames: list[F.TeachFrame], work: Path, n: int = SHEET):
+    """`n` frames spread over the teaching clip, blurred. Where te blur's detector marks
+    something on a picked frame, a near neighbour is used when that one is clean."""
+    step = len(frames) / n
+    picked, used = [], set()
+    for k in range(min(n, len(frames))):
+        i = int(k * step)
+        options = [j for j in (i, i + 1, i - 1, i + 2) if 0 <= j < len(frames) and j not in used]
+        best = None
+        for j in options:
+            path, found = blurred_copy(frames[j].path, work / f"teach_{j:02d}.jpg")
+            if best is None:
+                best = (j, path)
+            if not found:
+                best = (j, path)
+                break
+        used.add(best[0])
+        picked.append((frames[best[0]], best[1]))
+    return sorted(picked, key=lambda x: x[0].t_s)
+
+
+def strip(sk: F.SkillFacts, frames: list[F.TeachFrame], out: Path, work: Path) -> Path:
+    picked = pick_teaching(frames, work)
+    times = [f.t_s for f, _ in picked]
+    tenths = len({int(t) for t in times}) < len(times)
+    cells = [film.Cell(path.as_uri(), film.edge_time(f.t_s, tenths), f.size, f.box)
+             for f, path in picked]
+    half = (len(cells) + 1) // 2
+    geo = {"fw": 96, "fh": 128, "gap": 8, "rebate": 26}  # room for the edge print
+    rows = (film.strip(cells[:half], left=64, top=132, sam=True, **geo)
+            + film.strip(cells[half:], left=64, top=132 + 180 + 18, sam=True, **geo))
+    stop = "" if sk.request[-1:] in ".?!" else "."
+    target = html.escape(sk.sam_prompt)
+    said = any(m.job == "transcribe" for m in sk.models)
+    first = ("<b>You say what to watch for:</b>" if said
+             else "<b>You tell it what to watch for:</b>")
+    steps = [
+        (f"{first} <q>{html.escape(sk.request)}</q>{stop} Muse Wonder turns that into a "
+         "skill: what counts, and what doesn't."),
+        (f"<b>You film it for a few seconds.</b> Trained Eye keeps {sk.keyframes} sharp, "
+        f"different frames, and SAM 3.1 finds the {target} in {sk.frames_with_box} of them."),
+        (f"<b>Muse Image makes {sk.made} variations</b> of those frames: the condition and "
+        "near-misses, in other light and angles. Muse Spark checks each one and "
+        f"keeps {sk.kept}."),
+        (f"<b>Glimmer trains on {sk.train_examples} examples</b>, with {sk.val_examples} held "
+        f"back to check it, for {F.epochs_text()} on one {html.escape(sk.gpu)} on Modal."),
+    ]
+    page = fill("strip.html", {
+        "css": css(), "title": f"How it learned this {sk.skill.split('_')[0]}",
+        "strips": rows, "steps": "".join(f"<li>{x}</li>" for x in steps),
+        "note": (f"{len(cells)} of the {len(frames)} frames kept from the teaching clip, "
+                 "faces blurred, with SAM's boxes in red.")})
+    return screenshot(page, out, (1280, 560), folder=work)
+
+
+def banner_times(rp: F.Replay) -> list[tuple[float, float]]:
+    """Scored frames of the replay: a few before the alert, the alert frame, a few after."""
+    points = sorted(rp.points)
+    if not points:
+        raise F.MissingFact(f"replay {rp.clip} has no scored frames")
+    step = max(1.0, rp.alert_t / (BANNER_BEFORE + 1))
+    wanted = ([rp.alert_t - step * k for k in range(BANNER_BEFORE, 0, -1)] + [rp.alert_t]
+              + [rp.alert_t + step * k for k in range(1, BANNER_AFTER + 1)])
+    end = points[-1][0]
+    chosen = []
+    for t in wanted:
+        if t < 0 or t > end:
+            continue
+        near = min(points, key=lambda pt: abs(pt[0] - t))
+        if near not in chosen:
+            chosen.append(near)
+    return chosen
+
+
+def still(video: Path, t: float, dst: Path) -> Path:
+    subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{t:.3f}", "-i",
+                    str(video), "-frames:v", "1", "-q:v", "3", str(dst)], check=True)
+    if not dst.is_file():
+        raise F.MissingFact(f"no frame at {t:.1f} s in {video}")
     return dst
 
 
-def cover(size: tuple[int, int], frame: tuple[int, int], focus: tuple[float, float]):
-    """Scale and offset (CSS px) for a frame covering a `size` panel, centred on `focus`
-    (in frame pixels) as far as the edges allow."""
-    s = max(size[0] / frame[0], size[1] / frame[1])
-    w, h = frame[0] * s, frame[1] * s
-    left = min(0.0, max(size[0] - w, size[0] / 2 - focus[0] * s))
-    top = min(0.0, max(size[1] - h, size[1] / 2 - focus[1] * s))
-    return s, left, top
+def banner(sk: F.SkillFacts, head: F.Headline, rp: F.Replay, out: Path, work: Path) -> Path:
+    from PIL import Image
 
-
-def strip(sk: F.SkillFacts, out: Path, work: Path) -> Path:
-    frame = blurred_copy(sk.frame, work / "strip-frame.jpg")
-    x1, y1, x2, y2 = sk.box
-    panel = (248, 330)
-    s, left, top = cover(panel, sk.frame_size, ((x1 + x2) / 2, (y1 + y2) / 2))
-    box = (f"left:{left + x1 * s:.1f}px;top:{top + y1 * s:.1f}px;"
-           f"width:{(x2 - x1) * s:.1f}px;height:{(y2 - y1) * s:.1f}px")
-    page = fill("strip.html", {
-        "css": css(), "request": html.escape(sk.request), "frame": frame.as_uri(),
-        "frame_style": "", "img_style": (f"width:{sk.frame_size[0] * s:.1f}px;"
-                                          f"left:{left:.1f}px;top:{top:.1f}px"),
-        "box_style": box, "target": html.escape(sk.sam_prompt),
-        "boxed": sk.frames_with_box, "keyframes": sk.keyframes,
-        "made": sk.made, "kept": sk.kept, "rejected": sk.rejected, "examples": sk.examples,
-        "yes": sk.yes, "no": sk.no, "real": sk.real_examples})
-    return screenshot(page, out, (1280, 470), folder=work)
-
-
-def cards(sk: F.SkillFacts, out: Path, work: Path) -> Path:
-    items = []
-    for m in sk.models:
-        badge = '<div class="badge">OPEN WEIGHTS</div>' if m.highlight else ""
-        items.append(f'<div class="card{" on" if m.highlight else ""}">{badge}'
-                     f'<div class="name">{html.escape(m.name)}</div>'
-                     f'<div class="id">{html.escape(m.model_id)}</div>'
-                     f'<div class="what">{html.escape(m.what)}</div>'
-                     f'<div class="count num">{html.escape(m.count)}</div></div>')
-    page = fill("cards.html", {"css": css(), "cards": "".join(items), "height": "420px"})
-    return screenshot(page, out, (1280, 420), folder=work)
-
-
-def banner(sk: F.SkillFacts, head: F.Headline, frame_src: Path, out: Path, work: Path) -> Path:
-    frame = blurred_copy(frame_src, work / "banner-frame.jpg")
-    chips = "".join(f'<span class="chip{" on" if m.highlight else ""}">'
-                    f'{"<span class=dot></span>" if m.highlight else ""}{html.escape(m.name)}'
-                    "</span>" for m in sk.models)
+    shots = banner_times(rp)
+    alert_i = min(range(len(shots)), key=lambda i: abs(shots[i][0] - rp.alert_t))
+    cells = []
+    for i, (t, p) in enumerate(shots):
+        path = still(rp.video, t, work / f"replay_{i:02d}.jpg")
+        with Image.open(path) as im:
+            size = im.size
+        cells.append(film.Cell(path.as_uri(), f"{film.edge_time(t)} {p:.2f}", size))
+    fw, fh, gap, rebate, top, pad = 156, 208, 12, 36, 236, -40
+    start = pad + (BANNER_BEFORE - alert_i) * (fw + gap)  # the alert frame stays in place
+    strip_html = film.strip(cells, left=0, top=top, fw=fw, fh=fh, gap=gap, rebate=rebate,
+                            pad=start, width=1280, hole_every=22)
+    cx = start + alert_i * (fw + gap) + fw / 2
+    height = rebate * 2 + fh
+    cy = top + height / 2
+    lead = (cx + fw * 0.68 * 0.5 + 40, top - 64)
+    ring = film.ring(cx, cy, fw * 0.68, height * 0.55, lead, (1280, 640))
+    data_models = [m.name for m in sk.models if not m.highlight]
+    student = next(m.name for m in sk.models if m.highlight)
     page = fill("banner.html", {
-        "css": css(), "headline": html.escape(head.text), "detail": html.escape(head.detail),
-        "chips": chips, "frame": frame.as_uri(), "focus": "50% 45%", "alert": ALERT})
+        "css": css(), "strip": strip_html, "ring": ring,
+        "note_left": f"{lead[0] + 12:.0f}", "note_top": f"{lead[1] - 40:.0f}",
+        "alert": html.escape(rp.alert_text),
+        "when": f"Spoken on the glasses once this has lasted {rp.hold_s:g} seconds.",
+        "headline": html.escape(head.text), "detail": html.escape(head.detail),
+        "credits": (f"Built on {html.escape(_and(data_models))}, with a fine-tuned "
+                    f"{html.escape(student)} watching.<br>Meta Global AI Developer Hackathon "
+                    "2026.")})
     return screenshot(page, out, (1280, 640), folder=work)
+
+
+def models_markdown(sk: F.SkillFacts) -> str:
+    """The README's table of Meta models: each one's job and what it did in this run."""
+    rows = ["| Model | Its job | In this run |", "|---|---|---|"]
+    for m in sk.models:
+        name = (f"**{m.name}** (`{m.model_id}`), fine-tuned" if m.highlight
+                else f"{m.name} (`{m.model_id}`)")
+        rows.append(f"| {name} | {m.what} | {m.count} |")
+    return "\n".join(["## Meta models, each with a job", "", *rows])
+
+
+def write_models(readme: Path, sk: F.SkillFacts) -> Path:
+    text = readme.read_text(encoding="utf-8")
+    if MODELS_START not in text or MODELS_END not in text:
+        raise F.MissingFact(f"{readme} has no art: models markers")
+    head, rest = text.split(MODELS_START, 1)
+    _, tail = rest.split(MODELS_END, 1)
+    readme.write_text(f"{head}{MODELS_START}\n{models_markdown(sk)}\n{MODELS_END}{tail}",
+                      encoding="utf-8")
+    return readme
 
 
 def hero(data_dir: Path, clip_name: str, skill: str, out_gif: Path, out_mp4: Path,
@@ -159,9 +260,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--skill", default="fridge_left_open")
     p.add_argument("--run", default="exp1-mixed", help="the skill's training run")
     p.add_argument("--results", default=str(PROJECT_ROOT / "eval" / "results.json"))
-    p.add_argument("--banner-frame", help="a real first-person frame for the banner "
-                   "(default: the teaching frame the strip uses)")
+    p.add_argument("--replay-clip", help="the banner's replay: a te playground-clip name "
+                   "of the author's own footage in which the alert fires")
     p.add_argument("--hero-clip", help="a playground clip name (te playground-clip)")
+    p.add_argument("--readme", default=str(README), help="the README the models table goes in")
     p.add_argument("--out", default=str(PROJECT_ROOT / "docs" / "img"))
     p.add_argument("--video-out", default=None, help="where the hero MP4 goes (default: "
                    "data/art/, not committed)")
@@ -184,13 +286,16 @@ def main(argv: list[str] | None = None) -> int:
             work = Path(tmp)
             try:
                 if part == "strip":
-                    made.append(strip(sk, out / "strip.png", work))
-                elif part == "cards":
-                    made.append(cards(sk, out / "cards.png", work))
+                    frames = F.teaching_frames(settings.data_dir, args.skill)
+                    made.append(strip(sk, frames, out / "strip.png", work))
+                elif part == "models":
+                    made.append(write_models(Path(args.readme), sk))
                 elif part == "banner":
+                    if not args.replay_clip:
+                        raise F.MissingFact("no --replay-clip given")
                     head = F.headline(Path(args.results))
-                    made.append(banner(sk, head, Path(args.banner_frame or sk.frame),
-                                       out / "banner.png", work))
+                    rp = F.replay(settings.data_dir, args.replay_clip, args.skill)
+                    made.append(banner(sk, head, rp, out / "banner.png", work))
                 elif part == "hero":
                     if not args.hero_clip:
                         raise F.MissingFact("no --hero-clip given")
@@ -200,8 +305,6 @@ def main(argv: list[str] | None = None) -> int:
                     raise F.MissingFact(f"unknown part {part!r}")
             except F.MissingFact as err:
                 skipped.append(f"{part}: {err}")
-                for stale in (out / f"{part}.png", out / f"{part}.gif"):
-                    stale.unlink(missing_ok=True)  # never leave an older image behind
     for path in made:
         print(f"art: {path}")
     for why in skipped:

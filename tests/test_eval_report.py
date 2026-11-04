@@ -253,7 +253,7 @@ def test_judges_pool_over_their_skills_and_side_results_reach_results_and_wandb(
     assert (judges["base"]["skills"], judges["base"]["of"]) == (["burner_left_on"], 2)
     assert by_name["ft-w"]["threshold"] == {"values": [0.6], "sources": []}
     svg = (tmp_path / "out" / "exp4_cost.svg").read_text()
-    assert svg.count('class="acc ring"') == 1 and svg.count('class="neu ring"') == 2
+    assert svg.count('class="mark ring"') == 1 and svg.count('class="neu ring"') == 2
     assert "base (1 of 2 skills)" in svg
 
     assert results["spark_errors"]["burner_left_on"]["spark"]["errors"] == 19

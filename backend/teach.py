@@ -95,7 +95,8 @@ def keyframe_name(i: int, data: bytes) -> str:
 
 def save_keyframes(kf_dir: Path, frames: list) -> dict[str, bytes]:
     """Write the keyframes as kf_<position>_<hash> files, removing those of an earlier take
-    (only files named that way). Returns {name: bytes}."""
+    (only files named that way), and each one's time in the clip to keyframes.json beside
+    the folder (the README art's edge print). Returns {name: bytes}."""
     kf_dir.mkdir(parents=True, exist_ok=True)
     keyframes = {keyframe_name(i, frame.data): frame.data for i, frame in enumerate(frames)}
     for old in kf_dir.iterdir():
@@ -103,6 +104,11 @@ def save_keyframes(kf_dir: Path, frames: list) -> dict[str, bytes]:
             old.unlink()  # from an earlier take; keyframes are rebuilt from the clip each run
     for name, data in keyframes.items():
         (kf_dir / name).write_bytes(data)
+    times = [{"name": name, "t_s": round(float(t), 3)}
+             for name, t in zip(keyframes, (getattr(f, "t_s", None) for f in frames), strict=True)
+             if t is not None]
+    (kf_dir.parent / "keyframes.json").write_text(
+        json.dumps({"keyframes": times}, indent=1) + "\n", encoding="utf-8")
     return keyframes
 
 

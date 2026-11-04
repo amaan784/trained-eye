@@ -19,7 +19,7 @@ fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells 
 3. **Watch.** The glasses stream to your phone; the fine-tuned model scores a frame a
    second, and once the condition has lasted long enough, the glasses say so.
 
-<p align="center"><img src="docs/img/strip.png" alt="How a skill is built: the teaching frame with SAM's box, then the images made, kept and rejected, and the training examples" width="100%"></p>
+<p align="center"><img src="docs/img/strip.png" alt="How it learned this fridge: twelve teaching frames on film with SAM's boxes, and the four steps of the teach run with its numbers" width="100%"></p>
 
 <!-- te eval: results start (written by te eval --readme; edits here are lost) -->
 ## Results
@@ -58,7 +58,17 @@ Muse Spark's label error rate against hand labels (Experiment 2):
 - fridge_left_open: not measured yet (te spark-errors)
 <!-- te eval: results end -->
 
-<p align="center"><img src="docs/img/cards.png" alt="Meta models, each with a job" width="100%"></p>
+<!-- art: models start (written by python -m backend.art.build; edits here are lost) -->
+## Meta models, each with a job
+
+| Model | Its job | In this run |
+|---|---|---|
+| Muse Wonder (`muse-wonder-1.0`) | Turns the request into a skill: what to watch, what counts, what does not. | 1 skill from 1 sentence |
+| SAM 3.1 (`sam-3.1`) | Finds the target in the teaching frames. | 22 of 24 teaching frames boxed |
+| Muse Image (`muse-image-1.0`) | Makes the variations: the condition, near-misses, other light and angles. | 300 variations made |
+| Muse Spark (`muse-spark-1.3`) | Labels every image and keeps the ones it agrees with. | 324 images labelled, 299 variations kept |
+| **Muse Glimmer 30B** (`meta-models/Muse-Glimmer-30B`), fine-tuned | Fine-tuned, open weights: watches every frame. | 316 training examples, one epoch |
+<!-- art: models end -->
 
 ## Quick start
 

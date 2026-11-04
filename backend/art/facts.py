@@ -1,7 +1,9 @@
 """The numbers and pictures the README art shows, read from real run outputs only: a
-skill's teach outputs (data/skills/<skill>/), its training run (data/train/), and te eval's
-results (eval/results.json, written with results.md). Whatever is missing raises
-MissingFact, so an image is never rendered with a placeholder number.
+skill's teach outputs (data/skills/<skill>/: keyframes.json for each teaching frame's time,
+roi.json for SAM's boxes, label_stats.json), its training run (data/train/), a replay that
+te playground-clip made (its blurred video and frame log), and te eval's results
+(eval/results.json, written with results.md). Whatever is missing raises MissingFact, so an
+image is never rendered with a placeholder number.
 """
 
 from __future__ import annotations
@@ -74,6 +76,9 @@ class SkillFacts:
     box: tuple[float, float, float, float]  # SAM's box on it, in its pixels
     frame_size: tuple[int, int]
     models: list[Model]
+    train_examples: int = 0
+    val_examples: int = 0
+    gpu: str = ""
 
 
 def skill_facts(data_dir: Path, skill: str, run: str) -> SkillFacts:
@@ -106,14 +111,18 @@ def skill_facts(data_dir: Path, skill: str, run: str) -> SkillFacts:
     result = _json(Path(data_dir) / "train" / f"{run}.result.json")
     if result.get("ok") is not True or result.get("smoke"):
         raise MissingFact(f"{run} has no finished training run (data/train/{run}.result.json)")
+    bundle = _json(Path(data_dir) / "train" / run / "manifest.json")
+    if bundle.get("train_examples") is None:
+        raise MissingFact(f"data/train/{run}/manifest.json has no train_examples")
     image_ids = sorted({r.get("model") for r in made if r.get("model")})
     counts = {
         "transcribe": "the spoken request",
         "compiler": "1 skill from 1 sentence",
         "sam": f"{len(boxed)} of {len(rois)} teaching frames boxed",
-        "image": f"{len(made)} images made",
-        "labeler": f"{len(_jsonl(root / 'labels.jsonl'))} images labelled",
-        "student_base": f"{dataset.get('examples', len(index))} examples, one epoch",
+        "image": f"{len(made)} variations made",
+        "labeler": (f"{len(_jsonl(root / 'labels.jsonl'))} images labelled, "
+                    f"{int(stats['kept'])} variations kept"),
+        "student_base": f"{bundle['train_examples']} training examples, {epochs_text()}",
     }
     used = {"compiler", "sam", "labeler", "student_base"}
     if made:
@@ -136,7 +145,58 @@ def skill_facts(data_dir: Path, skill: str, run: str) -> SkillFacts:
         rejected=int(stats["total"]) - int(stats["kept"]), real_examples=real,
         examples=int(dataset.get("examples", len(index))), yes=yes, no=no,
         frame=by_sha[best["keyframe_sha256"]], box=tuple(best["best"]["box"]),
-        frame_size=(int(best["width"]), int(best["height"])), models=models)
+        frame_size=(int(best["width"]), int(best["height"])), models=models,
+        train_examples=int(bundle["train_examples"]),
+        val_examples=int(bundle.get("val_examples") or 0), gpu=training_gpu(data_dir, run))
+
+
+def epochs_text() -> str:
+    from backend.training.axolotl import RECIPE
+
+    n = RECIPE["num_epochs"]
+    return "one epoch" if n == 1 else f"{n} epochs"
+
+
+def training_gpu(data_dir: Path, run: str) -> str:
+    """The GPU of the run's last training job in te train's Modal ledger."""
+    path = Path(data_dir) / "modal_ledger.jsonl"
+    rows = _jsonl(path) if path.is_file() else []
+    gpus = [r.get("gpu") for r in rows if r.get("kind") == "train" and r.get("name") == run]
+    if not gpus or not gpus[-1]:
+        raise MissingFact(f"no training job for {run} in {path}")
+    return str(gpus[-1])
+
+
+@dataclass
+class TeachFrame:
+    path: Path
+    t_s: float  # its time in the teaching clip
+    box: tuple[float, float, float, float] | None  # SAM's box, in its pixels
+    size: tuple[int, int]
+
+
+def teaching_frames(data_dir: Path, skill: str) -> list[TeachFrame]:
+    """The skill's teaching keyframes in clip order, each with its time (keyframes.json,
+    written by te teach) and SAM's box (roi.json)."""
+    from backend.meta.cache import sha256_hex
+
+    root = Path(data_dir) / "skills" / skill
+    listed = _json(root / "keyframes.json").get("keyframes") or []
+    rois = {r["keyframe_sha256"]: r for r in _json(root / "roi.json")}
+    out = []
+    for k in listed:
+        path = root / "keyframes" / k["name"]
+        if not path.is_file() or k.get("t_s") is None:
+            raise MissingFact(f"{path} or its time is missing (keyframes.json)")
+        roi = rois.get(sha256_hex(path.read_bytes()))
+        if roi is None:
+            raise MissingFact(f"{k['name']} has no entry in {root / 'roi.json'}")
+        best = roi.get("best")
+        out.append(TeachFrame(path, float(k["t_s"]), tuple(best["box"]) if best else None,
+                              (int(roi["width"]), int(roi["height"]))))
+    if not out:
+        raise MissingFact(f"no teaching frames in {root / 'keyframes.json'}")
+    return sorted(out, key=lambda f: f.t_s)
 
 
 def _area(box) -> float:
@@ -146,15 +206,18 @@ def _area(box) -> float:
 
 @dataclass
 class Headline:
-    text: str  # e.g. "Frame F1 0.81 on other kitchens"
-    detail: str  # e.g. "fine-tuned Glimmer vs 0.42 base, 0.77 Muse Spark"
+    text: str  # the banner's bold line
+    detail: str  # the sentence under it, with the comparison
     footage: str
 
 
 def headline(results_path: Path) -> Headline:
-    """The banner's result: Experiment 4's three judges pooled (te eval's results.json,
-    "experiment4"): fine-tuned Glimmer's frame F1 and latency, against base Glimmer and
-    Muse Spark judging every frame. MissingFact until all three are scored."""
+    """The banner's result from Experiment 4's three judges pooled (te eval's results.json,
+    "experiment4", the numbers results.md shows): the accuracy when the fine-tuned model is
+    clearly ahead, else its speed, with the frame F1 of all three said plainly. MissingFact
+    until all three are scored."""
+    from backend.eval.readme import CLOSE_F1
+
     results = _json(results_path)
     judges = {j.get("variant"): j for j in results.get("experiment4") or []}
     need = ("finetuned", "base", "spark")
@@ -163,13 +226,50 @@ def headline(results_path: Path) -> Headline:
     m = {v: judges[v].get("metrics") or {} for v in need}
     f1 = {v: m[v].get("f1") for v in need}
     lat = {v: m[v].get("latency_median_s") for v in need}
-    usd = {v: judges[v].get("usd_per_hour") for v in need}
-    if any(x is None for d in (f1, lat, usd) for x in d.values()):
-        raise MissingFact(f"frame F1, latency or dollars per hour missing in {results_path}")
+    if any(x is None for d in (f1, lat) for x in d.values()):
+        raise MissingFact(f"frame F1 or latency missing in {results_path}")
     footage = results.get("footage") or "the test footage"
-    text = f"Frame F1 {f1['finetuned']:.2f} on {footage.split(' (')[0]}, {lat['finetuned']:.1f} s a frame"
-    detail = (f"Fine-tuned Glimmer, against base Glimmer ({f1['base']:.2f}, "
-              f"{lat['base']:.1f} s) and Muse Spark on every frame ({f1['spark']:.2f}, "
-              f"{lat['spark']:.1f} s), at ${usd['finetuned']:.2f} an hour against "
-              f"${usd['spark']:.2f} for Spark.")
-    return Headline(text, detail, footage)
+    where = footage.split(" (")[0]
+    scores = f"frame F1 {f1['finetuned']:.2f}, against {f1['base']:.2f} and {f1['spark']:.2f}"
+    others = max(f1["base"], f1["spark"])
+    if f1["finetuned"] - others > CLOSE_F1:
+        return Headline(f"Spots it more often: frame F1 {f1['finetuned']:.2f}.",
+                        f"Base Glimmer scores {f1['base']:.2f} and Muse Spark "
+                        f"{f1['spark']:.2f} on {where}, and the fine-tuned model answers in "
+                        f"{lat['finetuned']:.1f} s a frame.", footage)
+    how = ("at about the same accuracy" if others - f1["finetuned"] <= CLOSE_F1
+           else "though less accurate")
+    return Headline(f"Fast enough to watch live: {lat['finetuned']:.1f} s a frame.",
+                    f"Base Glimmer takes {lat['base']:.1f} s and Muse Spark "
+                    f"{lat['spark']:.1f} s, {how} on {where} ({scores}).", footage)
+
+
+@dataclass
+class Replay:
+    clip: str
+    video: Path  # te blur's video of the clip
+    points: list[tuple[float, float]]  # (t, the student's probability) per scored frame
+    alert_t: float  # the first alert
+    alert_text: str
+    hold_s: float
+
+
+def replay(data_dir: Path, clip_name: str, skill: str) -> Replay:
+    """A te playground-clip replay of the author's own footage in which the alert fires:
+    its blurred video and its frame log's scores."""
+    from backend.playground import data as pg
+    from backend.skills.spec import SKILL_HOLDS
+
+    clip = pg.clip_timeline(Path(data_dir), clip_name, public=True)  # blurred video only
+    if not clip or skill not in clip["skills"]:
+        raise MissingFact(f"no playground clip {clip_name!r} with a {skill} log "
+                          "(te playground-clip makes one)")
+    sk = clip["skills"][skill]
+    if not sk["alerts"]:
+        raise MissingFact(f"the alert never fires in playground clip {clip_name!r}")
+    if not clip["video"]:
+        raise MissingFact(f"playground clip {clip_name!r} has no blurred video (te blur)")
+    video = pg.clips_root(Path(data_dir)) / clip_name / Path(clip["video"]).name
+    first = sk["alerts"][0]
+    return Replay(clip_name, video, [(float(t), float(p)) for t, p in sk["points"]],
+                  float(first["t"]), str(first["text"]), float(SKILL_HOLDS.get(skill, 0)))

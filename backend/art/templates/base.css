@@ -1,20 +1,25 @@
-/* The README art in the app's look (ios/TrainedEye/UI/Theme.swift): dark, flat, one
-   accent, Inter, no gradients. Fonts come from the app's Fonts folder ($font_dir). */
-@font-face { font-family: Inter; font-weight: 400; src: url("$font_dir/Inter-Regular.ttf"); }
-@font-face { font-family: Inter; font-weight: 500; src: url("$font_dir/Inter-Medium.ttf"); }
-@font-face { font-family: Inter; font-weight: 600; src: url("$font_dir/Inter-SemiBold.ttf"); }
-@font-face { font-family: Inter; font-weight: 700; src: url("$font_dir/Inter-Bold.ttf"); }
-:root { --ground: #0d0f12; --surface: #1a1c21; --rule: rgba(255,255,255,0.10);
-        --text: #f0f0f0; --secondary: #999999; --accent: #3ddb99; --on-accent: #0d0f12;
-        --corner: 12px; }
+/* The contact sheet (DESIGN.md): Paper, Film, Edge, Marker, Ink and Graphite; Archivo in
+   three widths. The font is the playground's variable web font ($font_dir). */
+@font-face { font-family: Archivo; src: url("$font_dir/archivo-latin-wdth-normal.woff2") format("woff2");
+             font-weight: 100 900; font-stretch: 62% 125%; }
+:root { --paper: #F4F5F2; --film: #000000; --edge: #E2DFD3; --marker: #D1332B;
+        --ink: #1D1E20; --graphite: #6E7176; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { background: var(--ground); color: var(--text);
-             font-family: Inter, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
-.label { font-size: 13px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
-         color: var(--secondary); }
-.chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px;
-        border-radius: 999px; background: var(--surface); border: 1px solid var(--rule);
-        font-size: 15px; font-weight: 500; color: var(--text); white-space: nowrap; }
-.chip.on { border-color: var(--accent); }
-.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }
-.num { font-variant-numeric: tabular-nums; }
+html, body { background: var(--paper); color: var(--ink); font-family: Archivo, sans-serif;
+             font-stretch: 100%; font-weight: 400; -webkit-font-smoothing: antialiased; }
+body { position: relative; overflow: hidden; }
+.display { font-weight: 800; font-stretch: 125%; letter-spacing: -0.02em; line-height: 1; }
+.strip { position: absolute; background: var(--film); }
+.holes { position: absolute; left: 0; right: 0; height: 0; }
+.holes.top { top: 5px; }
+.holes.bottom { bottom: 11px; }
+.hole { position: absolute; width: 8px; height: 6px; border-radius: 1.5px;
+        background: var(--paper); opacity: 0.9; }
+.frame { position: absolute; overflow: hidden; }
+.frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sam { position: absolute; border: 1.5px solid var(--marker); }
+.edge { position: absolute; font-size: 9.5px; font-weight: 500; font-stretch: 62%;
+        letter-spacing: 0.12em; color: var(--edge); padding-left: 3px; white-space: nowrap;
+        font-variant-numeric: tabular-nums; }
+.marks { position: absolute; left: 0; top: 0; overflow: visible; }
+.ring { fill: none; stroke: var(--marker); stroke-linecap: round; stroke-linejoin: round; }

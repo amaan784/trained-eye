@@ -26,8 +26,8 @@ def test_every_chart_has_the_light_and_dark_style_and_the_font():
         root = parse(svg)
         style = root.find(f"{NS}style").text
         light, _, dark = style.partition("@media (prefers-color-scheme: dark){")
-        assert ".bg{fill:#fcfcfb}" in light and ".bg{fill:#1a1a19}" in dark
-        assert "font-family:Inter, system-ui" in style
+        assert ".bg{fill:#F4F5F2}" in light and ".bg{fill:#000000}" in dark
+        assert "font-family:Archivo, system-ui" in style
         assert "gradient" not in svg.lower()
         assert root.find(f"{NS}title").text and root.find(f"{NS}rect").get("class") == "bg"
         outside_style = svg.replace(style, "")
@@ -88,7 +88,7 @@ def test_scatter_highlights_the_fine_tuned_point():
     assert "F1 0.86, $10.80 per hour" in labels
     assert "not plotted, no numbers yet: not run" in labels
     rings = [c for c in root.iter(f"{NS}circle") if "ring" in (c.get("class") or "")]
-    assert [c.get("class") for c in rings].count("acc ring") == 1 and len(rings) == 3
+    assert [c.get("class") for c in rings].count("mark ring") == 1 and len(rings) == 3
     ys = [float(t.get("y")) for t in root.iter(f"{NS}text")
           if t.text in ("fine-tuned Glimmer", "base Glimmer")]
     assert abs(ys[0] - ys[1]) >= 32  # close points: their labels do not overlap

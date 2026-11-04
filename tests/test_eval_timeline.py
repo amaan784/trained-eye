@@ -52,7 +52,7 @@ def test_the_timeline_has_the_line_threshold_ranges_and_spoken_alerts():
     tips = [g.find(f"{NS}title").text for g in root.iter(f"{NS}g")]
     assert tips == ["alert at 1:02: Laundry's <done> & dry (Spark: yes)"]
     style = root.find(f"{NS}style").text
-    assert "@media (prefers-color-scheme: dark)" in style and "Inter" in style
+    assert "@media (prefers-color-scheme: dark)" in style and "Archivo" in style
 
 
 def test_student_errors_leave_gaps_and_close_alerts_take_two_label_rows():

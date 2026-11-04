@@ -103,8 +103,23 @@ def test_calibrating_for_frames_picks_the_best_frame_f1():
     truths = [False, False, False, True, True, True, True, False, False, False]
     clip = [Frame(float(i), p, t) for i, (p, t) in enumerate(zip(probs, truths, strict=True))]
     result = calibrate_frames([clip], cooldown_s=60.0, hold_s=30.0)
-    assert result["threshold"] == 0.8 and result["frame_f1"] == 1.0
+    # every threshold above 0.35 (a false frame) up to 0.8 splits them: the middle, 0.575
+    assert result["threshold"] == 0.575 and result["frame_f1"] == 1.0
+    assert (result["tied_above"], result["tied_to"]) == (0.35, 0.8)
     assert (result["frame_tp"], result["frame_fp"], result["frame_fn"]) == (4, 0, 0)
     assert result["events"] == 0  # a 4 s stretch never reaches the 30 s hold
     with pytest.raises(ValueError):
         calibrate_frames([], 60.0)
+
+
+def test_a_confident_model_gets_the_middle_of_its_tied_thresholds_not_1():
+    # Base Glimmer scores nearly every frame 0 or 1; on Nov 4 the top of its tie, 1.000,
+    # turned its test frames scored 0.9999 into noes (recall 0.02).
+    from backend.watch.trigger import calibrate_frames
+
+    probs = [0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0001]
+    truths = [False, False, True, True, True, False, False]
+    clip = [Frame(float(i), p, t) for i, (p, t) in enumerate(zip(probs, truths, strict=True))]
+    result = calibrate_frames([clip], cooldown_s=60.0)
+    assert 0.4 < result["threshold"] < 0.6 and result["frame_f1"] == 1.0
+    assert 0.9999 >= result["threshold"]  # a test frame at 0.9999 says yes

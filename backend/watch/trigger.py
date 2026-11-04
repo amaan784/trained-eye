@@ -188,27 +188,46 @@ OBJECTIVES = ("alerts", "frames")
 
 def calibrate_frames(clips: Sequence[Sequence[Frame]], cooldown_s: float,
                      hold_s: float = 0.0) -> dict:
-    """The threshold with the best frame F1 over the clips (ties: the higher threshold,
-    fewer false yeses), with the same evaluation as calibrate() plus the frame counts.
-    For footage whose events are too few or too short to judge alerts on (a frame says
-    yes when it scores at or over the threshold, as the evaluation counts it). Raises
+    """The threshold with the best frame F1 over the clips, with the same evaluation as
+    calibrate() plus the frame counts. For footage whose events are too few or too short
+    to judge alerts on (a frame says yes when it scores at or over the threshold, as the
+    evaluation counts it). When a stretch of thresholds ties for the best F1 (a confident
+    model scores most frames at 0 or 1), the middle of that stretch is taken: its top
+    edge, 1.000 for base Glimmer on Nov 4, failed test frames scored 0.9999. Raises
     ValueError without frames."""
     frames = [f for c in clips for f in c]
     if not frames:
         raise ValueError("no labelled frames to calibrate on")
     positives = sum(f.truth for f in frames)
-    best = None
-    for threshold in sorted({min(1.0, math.floor(f.p * 1000) / 1000) for f in frames} | {1.0}):
+
+    def counts(threshold: float) -> tuple[float, int, int]:
         tp = sum(f.truth and f.p >= threshold for f in frames)
         fp = sum((not f.truth) and f.p >= threshold for f in frames)
         f1 = 2 * tp / (2 * tp + fp + (positives - tp)) if positives else 0.0
-        if best is None or f1 >= best[0]:
-            best = (f1, threshold, tp, fp)
-    f1, threshold, tp, fp = best
+        return f1, tp, fp
+
+    candidates = sorted({min(1.0, math.floor(f.p * 1000) / 1000) for f in frames} | {1.0})
+    scores = [counts(t)[0] for t in candidates]
+    top = max(scores)
+    # the longest run of neighbouring candidates at the best F1, and the middle of it
+    best_run, run = (0, 0), None
+    for i, score in enumerate(scores):
+        if score >= top - 1e-12:
+            run = (run[0], i) if run else (i, i)
+            if run[1] - run[0] >= best_run[1] - best_run[0] or scores[best_run[0]] < top - 1e-12:
+                best_run = run
+        else:
+            run = None
+    # F1 holds from just above the candidate below the run (0 below the first) to the
+    # run's last candidate: no frame scores in between
+    low = candidates[best_run[0] - 1] if best_run[0] > 0 else 0.0
+    high = candidates[best_run[1]]
+    threshold = round((low + high) / 2, 4)
+    f1, tp, fp = counts(threshold)
     result = evaluate([sorted(c, key=lambda f: f.t) for c in clips if c], threshold,
                       cooldown_s, hold_s)
     return {**result, "frame_f1": round(f1, 4), "frame_tp": tp, "frame_fp": fp,
-            "frame_fn": positives - tp}
+            "frame_fn": positives - tp, "tied_above": low, "tied_to": high}
 
 
 def labelled_frames(rows: Iterable[dict], skill: str,

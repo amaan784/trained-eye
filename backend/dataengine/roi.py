@@ -1,9 +1,9 @@
 """Region of interest: where the skill's target is in the teaching keyframes (SAM 3.1).
 
 Runs SAM 3.1 on each keyframe with the spec's `target.sam_prompt` (one concept per
-request) and keeps the largest confident match per frame. The boxes drive the "outline"
-visual and the crops: te teach adds each keyframe cropped to its best box (`crop_box`, with
-a margin) as one more real example, labelled like the keyframe.
+request) and keeps, per frame, the box around all its confident matches. The boxes drive
+the "outline" visual and the crops: te teach adds each keyframe cropped to that box
+(`crop_box`, with a margin) as one more real example, labelled like the keyframe.
 
 SAM's output is special-token text in Meta's SAM 3 protocol. SPEC.md names Meta's
 `meta-sam-parser` package; this project reads the boxes with its own implementation of
@@ -75,8 +75,21 @@ def parse_sam_output(text: str, size: tuple[int, int] | None = None
 
 
 def best_detection(detections: list[Detection], min_score: float = MIN_SCORE) -> Detection | None:
+    """The region to watch: the box around every confident match. A target often comes
+    in several instances (both doors of a French-door fridge, every burner of a hob) and
+    the condition may be on any of them, so the crop has to hold them all. The largest
+    match alone was the closed door in most of the first fridge run's keyframes, which
+    made a crop of a shut door that was labelled open. The score is the best one among
+    the matches, the object ids are joined with "+"."""
     confident = [d for d in detections if d.score is None or d.score >= min_score]
-    return max(confident, key=lambda d: d.area) if confident else None
+    if len(confident) < 2:
+        return confident[0] if confident else None
+    boxes = [d.box for d in confident]
+    scores = [d.score for d in confident if d.score is not None]
+    ids = [d.object_id for d in confident if d.object_id is not None]
+    return Detection((min(b[0] for b in boxes), min(b[1] for b in boxes),
+                      max(b[2] for b in boxes), max(b[3] for b in boxes)),
+                     max(scores) if scores else None, "+".join(ids) or None)
 
 
 def crop_box(box: tuple[float, float, float, float], size: tuple[int, int],

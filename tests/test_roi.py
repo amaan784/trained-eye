@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -12,9 +13,11 @@ MASK = "<|mask;x=0;y=0;data=2,2,!!!!#Kq|>"
 
 
 def test_roi_best_detection_and_sam_text():
-    dets = [Detection((0, 0, 10, 10), 0.9), Detection((0, 0, 100, 100), 0.3),
-            Detection((5, 5, 60, 60), None)]
-    assert best_detection(dets).box == (5, 5, 60, 60)
+    dets = [Detection((0, 0, 10, 10), 0.9, "0"), Detection((0, 0, 100, 100), 0.3, "1"),
+            Detection((5, 5, 60, 60), None, "2")]
+    best = best_detection(dets)  # every confident match, not the unsure one
+    assert (best.box, best.score, best.object_id) == ((0, 0, 60, 60), 0.9, "0+2")
+    assert best_detection(dets[2:]) is dets[2]  # one match: that one
     assert best_detection([Detection((0, 0, 1, 1), 0.1)]) is None
     text = ("<0f>0<|box;x1=10;y1=20;x2=49;y2=39;w=100;h=50;c=0.9|>" + MASK +
             ",1<|box;x1=0;y1=0;x2=9;y2=9;w=100;h=50;c=0.2|>" + MASK + "\n<0f>2 broken\n")
@@ -25,6 +28,23 @@ def test_roi_best_detection_and_sam_text():
     scaled, _, _ = parse_sam_output(text, (200, 100))  # SAM saw the keyframe at half size
     assert scaled[0].box == (20, 40, 100, 80)
     assert parse_sam_output("") == ([], "sam3-text", [])  # SAM found nothing
+
+
+def test_the_region_holds_every_door_sam_found_in_a_real_frame():
+    # SAM 3.1's live reply for the first fridge keyframe (tests/fixtures/meta): the open
+    # right door (0.56) and the shut left door (0.93), which is larger. The region must
+    # hold both, or the crop shows only the shut door for a frame labelled "open".
+    from backend.meta.client import parse_sse, sam_stream_text
+
+    stream = (Path(__file__).parent / "fixtures" / "meta" / "sam_stream.txt").read_text()
+    text = sam_stream_text(parse_sse(stream))
+    detections, _, problems = parse_sam_output(text, (1552, 2064))
+    assert [(d.object_id, d.box) for d in detections] == [
+        ("0", (1101, 654, 1552, 2056)), ("1", (0, 584, 484, 2064))]
+    assert problems == []
+    best = best_detection(detections)
+    assert best.box == (0, 584, 1552, 2064) and best.object_id == "0+1"
+    assert best.score == pytest.approx(0.9298245906829834)
 
 
 SPEC = SkillSpec(name="burner_left_on", request="tell me when the burner is left on",

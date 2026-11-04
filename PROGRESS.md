@@ -1,8 +1,8 @@
 # Progress
 
 The source of truth between sessions. Updated at the end of every milestone.
-Last update: 2026-11-04 morning, the first live runs on the Mac (Meta API, Modal, the
-simulator); see "Live runs, Nov 4" below. v1 to v93 are on main, and the fixes since.
+Last update: 2026-11-04, 10 AM ET: the first live runs on the Mac (Meta API, Modal, the
+simulator), the product model and the first results; see "Live runs, Nov 4" below. v1 to v93 are on main, and the fixes since.
 
 ## Live runs, Nov 4
 
@@ -70,6 +70,29 @@ simulator); see "Live runs, Nov 4" below. v1 to v93 are on main, and the fixes s
   (iPhone 18 Pro, iOS 27.2). The earlier "not connected": the address saved in the app is
   `http://127.0.0.1:876`, not port 8765.
 
+### Later on Nov 4: the product model, EPIC-KITCHENS and the first results
+
+- The product model (run exp1-mixed: the teaching clip and its generated images only)
+  trained in 442 s on one H100 (349 s of training, 10 optimizer steps). Training loss
+  went from 4.03 to 0.003, validation loss on its 29 held-out examples from 4.047 to
+  0.031. `te export` merged it in 243 s; the merged model gave the same answer as base
+  plus adapter on all 29 validation examples.
+- Serving the adapter on the base with vLLM's `--enable-lora` failed at engine start (an
+  AssertionError in vLLM's LoRA kernel), so runs are served merged. The student key was
+  in none of the container log lines from start, vLLM's startup arguments included.
+- EPIC-KITCHENS-100: 11 test windows (1,405 frames) from kitchens P22 and P02 and 11
+  calibration windows (770 frames) from P03, fetched as one keyframe a second (323 MB,
+  from 14.5 GB of whole videos). Five of the 13 test open stretches last past the 30 s
+  hold, so EPIC gives frame-level results only, with thresholds calibrated for frame F1.
+- Experiment 4 on those windows (`eval/results.md`, from `te eval`): frame F1 0.88 for
+  the fine-tuned model (0.98 s a frame, $3.95 an hour), 0.89 for base Glimmer (2.07 s,
+  $3.95), 0.86 for Muse Spark on every frame (11.16 s, $16.32). In kitchens it never saw,
+  the fine-tuned model matches the base and Spark on frame accuracy, at half the base's
+  latency and under a quarter of Spark's cost; it is not more accurate than the base
+  there. The glasses footage is reported apart when it is recorded.
+- The README is now a short product page with art rendered from real outputs
+  (`python -m backend.art.build`); the details moved to docs/.
+
 ### Failed, and fixed at the root (each with a test)
 
 1. Voice Transcribe at `/audio/transcriptions`: 404. Now `/asr/transcribe`.
@@ -87,6 +110,16 @@ simulator); see "Live runs, Nov 4" below. v1 to v93 are on main, and the fixes s
 8. `te serve-student --stop`: `modal app stop` now asks to confirm; te passes `--yes`.
 9. 11 of 36 Spark labels spent the whole 1024-token budget on reasoning and were asked
    again; the first budget is now 2048 (billing follows the tokens used).
+10. EPIC's host serves about 70 KB/s per connection: frames are fetched as keyframes by
+    byte range; some EPIC-55 files flag no keyframe, so those are found by packet size.
+11. The alert calibration gave the fine-tuned student 0.027 on EPIC (its stretches are too
+    short for alerts): plans can calibrate for frame F1 instead.
+12. Calibrating for frames, base Glimmer's tie of thresholds went to its top, 1.000, and
+    its test frames scored 0.9999 became noes (recall 0.02): the middle of the tie is
+    taken now.
+13. `te blur` failed under OpenCV 5 (no Haar cascade detector): it asks for OpenCV 4.
+14. `te replay` scored one frame at a time; it scores 8 at a time (24 for Spark) and feeds
+    the trigger in order.
 
 ### Needed from the author
 
@@ -94,7 +127,13 @@ simulator); see "Live runs, Nov 4" below. v1 to v93 are on main, and the fixes s
   is generated. Clips with the fridge closed and opened (session 1 and 2,
   `docs/recording-protocol.md`), and the glasses test footage, are still to record.
 - tap_left_running has no teaching clip or request yet.
-- In the simulator app, the backend address `http://127.0.0.1:876` needs the 5 back.
+- The README's hero timeline needs a clip of the author's, from the glasses, in which the
+  alert fires: the fridge left open for well over its 30 s hold (a minute is plenty),
+  then `te watch` on it and `te playground-clip`. video-65 has the door open for about
+  11 s, so the alert never fires on it.
+- The phone screens in the README wait for screenshots from a real run on the phone.
+- Labels for the glasses test footage (`te label --clip`), and 200 generated images
+  (`te label --skill fridge_left_open --sample 200`) for Spark's error rate.
 - Nothing is waiting for an approval; nothing has been published.
 
 ## Status
@@ -514,4 +553,5 @@ sources disagree with SPEC.md, the sources win.
 | M3 | $0.00 | $0.00 | built and tested offline by Nov 3; the experiment runs need footage |
 | M4 | $0.00 | $0.00 | built and tested offline by Nov 3; nothing deployed or published |
 | Nov 4, to 9 AM ET | $6.85 | $1.49 | `te spend`: the API smoke ($0.0013) and the fridge teach runs (Muse Image $3.36, Spark labels $2.98, Wonder $0.32, SAM $0.18, Voice $0.0003); Modal: four two-step smokes $0.48, base serving $1.01 (an upper bound: deployed time). The image builds, the CPU base download and the preflight are not in the ledger; the Modal dashboard has the bill |
-| Total | $6.85 (the author's budget for Nov 4: $100) | $1.49 at config prices (budget for Nov 4: $100) | |
+| Nov 4, 9 to 10 AM ET | $6.45 | $4.85 | `te spend`: Muse Spark judging the 1,405 EPIC test frames and a 30-frame cost check; Modal: the product training run, its export, and serving the fine-tuned and base models for the EPIC replays (an upper bound: deployed time) |
+| Total | $13.30 (the author's budget for Nov 4: $100) | $6.34 at config prices (budget for Nov 4: $100) | |

@@ -210,7 +210,11 @@ def test_te_replay_calibrates_the_run_then_replays_its_test_clips(env, monkeypat
     assert not (watch / "session3_test_a.jsonl").exists()
     assert "held back: exp1-mixed has no threshold for burner_left_on yet" in out
     assert "no labels yet: te label --clip" in out
-    assert seen[:3] == [("built", "trained-eye"), 0, 0]  # the warm-up frame, then the clip
+    # the warm-up sends the first frame on its own; the clip's frames then go 8 at a time
+    # (replay.SCORE_WORKERS), so they come back in any order: each is scored once
+    assert seen[:2] == [("built", "trained-eye"), 0]
+    clip = [i for i in seen[2:] if isinstance(i, int)]
+    assert clip and sorted(clip) == list(range(len(clip)))
 
     labels = env / "data/clips/burner_left_on/session2_a.labels.json"
     labels.write_text(json.dumps({"true": [[10, 20]]}))

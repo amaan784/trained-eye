@@ -3,8 +3,9 @@
 Read this first when picking the project up in a new session, local or cloud. It says
 where everything is, what is done, what is not, the rules the author set, and what to
 build next. Last updated 2026-11-04: the code for M0 to M4 is written and tested offline,
-the iPhone app builds for the simulator (Xcode 27.2, from `ios/project.yml`), nothing has
-run against Meta or Modal yet, and all work now goes straight to `main`.
+the iPhone app builds for the simulator (Xcode 27.2, from `ios/project.yml`), the first live
+runs against Meta and Modal are done (PROGRESS.md, "Live runs, Nov 4"), and all work now
+goes straight to `main`.
 
 **Today's plan (Nov 4, submission due 9 PM ET, aim for 6 PM):** two skills,
 burner_left_on and tap_left_running; Experiments 1 and 4 only; the final model is
@@ -12,7 +13,10 @@ exp1-mixed. In order: the free and cheap live checks (section 3, items 2 and 3),
 check with Meta's CameraAccess sample, the small burner teach run, then start the Modal
 preflight and smoke at once (they run while the author records), the app on the phone,
 the session clips and labels, training, serving, `te replay`, `make eval`, the release
-and the video. `docs/how-it-works.html` shows the whole flow.
+and the video. `docs/how-it-works.html` shows the whole flow. During the day the
+author moved the skill to fridge_left_open (a new teaching clip, the product model
+exp1-mixed) and added EPIC-KITCHENS-100 as test footage from other kitchens; PROGRESS.md
+has what ran and what is still needed.
 
 ## 1. Read in this order
 

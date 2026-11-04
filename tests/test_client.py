@@ -73,7 +73,7 @@ def test_structured_call_is_billed_then_cached(tmp_path):
     rec = Recorder(chat_reply('{"label": "yes"}'))
     client, _ = make_client(tmp_path, rec)
     first = client.structured("muse-spark-1.3", [text_part("Is it done?"), image_part(JPEG)],
-                              SCHEMA, name="label", skill="washer_done")
+                              SCHEMA, name="label", skill="burner_left_on")
     assert first.data == {"label": "yes"}
     assert not first.info.cached and first.reasoning_tokens == 150
     assert first.info.cost_usd == pytest.approx((1000 * 1.25 + 200 * 4.25) / 1e6)
@@ -89,12 +89,12 @@ def test_structured_call_is_billed_then_cached(tmp_path):
     assert "reasoning_effort" not in body
 
     again = client.structured("muse-spark-1.3", [text_part("Is it done?"), image_part(JPEG)],
-                              SCHEMA, name="label", skill="washer_done")
+                              SCHEMA, name="label", skill="burner_left_on")
     assert again.data == {"label": "yes"} and again.info.cached and again.info.cost_usd == 0
     assert again.info.billed_usd == pytest.approx(first.info.cost_usd)  # kept with the reply
     assert len(rec.requests) == 1
     entries = client.ledger.entries()
-    assert len(entries) == 1 and entries[0]["skill"] == "washer_done"
+    assert len(entries) == 1 and entries[0]["skill"] == "burner_left_on"
     assert entries[0]["actual_usd"] == pytest.approx(first.info.cost_usd)
     assert entries[0]["estimate_usd"] >= entries[0]["actual_usd"]
 
@@ -244,7 +244,7 @@ def test_budget_checked_before_sending(tmp_path):
     rec = Recorder()
     client, _ = make_client(tmp_path, rec, TE_SKILL_CAP_USD="0.001")
     with pytest.raises(BudgetExceeded):
-        client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done", max_tokens=4096)
+        client.structured("muse-spark-1.3", "x", SCHEMA, skill="burner_left_on", max_tokens=4096)
     assert rec.requests == [] and client.ledger.entries() == []
 
 
@@ -272,12 +272,12 @@ def test_unusable_output_is_billed_but_not_cached(tmp_path, reply, message):
 def test_retries_stop_at_the_spend_cap(tmp_path):
     rec = Recorder(*[httpx.Response(502, text="bad gateway")] * 6)
     client, sleeps = make_client(tmp_path, rec, TE_SKILL_CAP_USD="0.10")
-    with pytest.raises(BudgetExceeded, match="skill 'washer_done'"):
-        client.image_generate("x", skill="washer_done", n=4)  # $0.04 per attempt
+    with pytest.raises(BudgetExceeded, match="skill 'burner_left_on'"):
+        client.image_generate("x", skill="burner_left_on", n=4)  # $0.04 per attempt
     assert len(rec.requests) == 2 and len(sleeps) == 1
     [entry] = client.ledger.entries()
     assert entry["status"] == "error" and entry["actual_usd"] == pytest.approx(0.08)
-    assert client.ledger.spent("washer_done") <= 0.10
+    assert client.ledger.spent("burner_left_on") <= 0.10
 
 
 @pytest.mark.parametrize("body", [
@@ -314,10 +314,10 @@ def test_ctrl_c_during_a_call_is_charged(tmp_path):
     rec = Recorder(KeyboardInterrupt(), chat_reply('{"label": "yes"}'))
     client, _ = make_client(tmp_path, rec)
     with pytest.raises(KeyboardInterrupt):
-        client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done")
+        client.structured("muse-spark-1.3", "x", SCHEMA, skill="burner_left_on")
     [entry] = client.ledger.entries()
     assert entry["status"] == "error" and entry["actual_usd"] > 0
-    assert client.ledger.spent("washer_done") == entry["actual_usd"]
+    assert client.ledger.spent("burner_left_on") == entry["actual_usd"]
 
 
 def test_failed_calls_carry_their_charge(tmp_path):
@@ -407,15 +407,15 @@ def test_transcribe(tmp_path):
     rec = Recorder({"text": "let me know when the washer says done", "duration": 2.0,
                     "segments": [{"start": 0.0, "end": 2.0, "text": "let me know..."}]})
     client, _ = make_client(tmp_path, rec)
-    t = client.transcribe(wav_bytes(), skill="washer_done")
+    t = client.transcribe(wav_bytes(), skill="burner_left_on")
     assert t.text.startswith("let me know") and t.duration_s == 2.0 and len(t.segments) == 1
     assert t.info.cost_usd == pytest.approx(0.18 * 2 / 3600)
     [entry] = client.ledger.entries()
-    assert entry["skill"] == "washer_done" and entry["actual_usd"] == t.info.cost_usd
+    assert entry["skill"] == "burner_left_on" and entry["actual_usd"] == t.info.cost_usd
     request = rec.requests[0]
     assert request.url.path == "/v1/audio/transcriptions"
     assert b'name="model"' in request.content and b"muse-voice-transcribe-1.0" in request.content
-    assert client.transcribe(wav_bytes(), skill="washer_done").info.cached
+    assert client.transcribe(wav_bytes(), skill="burner_left_on").info.cached
     assert len(client.ledger.entries()) == 1
     with pytest.raises(ValueError, match="duration_s"):
         client.transcribe(b"not a wav")
@@ -449,14 +449,14 @@ def test_sam_streamed(tmp_path):
         {"type": "response.completed", "response": {"usage": {"input_tokens": 900}}},
     ))
     client, _ = make_client(tmp_path, rec)
-    result = client.sam_image("washing machine display", JPEG, skill="washer_done")
+    result = client.sam_image("washing machine display", JPEG, skill="burner_left_on")
     assert result.text == SAM_LINE + "\n"
     assert result.info.cost_usd == pytest.approx(0.0025)
     body = json.loads(rec.requests[0].content)
     assert body["model"] == "sam-3.1" and body["stream"] is True
     assert body["metadata"] == {"include_confidence": "true"}
     assert [p["type"] for p in body["input"][0]["content"]] == ["input_text", "input_image"]
-    assert client.sam_image("washing machine display", JPEG, skill="washer_done").info.cached
+    assert client.sam_image("washing machine display", JPEG, skill="burner_left_on").info.cached
     [entry] = client.ledger.entries()
     assert entry["model"] == "sam-3.1" and entry["actual_usd"] == pytest.approx(0.0025)
 
@@ -525,16 +525,16 @@ def test_image_edit_keeps_bytes_exactly(tmp_path):
     rec = Recorder({"data": [{"b64_json": base64.b64encode(PNG).decode(),
                               "revised_prompt": "washer display showing End"}]})
     client, _ = make_client(tmp_path, rec)
-    result = client.image_edit(JPEG, "make the display show End", skill="washer_done")
+    result = client.image_edit(JPEG, "make the display show End", skill="burner_left_on")
     assert result.images == [PNG] and result.revised_prompts == ["washer display showing End"]
     assert result.info.cost_usd == pytest.approx(0.01)
     request = rec.requests[0]
     assert request.url.path == "/v1/images/edits"
     assert b'name="image"' in request.content and b'name="prompt"' in request.content
-    cached = client.image_edit(JPEG, "make the display show End", skill="washer_done")
+    cached = client.image_edit(JPEG, "make the display show End", skill="burner_left_on")
     assert cached.info.cached and cached.images == [PNG]
     [entry] = client.ledger.entries()
-    assert entry["skill"] == "washer_done" and entry["actual_usd"] == pytest.approx(0.01)
+    assert entry["skill"] == "burner_left_on" and entry["actual_usd"] == pytest.approx(0.01)
     assert b"b64_json" not in (tmp_path / "cache").joinpath(
         result.info.cache_key[:2], f"{result.info.cache_key}.json").read_bytes()
 
@@ -558,7 +558,7 @@ def test_a_failed_image_download_is_a_billed_output_error(tmp_path):
                    httpx.Response(503), httpx.ReadTimeout("slow cdn"))
     client, sleeps = make_client(tmp_path, rec)
     with pytest.raises(OutputError, match="image download failed: ReadTimeout") as err:
-        client.image_edit(JPEG, "make the display show End", skill="washer_done")
+        client.image_edit(JPEG, "make the display show End", skill="burner_left_on")
     assert len(rec.requests) == 3 and sleeps == [1.0]  # the download is tried twice
     [entry] = client.ledger.entries()
     assert entry["status"] == "output_error" and entry["actual_usd"] == pytest.approx(0.01)
@@ -598,11 +598,11 @@ def test_two_clients_cannot_both_pass_the_cap_with_a_call_in_flight(tmp_path):
     watch_rec = Recorder()
     watch, _ = make_client(tmp_path, watch_rec, TE_SKILL_CAP_USD="0.006")  # same ledger file
     thread = threading.Thread(target=lambda: results.append(teach.structured(
-        "muse-spark-1.3", "x", SCHEMA, skill="washer_done", max_tokens=1024)))
+        "muse-spark-1.3", "x", SCHEMA, skill="burner_left_on", max_tokens=1024)))
     thread.start()
     assert sent.wait(5)
     with pytest.raises(BudgetExceeded, match="in flight"):  # $0.0045 + $0.0045 > $0.006
-        watch.structured("muse-spark-1.3", "y", SCHEMA, skill="washer_done", max_tokens=1024)
+        watch.structured("muse-spark-1.3", "y", SCHEMA, skill="burner_left_on", max_tokens=1024)
     assert watch_rec.requests == [] and watch.ledger.entries() == []  # never sent
     finish.set()
     thread.join(5)
@@ -618,7 +618,7 @@ def test_two_clients_cannot_both_pass_the_cap_with_a_call_in_flight(tmp_path):
 def test_a_failed_call_leaves_no_reservation(tmp_path, reply):
     client, _ = make_client(tmp_path, Recorder(*[reply] * 6))
     with pytest.raises(MetaAPIError):
-        client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done")
+        client.structured("muse-spark-1.3", "x", SCHEMA, skill="burner_left_on")
     assert client.ledger.in_flight_usd() == 0.0
 
 
@@ -630,7 +630,7 @@ def test_a_call_whose_record_fails_still_releases(tmp_path, monkeypatch):
 
     monkeypatch.setattr(client.ledger, "record", full_disk)
     with pytest.raises(OSError):
-        client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done")
+        client.structured("muse-spark-1.3", "x", SCHEMA, skill="burner_left_on")
     assert client.ledger.in_flight_usd() == 0.0
 
 
@@ -639,7 +639,7 @@ def test_a_retry_after_a_maybe_billed_attempt_reserves_the_grown_estimate(tmp_pa
     client, _ = make_client(tmp_path, lambda r: seen.append(client.ledger.in_flight_usd())
                             or (httpx.Response(502) if len(seen) == 1
                                 else httpx.Response(200, json=chat_reply('{"label": "no"}'))))
-    client.structured("muse-spark-1.3", "x", SCHEMA, skill="washer_done", max_tokens=1024)
+    client.structured("muse-spark-1.3", "x", SCHEMA, skill="burner_left_on", max_tokens=1024)
     assert seen[1] == pytest.approx(2 * seen[0])  # replaced by the grown one, not added
     assert client.ledger.in_flight_usd() == 0.0
 

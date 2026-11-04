@@ -16,7 +16,7 @@ from backend.inference.student import (
 )
 from backend.skills.spec import SkillSpec, Target
 
-SPEC = SkillSpec(name="washer_done", request="tell me when the washer says End",
+SPEC = SkillSpec(name="burner_left_on", request="tell me when the washer says End",
                  target=Target(sam_prompt="washer display", description="the washer display"),
                  positive="the display shows End", negatives=["display off", "time left"],
                  alert="Laundry's done.")

@@ -15,7 +15,7 @@ from backend.dataengine.dataset import (
 from backend.skills.spec import SkillSpec, Target
 
 SPEC = SkillSpec(
-    name="washer_done",
+    name="burner_left_on",
     request="let me know when the washer says done",
     target=Target(sam_prompt="washing machine display", description="the washer display"),
     positive="the display shows the cycle has finished (e.g. 'End' or '0:00')",
@@ -45,16 +45,16 @@ def test_prompt_template_matches_spec_md():
 
 def test_write_dataset_axolotl_format(tmp_path):
     examples = [
-        Example("washer_done-real-kf_00", jpeg(), "no", "real", "washer_done",
+        Example("burner_left_on-real-kf_00", jpeg(), "no", "real", "burner_left_on",
                 SPEC.positive, SPEC.negatives),
-        Example("washer_done-synt-pos-000", jpeg(color=(0, 200, 0)), "yes", "synthetic",
-                "washer_done", SPEC.positive, SPEC.negatives),
+        Example("burner_left_on-synt-pos-000", jpeg(color=(0, 200, 0)), "yes", "synthetic",
+                "burner_left_on", SPEC.positive, SPEC.negatives),
     ]
-    manifest = write_dataset(examples, tmp_path / "ds", "washer_done-teach")
-    lines = (tmp_path / "ds" / "washer_done-teach.jsonl").read_text().splitlines()
+    manifest = write_dataset(examples, tmp_path / "ds", "burner_left_on-teach")
+    lines = (tmp_path / "ds" / "burner_left_on-teach.jsonl").read_text().splitlines()
     assert len(lines) == 2 and manifest["examples"] == 2
     record = json.loads(lines[1])
-    assert record["id"] == "washer_done-synt-pos-000"
+    assert record["id"] == "burner_left_on-synt-pos-000"
     system, user, assistant = record["messages"]
     assert system == {"role": "system", "content": SYSTEM_PROMPT}
     assert [p["type"] for p in user["content"]] == ["image", "text"]
@@ -62,7 +62,7 @@ def test_write_dataset_axolotl_format(tmp_path):
     assert image_path.startswith("/") and image_path.endswith(".png")
     assert Image.open(image_path).size == (IMAGE_SIZE, IMAGE_SIZE)
     assert assistant == {"role": "assistant", "content": "yes"}
-    assert manifest["counts"] == {"washer_done/real/no": 1, "washer_done/synthetic/yes": 1}
+    assert manifest["counts"] == {"burner_left_on/real/no": 1, "burner_left_on/synthetic/yes": 1}
     assert [e["source"] for e in manifest["examples_index"]] == ["real", "synthetic"]
     assert len(manifest["examples_index"][1]["original_sha256"]) == 64
     assert len(manifest["jsonl_sha256"]) == 64
@@ -82,10 +82,10 @@ def test_write_dataset_rejects_bad_answers(tmp_path):
 
 
 def test_rerun_rewrites_images(tmp_path):
-    first = Example("washer_done-real-kf_00", jpeg(color=(10, 10, 10)), "no", "real",
-                    "washer_done", SPEC.positive, SPEC.negatives)
+    first = Example("burner_left_on-real-kf_00", jpeg(color=(10, 10, 10)), "no", "real",
+                    "burner_left_on", SPEC.positive, SPEC.negatives)
     write_dataset([first], tmp_path / "ds", "x")
-    second = Example(first.id, jpeg(color=(250, 250, 250)), "yes", "real", "washer_done",
+    second = Example(first.id, jpeg(color=(250, 250, 250)), "yes", "real", "burner_left_on",
                      SPEC.positive, SPEC.negatives)
     write_dataset([second], tmp_path / "ds", "x")
     png = Image.open(tmp_path / "ds" / "images" / f"{first.id}.png")

@@ -11,7 +11,7 @@ from backend.skills.compiler import COMPILE_SCHEMA, SYSTEM, compile_skill
 from backend.skills.spec import REFUSALS
 
 ACCEPTED = {
-    "refused": False, "refusal_reason": None, "name": "washer_done",
+    "refused": False, "refusal_reason": None, "name": "burner_left_on",
     "sam_prompt": "washing machine display",
     "target_description": "the digital display on the front of the washer",
     "positive": "the display shows the cycle has finished (e.g. 'End' or '0:00')",
@@ -38,7 +38,7 @@ def test_compiles_a_spec_with_wonder(tmp_path, monkeypatch):
     requests = []
     client = client_with(ACCEPTED, requests)
     spec = compile_skill(client, "let me know when the washer says done", [JPEG] * 5,
-                         name="washer_done")
+                         name="burner_left_on")
     assert spec.target.sam_prompt == "washing machine display"
     assert spec.negatives == ["display shows time remaining", "display off"]
     assert spec.cooldown_s == 3600  # 99999 asked for: clamped to what SYSTEM allows
@@ -48,7 +48,7 @@ def test_compiles_a_spec_with_wonder(tmp_path, monkeypatch):
     assert body["messages"][0]["role"] == "system"
     parts = body["messages"][1]["content"]
     assert [p["type"] for p in parts] == ["text", "image_url", "image_url", "image_url"]
-    assert client.ledger.entries()[0]["skill"] == "washer_done"
+    assert client.ledger.entries()[0]["skill"] == "burner_left_on"
 
 
 def test_model_refusal_is_kept(tmp_path, monkeypatch):

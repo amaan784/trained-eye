@@ -21,11 +21,11 @@ def test_the_release_folder_holds_the_card_weights_and_manifests(tmp_path):
                               manifests_dir=manifests, weights_dir=weights)
     assert {f["path"] for f in release["files"]} == {
         "README.md", "LICENSE", "adapter_config.json", "adapter_model.safetensors",
-        "manifests/washer_done.jsonl"}
+        "manifests/burner_left_on.jsonl"}
     assert release["skipped"] == ["README.md", "args.bin", "checkpoint-2"]
     with pytest.raises(ValueError, match="not a release folder"):
         prepare_release(manifests, run="final", bundle_manifest=bundle, manifests_dir=manifests)
-    (manifests / "washer_done.jsonl").unlink()
+    (manifests / "burner_left_on.jsonl").unlink()
     with pytest.raises(ValueError, match="te manifests"):
         prepare_release(tmp_path / "release", run="final", bundle_manifest=bundle,
                         manifests_dir=manifests)
@@ -101,7 +101,7 @@ def test_upload_never_publishes_into_an_existing_public_repo(tmp_path, monkeypat
     assert ("upload", REPO) not in calls
 
 def keyframe_inputs(tmp_path):
-    """A mixed bundle whose washer_done manifest starts from two keyframes, the te blur
+    """A mixed bundle whose burner_left_on manifest starts from two keyframes, the te blur
     folder of those keyframes, and a generated image."""
     from tests.test_faces import noise
 
@@ -114,7 +114,7 @@ def keyframe_inputs(tmp_path):
     rows = [{"id": f"pos-{i}", "keyframe_sha256": sha256_hex(p.read_bytes()),
              "image_sha256": sha256_hex(generated) if i == 0 else "e" * 64}
             for i, p in enumerate(sorted(originals.iterdir()))]
-    (manifests / "washer_done.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    (manifests / "burner_left_on.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
     blurred = tmp_path / "blurred"
     blur_folder(originals, blurred, detector=lambda data: [(0, 0, 8, 8)])  # a face in each
     return bundle, manifests, weights, blurred, generated
@@ -128,20 +128,20 @@ def test_the_release_ships_the_blurred_keyframes_te_regenerate_needs(tmp_path, m
     folder = tmp_path / "release"
     release = prepare_release(folder, run="final", bundle_manifest=bundle,
                               manifests_dir=manifests, weights_dir=weights,
-                              keyframes={"washer_done": blurred})
-    shipped = folder / "keyframes" / "washer_done"
+                              keyframes={"burner_left_on": blurred})
+    shipped = folder / "keyframes" / "burner_left_on"
     assert sorted(p.name for p in shipped.iterdir()) == ["kf_00.png", "kf_01.jpg",
                                                          "sources.json"]
-    assert release["keyframes"] == {"washer_done": 2}
-    assert "keyframes/washer_done/kf_00.png" in {f["path"] for f in release["files"]}
+    assert release["keyframes"] == {"burner_left_on": 2}
+    assert "keyframes/burner_left_on/kf_00.png" in {f["path"] for f in release["files"]}
     needed = {json.loads(line)["keyframe_sha256"]
-              for line in (folder / "manifests/washer_done.jsonl").read_text().splitlines()}
+              for line in (folder / "manifests/burner_left_on.jsonl").read_text().splitlines()}
     found, mapped = find_keyframes(shipped, needed)  # what the card's te regenerate reads
     assert set(found) == needed and mapped == 2
     card = (folder / "README.md").read_text()
     assert ("te regenerate --skill <skill> --manifest manifests/<skill>.jsonl --keyframes "
             "keyframes/<skill>") in card and "blurred pixels" in card
-    assert "(for washer_done)" in card and "which are not published" not in card
+    assert "(for burner_left_on)" in card and "which are not published" not in card
     calls = []
     monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hub(calls))
     monkeypatch.setenv("HF_TOKEN", "hf_good")
@@ -155,9 +155,9 @@ def test_the_release_ships_the_blurred_keyframes_te_regenerate_needs(tmp_path, m
     with pytest.raises(ValueError, match="kf_02.png"):
         upload(folder, REPO, confirmed=True)
     (shipped / "kf_02.png").unlink()
-    (folder / "keyframes" / "bus_m4").mkdir()  # no manifest, so no keyframes may ship
-    (folder / "keyframes" / "bus_m4" / "kf_00.png").write_bytes(b"")
-    with pytest.raises(ValueError, match="bus_m4/kf_00.png"):
+    (folder / "keyframes" / "tap_left_running").mkdir()  # no manifest, so no keyframes may ship
+    (folder / "keyframes" / "tap_left_running" / "kf_00.png").write_bytes(b"")
+    with pytest.raises(ValueError, match="tap_left_running/kf_00.png"):
         upload(folder, REPO, confirmed=True)
     assert [c for c in calls if c[0] == "upload"] == [("upload", REPO)]
 
@@ -172,22 +172,22 @@ def test_keyframes_are_refused_unless_te_blur_made_all_of_them_from_real_frames(
                                keyframes=keyframes)
 
     with pytest.raises(ValueError, match="no generated images"):
-        release(bus_m4=blurred)
+        release(tap_left_running=blurred)
     with pytest.raises(ValueError, match="no sources.json"):
-        release(washer_done=tmp_path / "keyframes")  # the originals, not a te blur folder
+        release(burner_left_on=tmp_path / "keyframes")  # the originals, not a te blur folder
     synthetic = tmp_path / "synthetic"
     synthetic.mkdir()
     (synthetic / "pos.png").write_bytes(generated)
     blur_folder(synthetic, tmp_path / "blurred_synthetic", detector=lambda data: [])
     with pytest.raises(ValueError, match="generated image"):
-        release(washer_done=tmp_path / "blurred_synthetic")
+        release(burner_left_on=tmp_path / "blurred_synthetic")
     (blurred / "kf_01.jpg").unlink()
     with pytest.raises(ValueError, match="misses 1 of the 2 keyframes"):
-        release(washer_done=blurred)
+        release(burner_left_on=blurred)
     assert not folder.exists()  # refused before anything was written
     release()
     card = (folder / "README.md").read_text()
-    assert "For washer_done, `te regenerate` needs the original keyframes" in card
+    assert "For burner_left_on, `te regenerate` needs the original keyframes" in card
 
 
 def fake_collections(calls: list, repos: dict, existing_private=None):

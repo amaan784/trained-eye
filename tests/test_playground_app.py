@@ -77,7 +77,7 @@ def test_data_apis_read_the_fixture(tmp_path):
     client, fake = make_app(tmp_path)
     assert [c["name"] for c in client.get("/api/clips").json()["clips"]] == ["washer_1"]
     timeline = client.get("/api/clips/washer_1").json()
-    assert timeline["skills"]["washer_done"]["alerts"][0]["text"] == "Your laundry's done."
+    assert timeline["skills"]["burner_left_on"]["alerts"][0]["text"] == "Your laundry's done."
     assert client.get("/api/clips/nope").status_code == 404
     (skill,) = client.get("/api/skills").json()["skills"]
     detail = client.get(f"/api/skills/{skill['name']}").json()
@@ -92,7 +92,7 @@ def test_data_apis_read_the_fixture(tmp_path):
         r = client.get("/" + url)
         assert r.status_code == 200 and r.headers["x-content-type-options"] == "nosniff"
     assert "default-src 'none'" in client.get("/" + urls[1]).headers["content-security-policy"]
-    for bad in ("/media/clips/washer_1/log.jsonl", "/media/skills/washer_done/spec.json",
+    for bad in ("/media/clips/washer_1/log.jsonl", "/media/skills/burner_left_on/spec.json",
                 "/media/results/..%2F..%2Fledger.jsonl", "/media/"):
         assert client.get(bad).status_code == 404
     assert fake.calls == {}  # reading costs nothing
@@ -166,7 +166,7 @@ def test_odd_since_values_read_as_zero(tmp_path):
 
 def test_public_copy_serves_no_generated_image_and_no_original_keyframe(tmp_path):
     local, _ = make_app(tmp_path / "local")
-    detail = local.get("/api/skills/washer_done").json()
+    detail = local.get("/api/skills/burner_left_on").json()
     generated, original = detail["wall"][0]["url"], detail["keyframes"][0]["url"]
     assert local.get("/" + generated).status_code == local.get("/" + original).status_code == 200
     client, fake = make_app(tmp_path / "public", public=True)
@@ -175,7 +175,7 @@ def test_public_copy_serves_no_generated_image_and_no_original_keyframe(tmp_path
     for url in (generated, original):  # the same files exist in this copy's data too
         assert (tmp_path / "public/taught/data" / url.removeprefix("media/")).is_file()
         assert client.get("/" + url).status_code == 404
-    detail = client.get("/api/skills/washer_done").json()
+    detail = client.get("/api/skills/burner_left_on").json()
     assert detail["wall"] == [] and detail["wall_note"] == skills.WALL_NOTE
     assert detail["keyframes"] == []  # nothing blurred with te blur yet
     shown = client.get("/api/examples").json()
@@ -194,13 +194,13 @@ def test_public_copy_serves_no_generated_image_and_no_original_keyframe(tmp_path
 def test_public_copy_teaches_from_blurred_keyframes(tmp_path):
     client, fake = make_app(tmp_path, public=True)
     data_dir = tmp_path / "taught" / "data"
-    folder = data_dir / "skills" / "washer_done"
+    folder = data_dir / "skills" / "burner_left_on"
     blur(folder / "keyframes", folder / "keyframes_blurred")
     picked = tmp_path / "picked"
     picked.mkdir()
     (picked / "kettle.png").write_bytes(png((40, 50, 60)))
     blur(picked, data_dir / "playground" / "keyframes")
-    detail = client.get("/api/skills/washer_done").json()
+    detail = client.get("/api/skills/burner_left_on").json()
     assert detail["keyframes"] and all(client.get("/" + k["url"]).status_code == 200
                                        for k in detail["keyframes"])
     (offered,) = client.get("/api/teach/keyframes").json()["keyframes"]

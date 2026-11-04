@@ -7,14 +7,14 @@ from starlette.testclient import TestClient
 from backend.labeltool.images import create_image_app, sample_images
 from backend.skills.spec import SkillSpec
 
-SPEC = SkillSpec(name="washer_done", request="Tell me when the washer is done", alert="Done.",
+SPEC = SkillSpec(name="burner_left_on", request="Tell me when the washer is done", alert="Done.",
                  target={"sam_prompt": "washer display", "description": "the washer display"},
                  positive="The display shows End", negatives=["time remaining is shown"])
 
 
 @pytest.fixture
 def skill(tmp_path):
-    root = tmp_path / "skills" / "washer_done"
+    root = tmp_path / "skills" / "burner_left_on"
     (root / "synthetic").mkdir(parents=True)
     (root / "spec.json").write_text(SPEC.model_dump_json())
     rows = [{"file": "keyframes/kf_00.jpg", "source": "real", "spark_label": "yes"}]

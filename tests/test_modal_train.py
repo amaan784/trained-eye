@@ -159,7 +159,7 @@ def bundle_for(tmp_path, run="exp1-mixed"):
     folder.mkdir(parents=True)
     (folder / "manifest.json").write_text(json.dumps({
         "image_root": f"/vol/bundles/{run}", "variant": "mixed", "limit": None,
-        "dataset_dir": "dataset", "skills": {"washer_done": "ab" * 32}, "counts": {},
+        "dataset_dir": "dataset", "skills": {"burner_left_on": "ab" * 32}, "counts": {},
         "system_in_user": False, "train_examples": 40, "train_sha256": "cd" * 32}))
     return folder
 
@@ -233,8 +233,8 @@ def test_the_preflight_is_a_cpu_function_with_the_pinned_processor():
 
 def manifest(run="exp1-mixed", **extra):
     return {"variant": "mixed", "limit": None, "image_root": f"/vol/bundles/{run}",
-            "dataset_dir": "dataset", "skills": {"washer_done": "ab" * 32},
-            "system_in_user": False, "counts": {"train/washer_done/real/yes": 5},
+            "dataset_dir": "dataset", "skills": {"burner_left_on": "ab" * 32},
+            "system_in_user": False, "counts": {"train/burner_left_on/real/yes": 5},
             "train_examples": 5, "train_sha256": f"{run}-paths", **extra}
 
 

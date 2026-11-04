@@ -16,7 +16,7 @@ REQUEST = "let me know when the washer says done"
 def session(tmp_path, fake, timeout_s=5.0, **opts):
     opts = {"request": REQUEST, "positives": 6, "negatives": 6, **opts}
     return TeachSession(client_for(tmp_path, fake),
-                        TeachOptions(skill="washer_done", clip=clip(tmp_path / "clip"), **opts),
+                        TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"), **opts),
                         tmp_path / "skills", estimate={"total": 0.1}, timeout_s=timeout_s)
 
 
@@ -126,7 +126,7 @@ def test_stop_answers_an_open_question_no(tmp_path):
     assert status["stopped"] == ("the spend was not agreed: the server stopped "
                                  "(nothing was spent)")
     with pytest.raises(ServerStopping):
-        s.client.ledger.check(0.01, "washer_done")
+        s.client.ledger.check(0.01, "burner_left_on")
     assert fake.calls == {}
 
 
@@ -160,7 +160,7 @@ def test_stop_cuts_a_rate_limited_retry_short(tmp_path):
     settings = load_settings(env={"TE_DATA_DIR": str(tmp_path / "data"),
                                   "MODEL_API_KEY": "sk-test"}, env_file=None)
     client = MetaClient(settings, transport=httpx.MockTransport(busy))  # real backoff sleeps
-    s = TeachSession(client, TeachOptions(skill="washer_done", clip=clip(tmp_path / "clip"),
+    s = TeachSession(client, TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"),
                                           request=REQUEST, positives=6, negatives=6),
                      tmp_path / "skills", estimate={"total": 0.1}, timeout_s=30)
     s.answer("spend", True)

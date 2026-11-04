@@ -20,7 +20,7 @@ def env(tmp_path, monkeypatch):
     return tmp_path
 
 
-def manifest_rows(skill="washer_done"):
+def manifest_rows(skill="burner_left_on"):
     return [{"id": f"{skill}-pos-{i:03d}", "skill": skill, "label": "yes", "kind": "positive",
              "condition": "the display shows End", "nuisance": "in the same lighting",
              "keyframe_sha256": "a" * 64, "prompt": f"Edit this photo {i}.", "file": f"{i}.png",
@@ -30,12 +30,12 @@ def manifest_rows(skill="washer_done"):
 
 def test_manifests_copies_prompts_out_of_data_and_never_images(env, capsys):
     assert cli.main(["manifests"]) == 1  # nothing taught yet
-    synthetic = env / "data/skills/washer_done/synthetic"
+    synthetic = env / "data/skills/burner_left_on/synthetic"
     synthetic.mkdir(parents=True)
     (synthetic / "manifest.jsonl").write_text(
         "".join(json.dumps(r) + "\n" for r in manifest_rows()))
     assert cli.main(["manifests"]) == 0
-    out = config.PROJECT_ROOT / "manifests/washer_done.jsonl"
+    out = config.PROJECT_ROOT / "manifests/burner_left_on.jsonl"
     rows = [json.loads(line) for line in out.read_text().splitlines()]
     assert len(rows) == 3 and all("file" not in r and "cost_usd" not in r for r in rows)
     assert "3 prompts" in capsys.readouterr().out
@@ -44,7 +44,7 @@ def test_manifests_copies_prompts_out_of_data_and_never_images(env, capsys):
 def test_regenerate_prints_the_estimate_and_spends_nothing_without_a_yes(env, monkeypatch,
                                                                          capsys):
     calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
-    keyframes = env / "data/skills/washer_done/keyframes"
+    keyframes = env / "data/skills/burner_left_on/keyframes"
     keyframes.mkdir(parents=True)
     buf = io.BytesIO()
     Image.new("RGB", (32, 24), (10, 20, 30)).save(buf, format="JPEG")
@@ -52,18 +52,18 @@ def test_regenerate_prints_the_estimate_and_spends_nothing_without_a_yes(env, mo
     import hashlib
 
     sha = hashlib.sha256(buf.getvalue()).hexdigest()
-    manifest = env / "washer_done.jsonl"
+    manifest = env / "burner_left_on.jsonl"
     manifest.write_text("".join(json.dumps({**r, "keyframe_sha256": sha}) + "\n"
                                 for r in manifest_rows()))
-    assert cli.main(["regenerate", "--skill", "washer_done", "--manifest", str(manifest),
+    assert cli.main(["regenerate", "--skill", "burner_left_on", "--manifest", str(manifest),
                      "--estimate-only"]) == 0
     assert "3 images to regenerate" in capsys.readouterr().out
     answer(monkeypatch, "n")
-    assert cli.main(["regenerate", "--skill", "washer_done", "--manifest", str(manifest)]) == 1
+    assert cli.main(["regenerate", "--skill", "burner_left_on", "--manifest", str(manifest)]) == 1
     capsys.readouterr()
     monkeypatch.setattr(config, "ASK_ABOVE_USD", 0.001)  # these 3 images now count as over $15
     prompts = answer(monkeypatch, "n")
-    assert cli.main(["regenerate", "--skill", "washer_done", "--manifest", str(manifest),
+    assert cli.main(["regenerate", "--skill", "burner_left_on", "--manifest", str(manifest),
                      "--yes"]) == 1 and len(prompts) == 1
     assert "needs your yes even with --yes" in capsys.readouterr().out
     assert calls == []
@@ -112,10 +112,10 @@ def release_inputs(env, run="final"):
     bundle.mkdir(parents=True)
     (bundle / "manifest.json").write_text(json.dumps({
         "variant": "mixed", "train_examples": 3, "val_examples": 0,
-        "skills": {"washer_done": ""}, "counts": {"train/washer_done/real/yes": 1,
-                                                  "train/washer_done/synthetic/no": 2}}))
+        "skills": {"burner_left_on": ""}, "counts": {"train/burner_left_on/real/yes": 1,
+                                                  "train/burner_left_on/synthetic/no": 2}}))
     (env / "manifests").mkdir()
-    (env / "manifests" / "washer_done.jsonl").write_text('{"id": "x"}\n')
+    (env / "manifests" / "burner_left_on.jsonl").write_text('{"id": "x"}\n')
 
 
 def test_fetch_weights_feeds_te_release_by_default(env, monkeypatch, capsys):
@@ -140,7 +140,7 @@ def test_fetch_weights_feeds_te_release_by_default(env, monkeypatch, capsys):
     assert {"adapter_config.json", "adapter_model.safetensors"} <= {
         f["path"] for f in release["files"]}
     assert cli.main(["release", "--run", "final", "--out", str(env / "rel"), "--keyframes",
-                     "washer_done"]) == 2
+                     "burner_left_on"]) == 2
     assert "<skill>=<folder>" in capsys.readouterr().err
 
 
@@ -152,7 +152,7 @@ def test_release_test_set_asks_before_a_private_dataset_upload(env, monkeypatch,
 
     _, blurred = footage(env, monkeypatch)  # the labels are in data/clips, the default
     monkeypatch.setattr("backend.release.test_set.video_duration_s", lambda path: 120.0)
-    base = ["release-test-set", "--clips", f"washer_done={blurred}", "--out", str(env / "ts")]
+    base = ["release-test-set", "--clips", f"burner_left_on={blurred}", "--out", str(env / "ts")]
     assert cli.main(base) == 2 and "no default" in capsys.readouterr().err
     assert cli.main([*base, "--license", "cc-by-4.0", "--upload"]) == 2
     assert "--upload needs --repo" in capsys.readouterr().err
@@ -160,7 +160,7 @@ def test_release_test_set_asks_before_a_private_dataset_upload(env, monkeypatch,
     upload = [*base, "--license", "cc-by-4.0", "--upload", "--repo", "someone/te-test"]
     assert cli.main(upload) == 1
     out = capsys.readouterr().out
-    assert "left out washer_done/session1_kitchen.mp4" in out and "nothing was uploaded" in out
+    assert "left out burner_left_on/session1_kitchen.mp4" in out and "nothing was uploaded" in out
     assert "datasets/someone/te-test (private)" in prompts[0]
     calls = []
     monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hub(calls))

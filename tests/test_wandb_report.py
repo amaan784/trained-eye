@@ -15,7 +15,7 @@ EVAL_URL = "https://wandb.ai/someone/trained-eye/runs/abc123"
 def results(**extra):
     """results.json as te eval --wandb leaves it, with one pending evaluation."""
     return {"plan": "plan.json", "window_s": 5,
-            "evaluations": [{"name": "exp1-mixed-washer_done", "experiment": 1,
+            "evaluations": [{"name": "exp1-mixed-burner_left_on", "experiment": 1,
                              "status": "pending", "missing": ["../data/watch/a.jsonl"]}],
             "charts": {"1": ["exp1_f1.svg"], "4": ["exp4_cost.svg"]}, "wandb": EVAL_URL,
             **extra}
@@ -49,7 +49,7 @@ def test_one_section_per_experiment_with_the_text_of_results_md():
     assert spec["title"] == "Trained Eye: experiments" and spec["entity"] == "someone"
     assert [s["title"] for s in spec["sections"]] == list(EXPERIMENTS.values())
     first, *_, fourth = spec["sections"]
-    assert "exp1-mixed-washer_done" in first["text"] and "![" not in first["text"]
+    assert "exp1-mixed-burner_left_on" in first["text"] and "![" not in first["text"]
     assert first["training_tag"] == "exp:exp1" and first["charts"] == ["charts/exp1_f1"]
     assert fourth["training_tag"] is None and fourth["charts"] == ["charts/exp4_cost"]
     assert spec["sections"][1]["text"].startswith("No runs yet")

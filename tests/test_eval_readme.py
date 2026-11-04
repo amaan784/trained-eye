@@ -32,8 +32,8 @@ def scored(tmp_path):
         evaluation("exp4-spark", 4, write_clip(clips, "spark", 63), variant="spark",
                    scorer_usd_per_frame=0.003)]}))
     data = tmp_path / "data"
-    (data / "skills/washer_done").mkdir(parents=True)
-    (data / "skills/washer_done/spark_errors.json").write_text(json.dumps(SPARK_ERRORS))
+    (data / "skills/burner_left_on").mkdir(parents=True)
+    (data / "skills/burner_left_on/spark_errors.json").write_text(json.dumps(SPARK_ERRORS))
     (tmp_path / "eval/regression.json").write_text(json.dumps(REGRESSION))
     run_eval(plan, tmp_path / "eval", data_dir=data, regression=tmp_path / "eval/regression.json")
     return tmp_path / "eval" / "results.json"
@@ -47,7 +47,7 @@ def test_the_block_copies_results_json_and_names_its_hash(scored, tmp_path):
     one = text.split("### Experiment 1")[1].split("###")[0]
     assert "| Variant | Skill | Frame F1 | Events caught on time | False alarms per hour |" \
         in one
-    assert "| mixed | washer_done | 1.00 | 1.00 | 0.0 | $3.95 |" in one and "| real |" not in one
+    assert "| mixed | burner_left_on | 1.00 | 1.00 | 0.0 | $3.95 |" in one and "| real |" not in one
     assert "| 25 images" not in text and "| 25 | 0.00 |" in text  # Experiment 3's images
     assert "### Experiment 2" not in text  # nothing scored there
     four = text.split("### Experiment 4")[1]
@@ -57,7 +57,7 @@ def test_the_block_copies_results_json_and_names_its_hash(scored, tmp_path):
     assert "[Experiment 4 (cost)](eval/exp4_cost.svg)" in text and "timeline" not in text
     assert ("Regression check on general questions at bf16: base 2 of 2 (100%), fine-tuned 1 "
             "of 2 (50%); 1 question changed.") in text
-    assert ("- washer_done: wrong on 19 of 190 hand-labelled images (10.0%, 95% CI 6.5% to "
+    assert ("- burner_left_on: wrong on 19 of 190 hand-labelled images (10.0%, 95% CI 6.5% to "
             "15.1%), unsure on 5") in text
     assert "galleries" not in text  # local only: never in the README
     assert text.isascii() and "--" not in text.replace("|---", "").replace("--readme", "")
@@ -112,7 +112,7 @@ def test_te_eval_readme_writes_the_block_or_leaves_the_file(tmp_path, monkeypatc
     assert cli.main([*args, "--readme", str(readme)]) == 0
     assert "results block written into" in capsys.readouterr().out
     text = readme.read_text()
-    assert "| mixed | washer_done | 1.00 |" in text
+    assert "| mixed | burner_left_on | 1.00 |" in text
     assert "Regression check: not run yet (te regress)." in text  # no eval/regression.json
     plan.write_text(json.dumps({"evaluations": [
         evaluation("exp1-mixed", 1, {"log": "../clips/x.jsonl", "labels": "../clips/x.json"})]}))

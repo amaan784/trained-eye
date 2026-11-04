@@ -13,7 +13,7 @@ from backend.skills.spec import (
 )
 
 WASHER = {
-    "name": "washer_done",
+    "name": "burner_left_on",
     "request": "let me know when the washer says done",
     "target": Target(sam_prompt="washing machine display",
                      description="the digital display on the front of the washer"),

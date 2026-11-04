@@ -83,11 +83,11 @@ def test_calibrate_on_footage_that_always_looks_true_never_fires():
 def test_labelled_frames_from_a_watch_log():
     from backend.watch.trigger import labelled_frames
 
-    rows = [{"t": 0.0, "skill": "washer_done", "p": 0.1},
+    rows = [{"t": 0.0, "skill": "burner_left_on", "p": 0.1},
             {"t": 1.0, "skill": "pot_boils", "p": 0.9},
-            {"t": 1.0, "skill": "washer_done", "p": None, "error": "down"},
-            {"t": 2.0, "skill": "washer_done", "p": 0.8}]
-    frames = labelled_frames(rows, "washer_done", [[1.5, 3]])
+            {"t": 1.0, "skill": "burner_left_on", "p": None, "error": "down"},
+            {"t": 2.0, "skill": "burner_left_on", "p": 0.8}]
+    frames = labelled_frames(rows, "burner_left_on", [[1.5, 3]])
     assert [(f.t, f.p, f.truth) for f in frames] == [(0.0, 0.1, False), (2.0, 0.8, True)]
     with pytest.raises(ValueError):
-        labelled_frames(rows, "washer_done", [[3, 1]])
+        labelled_frames(rows, "burner_left_on", [[3, 1]])

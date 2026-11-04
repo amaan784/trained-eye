@@ -53,7 +53,7 @@ def public_fixture(env):
     from tests.test_teach import png
 
     data = env / "data"
-    skill = data / "skills/washer_done"
+    skill = data / "skills/burner_left_on"
     for sub in ("keyframes", "synthetic", "dataset", "cache"):
         (skill / sub).mkdir(parents=True)
     (skill / "spec.json").write_text("{}")
@@ -105,10 +105,10 @@ def test_playground_deploy_asks_first_and_copies_only_public_files(env, monkeypa
     assert removed == list(cli_playground.PUBLISHED_TREES)  # not the budget, ledger or cache
     assert "/data/playground/budget.json" not in removed and "/data" not in removed
     assert staged == {
-        "/data/skills/washer_done/spec.json", "/data/skills/washer_done/roi.json",
-        "/data/skills/washer_done/synthetic/manifest.jsonl",
-        "/data/skills/washer_done/keyframes_blurred/sources.json",
-        "/data/skills/washer_done/keyframes_blurred/kf_00.png",
+        "/data/skills/burner_left_on/spec.json", "/data/skills/burner_left_on/roi.json",
+        "/data/skills/burner_left_on/synthetic/manifest.jsonl",
+        "/data/skills/burner_left_on/keyframes_blurred/sources.json",
+        "/data/skills/burner_left_on/keyframes_blurred/kf_00.png",
         "/data/playground/clips/washer_1/log.jsonl", "/data/playground/clips/washer_1/clip.mp4",
         "/data/playground/clips/washer_1/clip.mp4.blur.json",
         "/data/playground/clips/raw_clip/log.jsonl", "/eval/f1.svg"}
@@ -136,7 +136,7 @@ def make_video(path, seconds=2):
 
 
 def frame_log(path, last_t=1.9):
-    rows = [{"t": round(i * 0.5, 3), "skill": "washer_done", "threshold": 0.6, "p": 0.1 * i}
+    rows = [{"t": round(i * 0.5, 3), "skill": "burner_left_on", "threshold": 0.6, "p": 0.1 * i}
             for i in range(int(last_t / 0.5) + 1)]
     path.write_text("".join(json.dumps(r) + "\n" for r in rows))
     return path

@@ -36,17 +36,17 @@ def test_watch_replays_a_clip_through_the_student(env, monkeypatch, capsys):
 
     monkeypatch.setattr(student, "OpenAIStudent", Fake)
     clip = write_clip(env / "clip", n=5)
-    assert cli.main(["watch", "--skills", "washer_done", "--clip", str(clip)]) == 0
+    assert cli.main(["watch", "--skills", "burner_left_on", "--clip", str(clip)]) == 0
     out = capsys.readouterr().out
     assert seen == [("http://127.0.0.1:8080/v1", "trained-eye", None)]
-    assert '2.0 s  washer_done: "Laundry\'s done."' in out and "cloud not checked" in out
+    assert '2.0 s  burner_left_on: "Laundry\'s done."' in out and "cloud not checked" in out
     assert "5 frames scored at 1 fps" in out and "no calibrated threshold" in out
     [log] = (env / "data/watch").glob("replay-*-clip.jsonl")
     assert len(log.read_text().splitlines()) == 5
 
 
 def test_watch_needs_the_student_endpoint(env, capsys):
-    assert cli.main(["watch", "--skills", "washer_done", "--clip", "x"]) == 2
+    assert cli.main(["watch", "--skills", "burner_left_on", "--clip", "x"]) == 2
     assert "TE_STUDENT_URL" in capsys.readouterr().err
 
 
@@ -56,17 +56,17 @@ def test_calibrate_writes_the_threshold_watch_mode_then_uses(env, capsys):
     root = taught(env)
     log, labels = env / "replay.jsonl", env / "labels.json"
     probs = [0.6 if i % 1800 < 3 else 0.2 for i in range(3600)] + [0.9] * 30
-    log.write_text("".join(json.dumps({"t": float(i), "skill": "washer_done", "p": p}) + "\n"
+    log.write_text("".join(json.dumps({"t": float(i), "skill": "burner_left_on", "p": p}) + "\n"
                            for i, p in enumerate(probs)))
     labels.write_text(json.dumps({"true": [[3600, 3630]]}))
-    assert cli.main(["calibrate", "--skill", "washer_done", "--log", str(log),
+    assert cli.main(["calibrate", "--skill", "burner_left_on", "--log", str(log),
                      "--labels", str(labels)]) == 0
     out = capsys.readouterr().out
     assert "0 false alarms, 1 of 1 events caught" in out
     saved = json.loads((root / "threshold.json").read_text())
     assert 0.6 < saved["threshold"] <= 0.9 and saved["clips"][0]["frames"] == 3630
     assert load_skill(root).trigger.threshold == saved["threshold"]
-    assert cli.main(["calibrate", "--skill", "washer_done", "--log", str(log), "--log", str(log),
+    assert cli.main(["calibrate", "--skill", "burner_left_on", "--log", str(log), "--log", str(log),
                      "--labels", str(labels)]) == 2
     assert "one --labels file for each --log" in capsys.readouterr().err
 
@@ -90,7 +90,7 @@ def test_watch_with_spark_asks_first_and_only_a_yes_fires(env, monkeypatch, caps
 
     monkeypatch.setattr(spark_scorer, "SparkScorer", Fake)
     clip = str(write_clip(env / "clip", n=5))
-    args = ["watch", "--skills", "washer_done", "--clip", clip, "--scorer", "spark"]
+    args = ["watch", "--skills", "burner_left_on", "--clip", clip, "--scorer", "spark"]
     prompts = answer(monkeypatch, "n")
     assert cli.main(args) == 1 and len(prompts) == 1
     assert "Muse Spark on 5 frames x 1 skills" in capsys.readouterr().out
@@ -99,11 +99,11 @@ def test_watch_with_spark_asks_first_and_only_a_yes_fires(env, monkeypatch, caps
     log.write_text("a line from an earlier run\n")
     replies[:] = [0.5] * 5  # unsure is not a yes
     assert cli.main([*args, "--yes", "--log", str(log)]) == 0
-    assert "washer_done:" not in capsys.readouterr().out
+    assert "burner_left_on:" not in capsys.readouterr().out
     assert "earlier run" not in log.read_text() and len(log.read_text().splitlines()) == 5
     replies[:] = [1.0] * 5
     assert cli.main([*args, "--yes", "--log", str(log)]) == 0
-    assert 'washer_done: "Laundry\'s done."' in capsys.readouterr().out
+    assert 'burner_left_on: "Laundry\'s done."' in capsys.readouterr().out
 
 
 def scoring(monkeypatch, p=0.9):
@@ -132,17 +132,17 @@ def test_calibrate_per_run_then_watch_uses_that_run_s_threshold(env, monkeypatch
     monkeypatch.setenv("TE_STUDENT_URL", "http://127.0.0.1:8080/v1")
     log, labels = env / "replay.jsonl", env / "labels.json"
     probs = [0.6 if i % 1800 < 3 else 0.2 for i in range(3600)] + [0.9] * 30
-    log.write_text("".join(json.dumps({"t": float(i), "skill": "washer_done", "p": p,
+    log.write_text("".join(json.dumps({"t": float(i), "skill": "burner_left_on", "p": p,
                                        "run": "exp1-mixed"}) + "\n"
                            for i, p in enumerate(probs)))
     labels.write_text(json.dumps({"true": [[3600, 3630]]}))
-    calibrate = ["calibrate", "--skill", "washer_done", "--log", str(log), "--labels",
+    calibrate = ["calibrate", "--skill", "burner_left_on", "--log", str(log), "--labels",
                  str(labels)]
     assert cli.main([*calibrate, "--run", "exp1-mixed"]) == 0
     out = capsys.readouterr().out
-    saved_path = env / "data/watch/exp1-mixed/washer_done/threshold.json"
+    saved_path = env / "data/watch/exp1-mixed/burner_left_on/threshold.json"
     saved = json.loads(saved_path.read_text())
-    assert "washer_done for run exp1-mixed: threshold" in out and "saved: data/watch" in out
+    assert "burner_left_on for run exp1-mixed: threshold" in out and "saved: data/watch" in out
     assert saved["run"] == "exp1-mixed" and 0.6 < saved["threshold"] <= 0.9
     assert not (root / "threshold.json").exists()  # the skill-wide file is left alone
     assert cli.main([*calibrate, "--run", "exp1-real"]) == 2
@@ -153,7 +153,7 @@ def test_calibrate_per_run_then_watch_uses_that_run_s_threshold(env, monkeypatch
     scoring(monkeypatch)
     clip = str(write_clip(env / "clip", n=4))
     replay = env / "out.jsonl"
-    watch = ["watch", "--skills", "washer_done", "--clip", clip, "--log", str(replay)]
+    watch = ["watch", "--skills", "burner_left_on", "--clip", clip, "--log", str(replay)]
     assert cli.main([*watch, "--run", "exp1-mixed"]) == 0
     assert "no calibrated threshold" not in capsys.readouterr().out
     assert {(r["run"], r["threshold"], r["threshold_source"]) for r in replay_rows(replay)} == {
@@ -179,7 +179,7 @@ def test_watch_asks_the_student_as_it_was_trained_with_its_reply_budget(env, mon
     root = taught(env)
     monkeypatch.setenv("TE_STUDENT_URL", "http://127.0.0.1:8080/v1")
     built = scoring(monkeypatch)
-    watch = ["watch", "--skills", "washer_done", "--clip", str(write_clip(env / "clip", n=3))]
+    watch = ["watch", "--skills", "burner_left_on", "--clip", str(write_clip(env / "clip", n=3))]
     assert cli.main(watch) == 0
     monkeypatch.setenv("TE_STUDENT_MAX_TOKENS", "900")
     monkeypatch.setenv("TE_SYSTEM_IN_USER", "1")  # for new datasets: this one is not folded
@@ -188,7 +188,7 @@ def test_watch_asks_the_student_as_it_was_trained_with_its_reply_budget(env, mon
     assert built == [{"max_tokens": 512, "system_in_user": False},
                      {"max_tokens": 900, "system_in_user": False},
                      {"max_tokens": 2048, "system_in_user": False}]
-    manifest_path = root / "dataset/washer_done-teach.manifest.json"
+    manifest_path = root / "dataset/burner_left_on-teach.manifest.json"
     manifest = json.loads(manifest_path.read_text())
     manifest_path.write_text(json.dumps({**manifest, "system_in_user": True}))
     built.clear()
@@ -199,7 +199,7 @@ def test_watch_asks_the_student_as_it_was_trained_with_its_reply_budget(env, mon
     bundle = env / "data/train/exp1-mixed"
     bundle.mkdir(parents=True)
     (bundle / "manifest.json").write_text(json.dumps(
-        {"skills": {"washer_done": "x"}, "system_in_user": False}))
+        {"skills": {"burner_left_on": "x"}, "system_in_user": False}))
     assert cli.main([*watch, "--run", "exp1-mixed"]) == 0  # what the run trained on wins
     assert built[-1]["system_in_user"] is False
     with pytest.raises(SystemExit):
@@ -212,17 +212,17 @@ def test_a_skill_wide_calibrate_says_when_te_serve_uses_the_served_run_s(env, ca
     taught(env)
     log, labels = env / "replay.jsonl", env / "labels.json"
     probs = [0.6 if i % 1800 < 3 else 0.2 for i in range(3600)] + [0.9] * 30
-    log.write_text("".join(json.dumps({"t": float(i), "skill": "washer_done", "p": p}) + "\n"
+    log.write_text("".join(json.dumps({"t": float(i), "skill": "burner_left_on", "p": p}) + "\n"
                            for i, p in enumerate(probs)))
     labels.write_text(json.dumps({"true": [[3600, 3630]]}))
-    calibrate = ["calibrate", "--skill", "washer_done", "--log", str(log), "--labels",
+    calibrate = ["calibrate", "--skill", "burner_left_on", "--log", str(log), "--labels",
                  str(labels)]
     assert cli.main(calibrate) == 0
     assert "te serve scores" not in capsys.readouterr().out  # nothing served: no note
-    runs.write_status(env / "data", "exp1-mixed", "done", ["washer_done"],
+    runs.write_status(env / "data", "exp1-mixed", "done", ["burner_left_on"],
                       started="2026-11-03T10:00:00Z", finished="2026-11-03T11:00:00Z")
     runs.write_serving(env / "data", "exp1-mixed")
-    run_file = env / "data/watch/exp1-mixed/washer_done/threshold.json"
+    run_file = env / "data/watch/exp1-mixed/burner_left_on/threshold.json"
     run_file.parent.mkdir(parents=True)
     run_file.write_text('{"threshold": 0.8}')
     assert cli.main(calibrate) == 0
@@ -237,11 +237,11 @@ def test_watch_with_spark_as_the_scorer_prices_and_asks_first(env, monkeypatch, 
     use_transport(monkeypatch, fake)
     clip = write_clip(env / "clip", n=4)
     prompts = answer(monkeypatch, "n")
-    assert cli.main(["watch", "--skills", "washer_done", "--clip", str(clip),
+    assert cli.main(["watch", "--skills", "burner_left_on", "--clip", str(clip),
                      "--scorer", "spark"]) == 1
     assert prompts and fake.calls == {}  # nothing paid before the yes
     log = env / "replay.jsonl"
-    assert cli.main(["watch", "--skills", "washer_done", "--clip", str(clip), "--scorer",
+    assert cli.main(["watch", "--skills", "burner_left_on", "--clip", str(clip), "--scorer",
                      "spark", "--yes", "--no-cloud", "--log", str(log)]) == 0
     out = capsys.readouterr().out
     assert "Muse Spark on 4 frames x 1 skills" in out and '"frames": 4' in out

@@ -36,15 +36,15 @@ def test_costs():
 def test_record_and_totals(tmp_path):
     ledger = Ledger(tmp_path / "ledger.jsonl", skill_cap_usd=10, global_cap_usd=120)
     assert ledger.spent() == 0 and ledger.entries() == []
-    ledger.record(Entry("muse-spark-1.3", "/responses", 0.02, 0.01, skill="washer_done"))
-    ledger.record(Entry("muse-image-1.0", "/images/edits", 0.01, 0.01, skill="washer_done"))
+    ledger.record(Entry("muse-spark-1.3", "/responses", 0.02, 0.01, skill="burner_left_on"))
+    ledger.record(Entry("muse-image-1.0", "/images/edits", 0.01, 0.01, skill="burner_left_on"))
     ledger.record(Entry("sam-3.1", "/responses", 0.0025, 0.0, status="error"))
     t = ledger.totals()
     assert t["calls"] == 3 and t["errors"] == 1
     assert t["actual_usd"] == pytest.approx(0.02)
-    assert t["by_skill"]["washer_done"]["calls"] == 2
+    assert t["by_skill"]["burner_left_on"]["calls"] == 2
     assert t["by_model"]["sam-3.1"]["usd"] == 0.0
-    assert ledger.spent("washer_done") == pytest.approx(0.02)
+    assert ledger.spent("burner_left_on") == pytest.approx(0.02)
 
 
 def test_caps(tmp_path):
@@ -62,24 +62,24 @@ def test_caps(tmp_path):
 def test_report(tmp_path):
     ledger = Ledger(tmp_path / "ledger.jsonl", skill_cap_usd=10, global_cap_usd=120)
     assert "(no calls yet)" in format_report(ledger)
-    ledger.record(Entry("muse-spark-1.3", "/responses", 0.002, 0.0015, skill="washer_done"))
+    ledger.record(Entry("muse-spark-1.3", "/responses", 0.002, 0.0015, skill="burner_left_on"))
     report = format_report(ledger)
-    assert "calls: 1" in report and "washer_done" in report and "$0.0015" in report
+    assert "calls: 1" in report and "burner_left_on" in report and "$0.0015" in report
 
 
 def test_report_columns_line_up_for_long_skill_names(tmp_path):
     ledger = Ledger(tmp_path / "ledger.jsonl", skill_cap_usd=10, global_cap_usd=120)
     long_name = "dishwasher_cycle_finished_light_on_front"  # 40 characters, the longest
-    for skill in (long_name, "washer_done", "washer_done"):
+    for skill in (long_name, "burner_left_on", "burner_left_on"):
         ledger.record(Entry("muse-spark-1.3", "/chat/completions", 0.002, 0.0015, skill=skill))
     rows = format_report(ledger).split("by skill:\n")[1].splitlines()
     assert len({row.index("$") for row in rows}) == 1
-    assert "    1 call " in rows[0] and "    2 calls " in rows[1]
+    assert "    2 calls " in rows[0] and "    1 call " in rows[1]  # sorted by name
 
 
 def test_spend_command(tmp_path, monkeypatch, capsys):
     ledger = Ledger(tmp_path / "ledger.jsonl", skill_cap_usd=10, global_cap_usd=120)
-    ledger.record(Entry("muse-spark-1.3", "/responses", 0.002, 0.0015, skill="washer_done"))
+    ledger.record(Entry("muse-spark-1.3", "/responses", 0.002, 0.0015, skill="burner_left_on"))
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("TE_DATA_DIR", str(tmp_path))
     assert main(["spend"]) == 0

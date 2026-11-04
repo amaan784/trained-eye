@@ -68,7 +68,7 @@ def test_serve_student_records_the_served_run_and_stop_clears_it(env, monkeypatc
     monkeypatch.setattr(cli.subprocess, "run",
                         lambda command, **kw: subprocess.CompletedProcess(command, codes.pop(0)))
     monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/" + name)
-    runs.write_status(env / "data", "exp1-mixed", "done", ["washer_done"],
+    runs.write_status(env / "data", "exp1-mixed", "done", ["burner_left_on"],
                       started="2026-11-03T10:00:00Z", finished="2026-11-03T11:00:00Z")
     codes[:] = [1]
     assert cli.main(["serve-student", "--run", "exp1-mixed", "--yes"]) == 1
@@ -76,9 +76,9 @@ def test_serve_student_records_the_served_run_and_stop_clears_it(env, monkeypatc
     codes[:] = [0]
     assert cli.main(["serve-student", "--run", "exp1-mixed", "--yes"]) == 0
     serving = json.loads((env / "data/train/serving.json").read_text())
-    assert serving["run"] == "exp1-mixed" and serving["skills"] == ["washer_done"]
+    assert serving["run"] == "exp1-mixed" and serving["skills"] == ["burner_left_on"]
     assert serving["deployed"].endswith("Z")
-    assert "run exp1-mixed serves washer_done" in capsys.readouterr().out
+    assert "run exp1-mixed serves burner_left_on" in capsys.readouterr().out
     codes[:] = [1]
     assert cli.main(["serve-student", "--stop"]) == 1  # not stopped: still served
     assert (env / "data/train/serving.json").exists()

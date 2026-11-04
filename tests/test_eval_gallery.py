@@ -11,7 +11,7 @@ from backend.eval import gallery
 from backend.eval.report import run_eval
 
 
-def rows(ps, skill="washer_done", threshold=0.6, step=1.0):
+def rows(ps, skill="burner_left_on", threshold=0.6, step=1.0):
     return [{"t": i * step, "skill": skill, "p": p, "threshold": threshold,
              "over": p is not None and p >= threshold} for i, p in enumerate(ps)]
 
@@ -23,12 +23,12 @@ def test_pick_takes_the_worst_frames_spread_apart():
         ps[t] = 0.8
     ps[21], ps[22], ps[28] = 0.1, 0.15, 0.3  # misses
     ps[25] = None  # a student error is neither
-    alarms, misses = gallery.pick(rows(ps), "washer_done", [[20, 29]], size=3)
+    alarms, misses = gallery.pick(rows(ps), "burner_left_on", [[20, 29]], size=3)
     assert [r["t"] for r in alarms] == [3.0, 12.0, 30.0]  # 4.0 is under 5 s from 3.0
     assert [r["t"] for r in misses] == [21.0, 28.0]  # 22.0 is too close to 21.0
-    alarms, _ = gallery.pick(rows(ps), "washer_done", [[20, 29]], size=1, gap_s=0)
+    alarms, _ = gallery.pick(rows(ps), "burner_left_on", [[20, 29]], size=1, gap_s=0)
     assert [r["t"] for r in alarms] == [3.0]
-    assert gallery.pick(rows(ps), "boil_over", [[20, 29]], size=3) == ([], [])
+    assert gallery.pick(rows(ps), "fridge_left_open", [[20, 29]], size=3) == ([], [])
 
 
 def test_frame_step_and_finding_the_clip(tmp_path):
@@ -65,7 +65,7 @@ def write_log(path, ps):
 
 
 def test_te_eval_writes_a_gallery_page_per_run_reading_each_clip_once(tmp_path, monkeypatch):
-    clips = tmp_path / "data/clips/washer_done"
+    clips = tmp_path / "data/clips/burner_left_on"
     frame_folder(clips / "session3_test_a", 60)
     (clips / "session3_test_a.labels.json").write_text(json.dumps({"true": [[30, 45]]}))
     watch = tmp_path / "data/watch"
@@ -74,17 +74,17 @@ def test_te_eval_writes_a_gallery_page_per_run_reading_each_clip_once(tmp_path, 
         for t in range(30, 46):
             ps[t] = 0.9
         ps[alarm], ps[miss] = 0.8, 0.1
-        (watch / run / "washer_done").mkdir(parents=True)
-        write_log(watch / run / "washer_done/session3_test_a.jsonl", ps)
+        (watch / run / "burner_left_on").mkdir(parents=True)
+        write_log(watch / run / "burner_left_on/session3_test_a.jsonl", ps)
     stale = tmp_path / "eval/galleries/exp1-old"
     stale.mkdir(parents=True)
 
     def evaluation(run):
-        return {"name": f"{run}-washer_done", "experiment": 1, "skill": "washer_done",
+        return {"name": f"{run}-burner_left_on", "experiment": 1, "skill": "burner_left_on",
                 "variant": run.removeprefix("exp1-"), "run": run, "clips": [{
-                    "clip": "../data/clips/washer_done/session3_test_a",
-                    "log": f"../data/watch/{run}/washer_done/session3_test_a.jsonl",
-                    "labels": "../data/clips/washer_done/session3_test_a.labels.json"}]}
+                    "clip": "../data/clips/burner_left_on/session3_test_a",
+                    "log": f"../data/watch/{run}/burner_left_on/session3_test_a.jsonl",
+                    "labels": "../data/clips/burner_left_on/session3_test_a.labels.json"}]}
 
     plan = tmp_path / "eval/plan.json"
     plan.write_text(json.dumps({"evaluations": [
@@ -107,8 +107,8 @@ def test_te_eval_writes_a_gallery_page_per_run_reading_each_clip_once(tmp_path, 
     assert ignore.read_text().splitlines()[-1] == "*"
     folder = tmp_path / "eval/galleries/exp1-mixed"
     thumbs = sorted(p.name for p in folder.glob("*.jpg"))
-    assert thumbs == ["exp1-mixed-washer_done-session3_test_a-fa-01.jpg",
-                      "exp1-mixed-washer_done-session3_test_a-miss-01.jpg"]
+    assert thumbs == ["exp1-mixed-burner_left_on-session3_test_a-fa-01.jpg",
+                      "exp1-mixed-burner_left_on-session3_test_a-miss-01.jpg"]
     with Image.open(io.BytesIO((folder / thumbs[0]).read_bytes())) as img:
         assert max(img.size) == gallery.THUMB_PX and img.format == "JPEG"
         assert img.getpixel((5, 5))[0] in range(15, 26)  # frame 10: red 20, give or take JPEG
@@ -125,8 +125,8 @@ def test_without_the_clip_or_ffmpeg_the_page_lists_the_frames(tmp_path, monkeypa
     log = tmp_path / "a.jsonl"
     write_log(log, [0.9 if t in (3, 20) else 0.2 for t in range(30)])
     (tmp_path / "a.labels.json").write_text(json.dumps({"true": [[18, 25]]}))
-    entry = {"name": "exp1-mixed-washer_done", "experiment": 1, "status": "scored",
-             "skill": "washer_done", "variant": "mixed", "run": "exp1-mixed",
+    entry = {"name": "exp1-mixed-burner_left_on", "experiment": 1, "status": "scored",
+             "skill": "burner_left_on", "variant": "mixed", "run": "exp1-mixed",
              "clips": [{"log": "a.jsonl", "labels": "a.labels.json"}]}
     found = gallery.write_galleries({"evaluations": [entry]}, tmp_path, out)
     assert found["exp1-mixed"] == {"page": "galleries/exp1-mixed/index.html",

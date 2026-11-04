@@ -19,7 +19,7 @@ def test_run_names_and_times():
 
 
 def test_a_status_is_written_atomically_and_read_back(tmp_path):
-    status = runs.write_status(tmp_path, "exp1-mixed", "running", ["pot_boils", "washer_done"],
+    status = runs.write_status(tmp_path, "exp1-mixed", "running", ["pot_boils", "burner_left_on"],
                                started="2026-11-03T10:00:00Z")
     path = tmp_path / "train/exp1-mixed.status.json"
     assert json.loads(path.read_text()) == status and status["pid"] == os.getpid()
@@ -42,15 +42,15 @@ def test_serving_lists_the_run_s_skills_from_its_status_or_bundle(tmp_path):
     assert runs.serving(tmp_path) is None
     bundle = tmp_path / "train/exp1-mixed"
     bundle.mkdir(parents=True)
-    (bundle / "manifest.json").write_text('{"skills": {"washer_done": "sha"}}')
+    (bundle / "manifest.json").write_text('{"skills": {"burner_left_on": "sha"}}')
     served = runs.write_serving(tmp_path, "exp1-mixed")
-    assert served["skills"] == ["washer_done"] and served["run"] == "exp1-mixed"
+    assert served["skills"] == ["burner_left_on"] and served["run"] == "exp1-mixed"
     assert runs.serving(tmp_path) == served
-    runs.write_status(tmp_path, "exp1-mixed", "done", ["pot_boils", "washer_done"],
+    runs.write_status(tmp_path, "exp1-mixed", "done", ["pot_boils", "burner_left_on"],
                       started="2026-11-03T10:00:00Z")
     path = runs.serving_path(tmp_path)
     path.write_text(json.dumps({"run": "exp1-mixed", "deployed": "x"}))  # as the contract
-    assert runs.serving(tmp_path)["skills"] == ["pot_boils", "washer_done"]
+    assert runs.serving(tmp_path)["skills"] == ["burner_left_on", "pot_boils"]
     path.write_text(json.dumps({"run": "../etc", "deployed": "x"}))
     assert runs.serving(tmp_path) is None
     assert not runs.serving_known(tmp_path / "elsewhere")

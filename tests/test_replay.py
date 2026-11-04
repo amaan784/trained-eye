@@ -107,7 +107,7 @@ def test_replay_clip_writes_the_log_only_when_frames_scored(tmp_path, monkeypatc
 
     skill = load_skill(skill_folder(tmp_path / "skills", SPEC))
     frames = load_frames(frame_folder(tmp_path / "clip", 4), fps=1.0)
-    job = replay.Job("washer_done", "test", tmp_path / "w/a.jsonl", tmp_path / "a.json",
+    job = replay.Job("burner_left_on", "test", tmp_path / "w/a.jsonl", tmp_path / "a.json",
                      tmp_path / "clip", "clip")
     fake_student(monkeypatch, fail=lambda i: i == 2)
     scoring = student.OpenAIStudent("http://x/v1", "m")
@@ -132,17 +132,17 @@ def env(tmp_path, monkeypatch):
 
 
 def recorded(env, labels=True):
-    """washer_done taught, a 30 s validation clip (true 10 to 20 s) and a 30 s test clip
+    """burner_left_on taught, a 30 s validation clip (true 10 to 20 s) and a 30 s test clip
     (true 15 to 25 s), and te experiments' plan for them."""
     taught(env)
-    clips = env / "data/clips/washer_done"
+    clips = env / "data/clips/burner_left_on"
     frame_folder(clips / "session2_a", 30)
     frame_folder(clips / "session3_test_a", 30)
     (clips / "session3_test_a.labels.json").write_text(json.dumps({"true": [[15, 25]]}))
     if labels:
         (clips / "session2_a.labels.json").write_text(json.dumps({"true": [[10, 20]]}))
     settings = config.load_settings(env={"TE_DATA_DIR": str(env / "data")}, env_file=None)
-    return write_plan(env / "eval/plan.json", plan_skeleton(["washer_done"], settings),
+    return write_plan(env / "eval/plan.json", plan_skeleton(["burner_left_on"], settings),
                       force=True)
 
 
@@ -152,9 +152,9 @@ def test_jobs_and_scorers_come_from_the_plan(env):
     jobs = replay.plan_jobs(plan, plan_path.parent, "exp1-mixed")
     assert [(j.kind, j.log.name) for j in jobs] == [("validation", "session2_a.jsonl"),
                                                     ("test", "session3_test_a.jsonl")]
-    assert jobs[1].evaluations == ["exp1-mixed-washer_done", "exp2-filtered-washer_done",
-                                   "exp4-finetuned-washer_done"]  # one replay, three reads
-    assert jobs[1].clip.resolve() == (env / "data/clips/washer_done/session3_test_a").resolve()
+    assert jobs[1].evaluations == ["exp1-mixed-burner_left_on", "exp2-filtered-burner_left_on",
+                                   "exp4-finetuned-burner_left_on"]  # one replay, three reads
+    assert jobs[1].clip.resolve() == (env / "data/clips/burner_left_on/session3_test_a").resolve()
     assert replay.plan_scorer(plan, "exp4-spark") == "spark"
     assert replay.plan_scorer(plan, "exp4-base") == "student"
     with pytest.raises(ValueError, match="with the spark scorer, not student"):
@@ -174,21 +174,21 @@ def test_te_replay_calibrates_the_run_then_replays_its_test_clips(env, monkeypat
     seen = fake_student(monkeypatch, true=lambda i: 10 <= i <= 25)
     assert cli.main(replay_cmd) == 0  # the validation labels are missing: tests held back
     out = capsys.readouterr().out
-    watch = env / "data/watch/exp1-mixed/washer_done"
+    watch = env / "data/watch/exp1-mixed/burner_left_on"
     assert (watch / "session2_a.jsonl").is_file() and not (watch / "threshold.json").exists()
     assert not (watch / "session3_test_a.jsonl").exists()
-    assert "held back: exp1-mixed has no threshold for washer_done yet" in out
+    assert "held back: exp1-mixed has no threshold for burner_left_on yet" in out
     assert "no labels yet: te label --clip" in out
     assert seen[:3] == [("built", "trained-eye"), 0, 0]  # the warm-up frame, then the clip
 
-    labels = env / "data/clips/washer_done/session2_a.labels.json"
+    labels = env / "data/clips/burner_left_on/session2_a.labels.json"
     labels.write_text(json.dumps({"true": [[10, 20]]}))
     seen.clear()
     assert cli.main(replay_cmd) == 0
     out = capsys.readouterr().out
     threshold = json.loads((watch / "threshold.json").read_text())
     assert threshold["run"] == "exp1-mixed" and threshold["threshold"] == 0.9
-    assert "washer_done for run exp1-mixed: threshold 0.900" in out
+    assert "burner_left_on for run exp1-mixed: threshold 0.900" in out
     rows = [json.loads(line) for line in (watch / "session3_test_a.jsonl").read_text()
             .splitlines()]
     assert {(r["run"], r["threshold"], r["threshold_source"]) for r in rows} == {
@@ -202,14 +202,14 @@ def test_te_replay_calibrates_the_run_then_replays_its_test_clips(env, monkeypat
     results = run_eval(plan, env / "eval")
     by_name = {e["name"]: e for e in results["evaluations"]}
     for name in ("exp1-mixed", "exp2-filtered", "exp4-finetuned"):
-        e = by_name[f"{name}-washer_done"]
+        e = by_name[f"{name}-burner_left_on"]
         assert e["status"] == "scored" and e["threshold"] == {"values": [0.9],
                                                               "sources": ["run"]}
-    assert by_name["exp1-real-washer_done"]["status"] == "pending"
+    assert by_name["exp1-real-burner_left_on"]["status"] == "pending"
 
     (watch / "threshold.json").write_text(json.dumps({**threshold, "threshold": 0.5}))
     assert cli.main(replay_cmd) == 0  # calibrated again by hand: the test log is stale
-    assert ("scored at 0.900, but exp1-mixed's threshold for washer_done is 0.500 now: "
+    assert ("scored at 0.900, but exp1-mixed's threshold for burner_left_on is 0.500 now: "
             "delete this log") in capsys.readouterr().out
 
 
@@ -257,7 +257,7 @@ def test_te_replay_with_spark_prices_and_asks_first(env, monkeypatch, capsys):
     assert prompts and fake.calls == {}  # nothing paid before the yes
     assert "Muse Spark on 30 frames of 1 clip:" in capsys.readouterr().out
     assert cli.main([*replay_cmd, "--yes", "--no-cloud"]) == 0
-    log = env / "data/watch/exp4-spark/washer_done/session3_test_a.jsonl"
+    log = env / "data/watch/exp4-spark/burner_left_on/session3_test_a.jsonl"
     rows = [json.loads(line) for line in log.read_text().splitlines()]
     assert {(r["p"], r["threshold"], r["threshold_source"]) for r in rows} == {
         (1.0, 1.0, "spark")}
@@ -272,12 +272,12 @@ def test_labels_added_later_recalibrate_the_run(env, monkeypatch, capsys):
     fake_student(monkeypatch, true=lambda i: 10 <= i <= 25)
     cmd = ["replay", "--plan", str(plan), "--run", "exp1-mixed"]
     assert cli.main(cmd) == 0
-    threshold = env / "data/watch/exp1-mixed/washer_done/threshold.json"
+    threshold = env / "data/watch/exp1-mixed/burner_left_on/threshold.json"
     assert [c["log"] for c in json.loads(threshold.read_text())["clips"]] == ["session2_a.jsonl"]
-    clips = env / "data/clips/washer_done"
+    clips = env / "data/clips/burner_left_on"
     frame_folder(clips / "session2_b", 30)  # recorded later, labelled after its replay
     settings = config.load_settings(env={"TE_DATA_DIR": str(env / "data")}, env_file=None)
-    write_plan(plan, plan_skeleton(["washer_done"], settings), force=True)
+    write_plan(plan, plan_skeleton(["burner_left_on"], settings), force=True)
     assert cli.main(cmd) == 0
     (clips / "session2_b.labels.json").write_text(json.dumps({"true": [[0, 5]]}))
     capsys.readouterr()
@@ -295,15 +295,15 @@ def test_a_failed_recalibration_holds_the_test_clips(env, monkeypatch, capsys):
     fake_student(monkeypatch, true=lambda i: 10 <= i <= 25)
     cmd = ["replay", "--plan", str(plan), "--run", "exp1-mixed"]
     assert cli.main(cmd) == 0
-    clips = env / "data/clips/washer_done"
+    clips = env / "data/clips/burner_left_on"
     frame_folder(clips / "session2_b", 30)
     (clips / "session2_b.labels.json").write_text(json.dumps({"true": [[20, 10]]}))  # a typo
     frame_folder(clips / "session3_test_b", 30)
     (clips / "session3_test_b.labels.json").write_text(json.dumps({"true": [[15, 25]]}))
     settings = config.load_settings(env={"TE_DATA_DIR": str(env / "data")}, env_file=None)
-    write_plan(plan, plan_skeleton(["washer_done"], settings), force=True)
+    write_plan(plan, plan_skeleton(["burner_left_on"], settings), force=True)
     capsys.readouterr()
     assert cli.main(cmd) == 1
     out = capsys.readouterr().out
-    assert "te calibrate --run exp1-mixed failed for washer_done" in out
-    assert not (env / "data/watch/exp1-mixed/washer_done/session3_test_b.jsonl").exists()
+    assert "te calibrate --run exp1-mixed failed for burner_left_on" in out
+    assert not (env / "data/watch/exp1-mixed/burner_left_on/session3_test_b.jsonl").exists()

@@ -12,20 +12,20 @@ from tests.test_training_prep import teach_dataset
 
 def test_the_plan_skeleton_is_what_te_eval_reads(tmp_path):
     settings = load_settings(env={"TE_DATA_DIR": str(tmp_path / "data")}, env_file=None)
-    Plan.model_validate(plan_skeleton(["washer_done", "boil_over"], settings))  # before data
-    skill = teach_dataset(settings.data_dir / "skills", "washer_done")
+    Plan.model_validate(plan_skeleton(["burner_left_on", "fridge_left_open"], settings))  # before data
+    skill = teach_dataset(settings.data_dir / "skills", "burner_left_on")
     (skill / "label_stats.json").write_text(json.dumps({"total": 50, "kept": 40}))
-    clips = settings.data_dir / "clips" / "washer_done"
+    clips = settings.data_dir / "clips" / "burner_left_on"
     clips.mkdir(parents=True)
     (clips / "session3_test_a.mp4").write_bytes(b"")
     (clips / "session3_test_a.labels.json").write_text('{"true": []}')
-    plan = plan_skeleton(["washer_done"], settings)
+    plan = plan_skeleton(["burner_left_on"], settings)
     Plan.model_validate(plan)
-    entries = {e["name"].removesuffix("-washer_done"): e for e in plan["evaluations"]}
+    entries = {e["name"].removesuffix("-burner_left_on"): e for e in plan["evaluations"]}
     assert len(entries) == 13 and entries["exp1-mixed"]["clips"] == [{
-        "clip": "../data/clips/washer_done/session3_test_a.mp4",
-        "log": "../data/watch/exp1-mixed/washer_done/session3_test_a.jsonl",
-        "labels": "../data/clips/washer_done/session3_test_a.labels.json",
+        "clip": "../data/clips/burner_left_on/session3_test_a.mp4",
+        "log": "../data/watch/exp1-mixed/burner_left_on/session3_test_a.jsonl",
+        "labels": "../data/clips/burner_left_on/session3_test_a.labels.json",
         "timeline": True}]  # from eval/
     check = entries["exp1-mixed"]["spark_usd_per_check"]
     assert entries["exp3-25"]["generation_usd"] == round(25 * 50 / 40 * (0.01 + check), 4)
@@ -43,31 +43,31 @@ def test_same_models_share_their_replays_and_every_run_calibrates_its_own(tmp_pa
     from tests.test_realclips import SPEC, skill_folder
 
     settings = load_settings(env={"TE_DATA_DIR": str(tmp_path / "data")}, env_file=None)
-    blank = plan_skeleton(["washer_done"], settings)  # nothing recorded: protocol names
+    blank = plan_skeleton(["burner_left_on"], settings)  # nothing recorded: protocol names
     first = blank["evaluations"][0]["clips"][0]
-    assert first["clip"] == "../data/clips/washer_done/session3_test_a.mp4"
-    assert blank["calibration"][0]["clips"][0]["clip"] == ("../data/clips/washer_done/"
+    assert first["clip"] == "../data/clips/burner_left_on/session3_test_a.mp4"
+    assert blank["calibration"][0]["clips"][0]["clip"] == ("../data/clips/burner_left_on/"
                                                           "session2_a.mp4")
     assert "alert_text" not in blank["evaluations"][0]  # no spec.json yet: the default
     skills = settings.data_dir / "skills"
-    teach_dataset(skills, "washer_done")
+    teach_dataset(skills, "burner_left_on")
     skill_folder(skills, SPEC)
-    clips = settings.data_dir / "clips" / "washer_done"
+    clips = settings.data_dir / "clips" / "burner_left_on"
     clips.mkdir(parents=True)
     for name in ("session3_test_a.mp4", "session3_test_b.mp4", "session2_x.mp4",
                  "session1_y.mp4"):
         (clips / name).write_bytes(b"")
-    plan = plan_skeleton(["washer_done"], settings)
+    plan = plan_skeleton(["burner_left_on"], settings)
     Plan.model_validate(plan)
-    entries = {e["name"].removesuffix("-washer_done"): e for e in plan["evaluations"]}
+    entries = {e["name"].removesuffix("-burner_left_on"): e for e in plan["evaluations"]}
     runs = {name: e["run"] for name, e in entries.items()}
     assert runs["exp2-filtered"] == runs["exp4-finetuned"] == "exp1-mixed"
     assert runs["exp3-50"] == runs["exp3-300"] == "exp1-synthetic"  # 40 images is all
     assert runs["exp3-25"] == "exp3-25" and runs["exp4-base"] == "exp4-base"
     logs = {name: [c["log"] for c in e["clips"]] for name, e in entries.items()}
     assert logs["exp2-filtered"] == logs["exp4-finetuned"] == logs["exp1-mixed"] == [
-        "../data/watch/exp1-mixed/washer_done/session3_test_a.jsonl",
-        "../data/watch/exp1-mixed/washer_done/session3_test_b.jsonl"]
+        "../data/watch/exp1-mixed/burner_left_on/session3_test_a.jsonl",
+        "../data/watch/exp1-mixed/burner_left_on/session3_test_b.jsonl"]
     timelines = {name: [bool(c.get("timeline")) for c in e["clips"]]
                  for name, e in entries.items()}
     assert timelines["exp1-mixed"] == timelines["exp4-finetuned"] == [True, False]
@@ -80,6 +80,6 @@ def test_same_models_share_their_replays_and_every_run_calibrates_its_own(tmp_pa
     assert list(calibration) == ["exp1-real", "exp1-synthetic", "exp1-mixed", "exp2-unfiltered",
                                  "exp3-25", "exp4-base"]  # each replayed student; not Spark
     assert calibration["exp4-base"]["clips"] == [{
-        "clip": "../data/clips/washer_done/session2_x.mp4",
-        "log": "../data/watch/exp4-base/washer_done/session2_x.jsonl",
-        "labels": "../data/clips/washer_done/session2_x.labels.json"}]  # session 2 only
+        "clip": "../data/clips/burner_left_on/session2_x.mp4",
+        "log": "../data/watch/exp4-base/burner_left_on/session2_x.jsonl",
+        "labels": "../data/clips/burner_left_on/session2_x.labels.json"}]  # session 2 only

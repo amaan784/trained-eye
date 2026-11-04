@@ -70,13 +70,13 @@ def test_unusable_hand_labels_are_refused(tmp_path, content, message):
 @pytest.fixture
 def taught(tmp_path):
     """A finished fake teach run: Spark disagrees with some generated positives."""
-    opts = TeachOptions(skill="washer_done", clip=clip(tmp_path / "clip"),
+    opts = TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"),
                         request="let me know when the washer says done", positives=12,
                         negatives=12)
     report = run_teach(client_for(tmp_path, FakeMeta()), opts, tmp_path / "skills",
                        confirm=lambda s: True, say=lambda s: None)
     assert report["label_stats"]["kept"] < 24
-    return tmp_path / "skills" / "washer_done"
+    return tmp_path / "skills" / "burner_left_on"
 
 
 def index(manifest):
@@ -86,11 +86,11 @@ def index(manifest):
 def test_the_unfiltered_arm_keeps_every_generated_image_with_its_intended_label(taught,
                                                                                tmp_path):
     rows = [json.loads(x) for x in (taught / "labels.jsonl").read_text().splitlines()]
-    teach = index(json.loads((taught / "dataset/washer_done-teach.manifest.json").read_text()))
+    teach = index(json.loads((taught / "dataset/burner_left_on-teach.manifest.json").read_text()))
     manifest = write_unfiltered_dataset(taught)
     ours = index(manifest)
-    assert manifest["name"] == "washer_done-teach"
-    assert (taught / "dataset-unfiltered/washer_done-teach.jsonl").is_file()
+    assert manifest["name"] == "burner_left_on-teach"
+    assert (taught / "dataset-unfiltered/burner_left_on-teach.jsonl").is_file()
     real = {k: v for k, v in teach.items() if v["source"] == "real"}
     assert {k: v for k, v in ours.items() if v["source"] == "real"} == real
     intended = sorted(r["label"] for r in rows if r["source"] == "synthetic")
@@ -114,19 +114,19 @@ def test_the_unfiltered_arm_keeps_every_generated_image_with_its_intended_label(
 def test_the_unfiltered_arm_needs_a_finished_teach_run_with_model_outputs(taught, tmp_path):
     with pytest.raises(ValueError, match="model outputs is off"):
         write_unfiltered_dataset(taught, train_on_model_outputs=False)
-    (tmp_path / "skills/boil_over").mkdir()
+    (tmp_path / "skills/fridge_left_open").mkdir()
     with pytest.raises(ValueError, match="no finished teach run"):
-        write_unfiltered_dataset(tmp_path / "skills/boil_over")
+        write_unfiltered_dataset(tmp_path / "skills/fridge_left_open")
 
 
 def test_the_unfiltered_arm_puts_the_system_prompt_where_te_teach_did(taught):
-    manifest = taught / "dataset/washer_done-teach.manifest.json"
+    manifest = taught / "dataset/burner_left_on-teach.manifest.json"
     assert write_unfiltered_dataset(taught, system_in_user=False)["system_in_user"] is False
     teach = json.loads(manifest.read_text())
     manifest.write_text(json.dumps({**teach, "system_in_user": True}))  # as if folded
     folded = write_unfiltered_dataset(taught)  # no setting given: follow te teach
     assert folded["system_in_user"] is True
-    record = json.loads((taught / "dataset-unfiltered/washer_done-teach.jsonl").read_text()
+    record = json.loads((taught / "dataset-unfiltered/burner_left_on-teach.jsonl").read_text()
                         .splitlines()[0])
     assert [m["role"] for m in record["messages"]] == ["user", "assistant"]
     with pytest.raises(ValueError, match="TE_SYSTEM_IN_USER=1, but it is 0 now"):

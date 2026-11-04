@@ -16,7 +16,7 @@ from backend.watch.trigger import Trigger
 from backend.watch.watcher import FrameLog, WatchedSkill, Watcher
 from tests.test_teach import chat, client_for, png
 
-SPEC = SkillSpec(name="washer_done", request="tell me when the washer says End",
+SPEC = SkillSpec(name="burner_left_on", request="tell me when the washer says End",
                  target=Target(sam_prompt="washer display", description="the washer display"),
                  positive="the display shows End", negatives=["display off"],
                  alert="Laundry's done.", confirm_with_cloud=False)
@@ -66,7 +66,7 @@ def test_spark_labels_become_probabilities_and_are_billed_to_the_skill(tmp_path,
     assert (score.p, score.answer, score.cached) == (p, answer, False)
     assert score.latency_s == pytest.approx(0.75) and score.latency_measured
     assert score.cost_usd > 0
-    assert [e["skill"] for e in client.ledger.entries()] == ["washer_done"]
+    assert [e["skill"] for e in client.ledger.entries()] == ["burner_left_on"]
 
 
 def test_a_cached_frame_reports_the_latency_measured_when_it_was_sent(tmp_path):

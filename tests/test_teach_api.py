@@ -58,7 +58,7 @@ def audio(tmp_path):
     return wav(tmp_path / "request.wav").read_bytes()
 
 
-def start(api, frames, skill="washer_done", audio=None, **fields):
+def start(api, frames, skill="burner_left_on", audio=None, **fields):
     files = [("frames", (f"{i}.jpg", data, "image/jpeg")) for i, data in enumerate(frames)]
     if audio:
         files.append(("audio", ("request.wav", audio, "audio/wav")))
@@ -67,11 +67,11 @@ def start(api, frames, skill="washer_done", audio=None, **fields):
 
 
 def answer(api, step, yes, **extra):
-    return api.post("/teach/answer", json={"skill": "washer_done", "step": step, "yes": yes,
+    return api.post("/teach/answer", json={"skill": "burner_left_on", "step": step, "yes": yes,
                                            **extra})
 
 
-def wait(api, until, skill="washer_done", timeout=30.0):
+def wait(api, until, skill="burner_left_on", timeout=30.0):
     deadline = time.monotonic() + timeout
     while True:
         status = api.get("/teach/status", params={"skill": skill}).json()
@@ -89,7 +89,7 @@ def test_a_full_run_from_the_phone(api, fake, settings, frames, audio):
     assert 0 < body["estimate"]["total"] < body["estimate"]["at_most"] < 15
     assert fake.calls == {}  # nothing is paid before the spend is agreed
     capture = Path(body["capture"]).resolve()
-    assert capture.parent == (settings.data_dir / "teach" / "washer_done").resolve()
+    assert capture.parent == (settings.data_dir / "teach" / "burner_left_on").resolve()
     assert sorted(p.name for p in capture.iterdir()) == [
         *(f"f{i:03d}.jpg" for i in range(len(frames))), "request.wav"]
     assert (capture / "f000.jpg").read_bytes() == frames[0]
@@ -103,7 +103,7 @@ def test_a_full_run_from_the_phone(api, fake, settings, frames, audio):
     assert done["state"] == "done", done
     summary = done["summary"]
     assert summary["yes"] and summary["no"] and summary["generated"] == fake.edits == 12
-    assert (settings.data_dir / "skills/washer_done/dataset/washer_done-teach.jsonl").is_file()
+    assert (settings.data_dir / "skills/burner_left_on/dataset/burner_left_on-teach.jsonl").is_file()
     assert any(line.startswith("dataset:") for line in done["lines"])
     assert done["spent_usd"] == pytest.approx(MetaClient(settings).ledger.spent(), abs=1e-4)
     assert done["spent_usd"] > 0 and done["stopped"] is None and done["error"] is None
@@ -130,14 +130,14 @@ def test_a_correction_at_the_read_back_compiles_again(api, fake, settings, frame
     stopped = wait(api, ended)
     assert stopped["state"] == "stopped" and stopped["stopped"] == "not confirmed"
     assert "/images/edits" not in fake.calls
-    request = json.loads((settings.data_dir / "skills/washer_done/request.json").read_text())
+    request = json.loads((settings.data_dir / "skills/burner_left_on/request.json").read_text())
     assert request["correction"] == "the light on the lid"
 
 
 def test_one_session_at_a_time_and_answers_must_fit(api, frames):
     assert start(api, frames, request=REQUEST).status_code == 200
     second = start(api, frames, skill="pot_boils", request="tell me when the pot boils over")
-    assert second.status_code == 409 and "washer_done" in second.json()["error"]
+    assert second.status_code == 409 and "burner_left_on" in second.json()["error"]
     wrong = answer(api, "read_back", True)
     assert wrong.status_code == 409 and "waiting_spend" in wrong.json()["error"]
     assert answer(api, "spend", True, correction="the lid").status_code == 400
@@ -157,9 +157,9 @@ def test_a_run_over_the_ask_limit_is_refused(api, fake, frames):
     assert refused.status_code == 422
     body = refused.json()
     assert body["estimate"]["at_most"] > 15
-    assert "te teach --skill washer_done --clip " in body["error"]
+    assert "te teach --skill burner_left_on --clip " in body["error"]
     assert "--positives 600 --negatives 600" in body["error"]
-    assert api.get("/teach/status", params={"skill": "washer_done"}).status_code == 404
+    assert api.get("/teach/status", params={"skill": "burner_left_on"}).status_code == 404
     assert fake.calls == {}
 
 
@@ -176,7 +176,7 @@ def test_bad_inputs_are_refused_before_anything_is_saved(api, fake, settings, fr
         "bad name": lambda: start(api, frames, skill="Washer Done", request=REQUEST),
         "no request": lambda: start(api, frames),
         "no frames": lambda: start(api, [], audio=audio),
-        "not multipart": lambda: api.post("/teach/start", json={"skill": "washer_done"}),
+        "not multipart": lambda: api.post("/teach/start", json={"skill": "burner_left_on"}),
         "policy": lambda: start(api, frames, request="tell me when Sam gets here"),
     }[case]()
     assert reply.status_code == status and message in reply.json()["error"], reply.text
@@ -187,7 +187,7 @@ def test_the_teach_routes_need_the_server_token(fake, settings, frames):
     app = Starlette(routes=teach_routes(lambda: settings, meta_for(fake)))
     with TestClient(app) as bare:
         for reply in (bare.get("/teach/status"), start(bare, frames, request=REQUEST),
-                      bare.post("/teach/answer", json={"skill": "washer_done"}),
+                      bare.post("/teach/answer", json={"skill": "burner_left_on"}),
                       bare.get("/teach/status", headers={"Authorization": "Bearer nope"})):
             assert reply.status_code == 401 and "SERVER_TOKEN" in reply.json()["error"]
     off = load_settings(env={"TE_DATA_DIR": str(settings.data_dir), "MODEL_API_KEY": "sk-test"},
@@ -208,7 +208,7 @@ def test_the_teach_routes_need_the_server_token(fake, settings, frames):
 def test_odd_answers_are_refused(api, frames):
     assert start(api, frames, request=REQUEST).status_code == 200
     for step in (["spend"], {"a": 1}):
-        reply = api.post("/teach/answer", json={"skill": "washer_done", "step": step, "yes": True})
+        reply = api.post("/teach/answer", json={"skill": "burner_left_on", "step": step, "yes": True})
         assert reply.status_code == 400 and "step must be" in reply.json()["error"]
     assert api.post("/teach/answer", content=b"[" * 50_000).status_code == 400
     big = api.post("/teach/answer", content=b" " * (65 * 1024))
@@ -231,7 +231,7 @@ def test_frames_that_are_not_camera_frames_and_endless_audio_are_refused(api, fa
     assert tall.json()["error"] == "frame 2: 8x4000 is not a camera frame"
     files = [("frames", (f"{i}.jpg", data, "image/jpeg")) for i, data in enumerate(frames)]
     for value in ("inf", "1e400", "nan"):
-        endless = api.post("/teach/start", data={"skill": "washer_done", "audio_s": value},
+        endless = api.post("/teach/start", data={"skill": "burner_left_on", "audio_s": value},
                            files=[*files, ("audio", ("request.m4a", b"m4a", "audio/mp4"))])
         assert endless.status_code == 400 and "audio_s must be a finite" in endless.text
     assert not (settings.data_dir / "teach").exists() and fake.calls == {}

@@ -12,7 +12,7 @@ def write_clip(folder, name, alert_at, true=(60, 90), n=120, over=None):
     """A frame log at 1 fps: over the threshold on `over` (default: the true range), an
     alert at `alert_at` (None for none), and its labels file."""
     over = range(true[0], true[1] + 1) if over is None else over
-    rows = [{"t": float(t), "skill": "washer_done", "threshold": 0.6,
+    rows = [{"t": float(t), "skill": "burner_left_on", "threshold": 0.6,
              "p": 0.9 if t in over else 0.2, "over": t in over, "fires": t == alert_at,
              "latency_s": 0.4, **({"alert": True, "cloud": "yes"} if t == alert_at else {})}
             for t in range(n)]
@@ -22,7 +22,7 @@ def write_clip(folder, name, alert_at, true=(60, 90), n=120, over=None):
 
 
 def evaluation(name, experiment, clip, **extra):
-    return {"name": name, "experiment": experiment, "skill": "washer_done",
+    return {"name": name, "experiment": experiment, "skill": "burner_left_on",
             "clips": [clip], **extra}
 
 
@@ -63,7 +63,7 @@ def test_run_eval_writes_results_tables_and_charts(plan, tmp_path):
     assert by_name["exp4-spark"]["cost_per_hour"]["total_usd"] == 10.8  # 3600 frames per hour
     assert by_name["exp4-base"]["status"] == "pending"
     assert by_name["exp4-base"]["gpu_usd_per_hour"] == 3.95  # from config
-    assert results["charts"] == {"1": ["exp1_bars.svg"], "3": ["exp3_washer_done.svg"],
+    assert results["charts"] == {"1": ["exp1_bars.svg"], "3": ["exp3_burner_left_on.svg"],
                                  "4": ["exp4_cost.svg"],
                                  "timelines": ["timeline_exp1-mixed_1.svg"]}
     for names in results["charts"].values():
@@ -75,9 +75,9 @@ def test_run_eval_writes_results_tables_and_charts(plan, tmp_path):
     two = md.split("## Experiment 2")[1].split("## Experiment 3")[0]
     assert "No runs yet: the plan has no evaluations for this experiment." in two
     assert "![Experiment 1: real only, synthetic only, mixed](exp1_bars.svg)" in md
-    assert ("| exp1-mixed | mixed | washer_done | 1 | 2.0 min | 120 | 1.00 | 1.00 | 1.00 | "
+    assert ("| exp1-mixed | mixed | burner_left_on | 1 | 2.0 min | 120 | 1.00 | 1.00 | 1.00 | "
             "1 of 1 | 1 of 1 | 0.0 | 2.0 s (2.0 s) |") in md
-    assert "| exp1-real | real only | washer_done |" in md and "| 0 of 1 | 1 of 1 |" in md
+    assert "| exp1-real | real only | burner_left_on |" in md and "| 0 of 1 | 1 of 1 |" in md
     assert "| 25 | $0.25 |" in md and "| 300 | n/a |" in md  # no generation cost given
     assert ("| exp4-spark | 0.40 s | 0.40 s | 0 | 1 | 30.0 | $10.80 | Mac, Spark checks not "
             "priced in the plan, $0.003 per frame scored |") in md
@@ -146,7 +146,7 @@ def skill_clip(folder, name, skill, alert_at, **kw):
     """write_clip for another skill."""
     clip = write_clip(folder, name, alert_at, **kw)
     log = folder / f"{name}.jsonl"
-    log.write_text(log.read_text().replace('"washer_done"', f'"{skill}"'))
+    log.write_text(log.read_text().replace('"burner_left_on"', f'"{skill}"'))
     return clip
 
 
@@ -164,22 +164,22 @@ def test_judges_pool_over_their_skills_and_side_results_reach_results_and_wandb(
     plan_path = tmp_path / "eval" / "plan.json"
     plan_path.parent.mkdir()
     plan_path.write_text(json.dumps({"evaluations": [
-        judge("ft-w", "finetuned", "washer_done", write_clip(clips, "ftw", 62), gpu="H100",
+        judge("ft-w", "finetuned", "burner_left_on", write_clip(clips, "ftw", 62), gpu="H100",
               highlight=True),
-        judge("ft-b", "finetuned", "boil_over", skill_clip(clips, "ftb", "boil_over", None,
+        judge("ft-b", "finetuned", "fridge_left_open", skill_clip(clips, "ftb", "fridge_left_open", None,
                                                            n=240), gpu="H100", highlight=True),
-        judge("base-w", "base", "washer_done", write_clip(clips, "bw", 75), gpu="H100"),
-        judge("base-b", "base", "boil_over", {"log": "../clips/none.jsonl",
+        judge("base-w", "base", "burner_left_on", write_clip(clips, "bw", 75), gpu="H100"),
+        judge("base-b", "base", "fridge_left_open", {"log": "../clips/none.jsonl",
                                               "labels": "../clips/none.json"}),
-        judge("spark-w", "spark", "washer_done", write_clip(clips, "sw", 63),
+        judge("spark-w", "spark", "burner_left_on", write_clip(clips, "sw", 63),
               scorer_usd_per_frame=0.003)]}))
     data = tmp_path / "data"
-    for skill, files in (("washer_done", {"spark_errors.json": {**SPARK_ERRORS,
+    for skill, files in (("burner_left_on", {"spark_errors.json": {**SPARK_ERRORS,
                                                                  "unmatched_files": ["x.png"]},
                                           "label_stats.json": {"total": 250, "kept": 200,
                                                                "agreement": 0.8,
                                                                "by_kind": {}}}),
-                         ("boil_over", {})):
+                         ("fridge_left_open", {})):
         (data / "skills" / skill).mkdir(parents=True)
         for name, content in files.items():
             (data / "skills" / skill / name).write_text(json.dumps(content))
@@ -195,7 +195,7 @@ def test_judges_pool_over_their_skills_and_side_results_reach_results_and_wandb(
 
     judges = {j["variant"]: j for j in results["experiment4"]}
     assert list(judges) == ["finetuned", "base", "spark"]
-    assert judges["finetuned"]["skills"] == ["washer_done", "boil_over"] and judges[
+    assert judges["finetuned"]["skills"] == ["burner_left_on", "fridge_left_open"] and judges[
         "finetuned"]["highlight"]
     assert judges["finetuned"]["metrics"]["frames"] == 120 + 240  # the counts added up
     assert judges["finetuned"]["metrics"]["clips"] == 2
@@ -204,29 +204,29 @@ def test_judges_pool_over_their_skills_and_side_results_reach_results_and_wandb(
     usd = [by_name[n]["cost_per_hour"]["total_usd"] for n in ("ft-w", "ft-b")]
     assert judges["finetuned"]["usd_per_hour"] == round(
         (usd[0] * hours[0] + usd[1] * hours[1]) / sum(hours), 4)  # weighted by footage
-    assert (judges["base"]["skills"], judges["base"]["of"]) == (["washer_done"], 2)
+    assert (judges["base"]["skills"], judges["base"]["of"]) == (["burner_left_on"], 2)
     assert by_name["ft-w"]["threshold"] == {"values": [0.6], "sources": []}
     svg = (tmp_path / "out" / "exp4_cost.svg").read_text()
     assert svg.count('class="acc ring"') == 1 and svg.count('class="neu ring"') == 2
     assert "base (1 of 2 skills)" in svg
 
-    assert results["spark_errors"]["washer_done"]["spark"]["errors"] == 19
-    assert "unmatched_files" not in results["spark_errors"]["washer_done"]
-    assert results["spark_errors"]["boil_over"] is None is results["label_stats"]["boil_over"]
-    assert "by_kind" not in results["label_stats"]["washer_done"]
+    assert results["spark_errors"]["burner_left_on"]["spark"]["errors"] == 19
+    assert "unmatched_files" not in results["spark_errors"]["burner_left_on"]
+    assert results["spark_errors"]["fridge_left_open"] is None is results["label_stats"]["fridge_left_open"]
+    assert "by_kind" not in results["label_stats"]["burner_left_on"]
     assert results["regression"]["questions"] == 2 and "rows" not in results["regression"]
     md = (tmp_path / "out" / "results.md").read_text()
     assert "## Regression check" in md and "19 of 190 (10.0%" in md
     summary = run.summary
     assert summary["exp4-pooled/finetuned/frames"] == 360
-    assert summary["spark_errors/washer_done/spark_rate"] == 0.1
-    assert summary["spark_errors/washer_done/spark_ci95_low"] == 0.065
-    assert summary["spark_errors/washer_done/kept_n"] == 150
-    assert summary["label_stats/washer_done/agreement"] == 0.8
+    assert summary["spark_errors/burner_left_on/spark_rate"] == 0.1
+    assert summary["spark_errors/burner_left_on/spark_ci95_low"] == 0.065
+    assert summary["spark_errors/burner_left_on/kept_n"] == 150
+    assert summary["label_stats/burner_left_on/agreement"] == 0.8
     assert (summary["regression/base_accuracy"], summary["regression/finetuned_accuracy"],
             summary["regression/changed"]) == (1.0, 0.5, 1)
     assert summary["ft-w/threshold"] == 0.6
-    assert not any(k.startswith("spark_errors/boil_over") for k in summary)
+    assert not any(k.startswith("spark_errors/fridge_left_open") for k in summary)
 
     regression.write_text(json.dumps({"precision": "bf16", "base": {}}))
     with pytest.raises(ValueError, match="is not te regress's report"):

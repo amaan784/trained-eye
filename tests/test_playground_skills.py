@@ -9,7 +9,7 @@ from backend.teach import TeachOptions, run_teach
 from tests.test_teach import FakeMeta, client_for, clip, png
 
 
-def make_skill(tmp_path, name="washer_done"):
+def make_skill(tmp_path, name="burner_left_on"):
     """data/skills/<name>/ as `te teach` leaves it, with 6 + 6 variations. Returns data/."""
     client = client_for(tmp_path, FakeMeta())
     opts = TeachOptions(skill=name, clip=clip(tmp_path / f"clip_{name}"),
@@ -28,18 +28,18 @@ def test_list_skills_skips_refused_and_odd_folders(tmp_path):
         "refusal_reason": "no people"}))
     (data_dir / "skills" / "Bad-Name").mkdir()
     listed = skills.list_skills(data_dir)
-    assert [s["name"] for s in listed] == ["washer_done"]
-    stats = json.loads((data_dir / "skills/washer_done/label_stats.json").read_text())
+    assert [s["name"] for s in listed] == ["burner_left_on"]
+    stats = json.loads((data_dir / "skills/burner_left_on/label_stats.json").read_text())
     assert listed[0]["read_back"].startswith("I'll watch the digital display")
     assert listed[0]["variations"] == 12 and listed[0]["kept"] == stats["kept"]
-    assert listed[0]["keyframes"] == len(list((data_dir / "skills/washer_done/keyframes")
+    assert listed[0]["keyframes"] == len(list((data_dir / "skills/burner_left_on/keyframes")
                                               .iterdir()))
     assert skills.list_skills(tmp_path / "nothing") == []
 
 
 def test_skill_detail_wall_and_keyframes(tmp_path):
     data_dir = make_skill(tmp_path)
-    detail = skills.skill_detail(data_dir, "washer_done")
+    detail = skills.skill_detail(data_dir, "burner_left_on")
     assert detail["target"] == "washing machine display"
     assert detail["keyframes"][0]["spark_label"] == "no"  # the fake labels real frames no
     assert detail["wall_total"] == 12 and len(detail["wall"]) == 12
@@ -53,14 +53,14 @@ def test_skill_detail_wall_and_keyframes(tmp_path):
     assert detail["roi"]["with_box"] == 0 and detail["roi"]["frame"] is None
     assert detail["roi"]["frames"] == len(detail["keyframes"])
     assert "found no box" in detail["roi"]["note"]
-    for name in ("missing", "../washer_done", "sam_arrives"):
+    for name in ("missing", "../burner_left_on", "sam_arrives"):
         assert skills.skill_detail(data_dir, name) is None
 
 
 def test_wall_is_spread_over_all_variations(tmp_path, monkeypatch):
     data_dir = make_skill(tmp_path)
     monkeypatch.setattr(skills, "WALL_TILES", 5)
-    detail = skills.skill_detail(data_dir, "washer_done")
+    detail = skills.skill_detail(data_dir, "burner_left_on")
     assert len(detail["wall"]) == 5 and detail["wall_total"] == 12
     assert detail["wall"][0]["kind"] == "positive"
     assert detail["wall"][-1]["kind"] == "hard_negative"
@@ -68,12 +68,12 @@ def test_wall_is_spread_over_all_variations(tmp_path, monkeypatch):
 
 def test_outline_on_the_first_frame_with_a_box(tmp_path):
     data_dir = make_skill(tmp_path)
-    folder = data_dir / "skills" / "washer_done"
+    folder = data_dir / "skills" / "burner_left_on"
     rois = json.loads((folder / "roi.json").read_text())
     rois[2]["best"] = {"box": [10, 20, 200, 180], "score": 0.9}
     rois[3]["best"] = {"box": [5, 5, 1, 1], "score": 0.9}  # empty box: ignored
     (folder / "roi.json").write_text(json.dumps(rois))
-    roi = skills.skill_detail(data_dir, "washer_done")["roi"]
+    roi = skills.skill_detail(data_dir, "burner_left_on")["roi"]
     assert roi["with_box"] == 1 and roi["note"] is None
     frame = roi["frame"]
     assert frame["box"] == [10.0, 20.0, 200.0, 180.0] and frame["score"] == 0.9
@@ -84,21 +84,21 @@ def test_outline_on_the_first_frame_with_a_box(tmp_path):
 
 def test_a_skill_taught_before_the_parser_gets_its_box_from_the_stored_text(tmp_path):
     data_dir = make_skill(tmp_path)
-    folder = data_dir / "skills" / "washer_done"
+    folder = data_dir / "skills" / "burner_left_on"
     rois = json.loads((folder / "roi.json").read_text())
     w, h = rois[0]["width"], rois[0]["height"]
     rois[0]["raw"] = (f"<0f>0<|box;x1=1;y1=2;x2={w - 2};y2={h - 3};w={w};h={h};c=0.7|>"
                       "<|mask;x=0;y=0;data=2,2,!!!!#Kq|>\n")
     (folder / "roi.json").write_text(json.dumps(rois))
-    roi = skills.skill_detail(data_dir, "washer_done")["roi"]
+    roi = skills.skill_detail(data_dir, "burner_left_on")["roi"]
     assert roi["with_box"] == 1 and roi["frame"]["box"] == [1.0, 2.0, w - 1.0, h - 2.0]
     assert roi["frame"]["score"] == 0.7
 
 
 def test_wall_before_labelling_comes_from_the_manifest(tmp_path):
     data_dir = make_skill(tmp_path)
-    (data_dir / "skills" / "washer_done" / "labels.jsonl").unlink()
-    wall = skills.skill_detail(data_dir, "washer_done")["wall"]
+    (data_dir / "skills" / "burner_left_on" / "labels.jsonl").unlink()
+    wall = skills.skill_detail(data_dir, "burner_left_on")["wall"]
     assert len(wall) == 12 and all(t["spark_label"] is None and not t["kept"] for t in wall)
     assert skills.examples(data_dir) == []  # nothing labelled, nothing to show
 
@@ -106,7 +106,7 @@ def test_wall_before_labelling_comes_from_the_manifest(tmp_path):
 def test_examples(tmp_path):
     data_dir = make_skill(tmp_path)
     (example,) = skills.examples(data_dir)
-    assert example["skill"] == "washer_done"
+    assert example["skill"] == "burner_left_on"
     assert example["request"] == "tell me when the washer says done"
     kinds = [t["kind"] for t in example["variations"]]
     assert kinds == ["positive"] * 6 + ["hard_negative"] * 6
@@ -119,7 +119,7 @@ def test_provided_keyframes(tmp_path):
     first = offered[0]
     path = data.media_path(data_dir, tmp_path, first["url"].removeprefix("media/"))[0]
     assert skills.keyframe_bytes(data_dir, first["id"]) == path.read_bytes()
-    for bad in ("washer_done/../spec.json", "washer_done/missing.jpg", "", "x"):
+    for bad in ("burner_left_on/../spec.json", "burner_left_on/missing.jpg", "", "x"):
         assert skills.keyframe_bytes(data_dir, bad) is None
 
     curated = data_dir / "playground" / "keyframes"
@@ -139,23 +139,23 @@ def blur(src, dst):
 
 def test_public_copy_shows_blurred_keyframes_and_no_generated_images(tmp_path):
     data_dir = make_skill(tmp_path)
-    folder = data_dir / "skills" / "washer_done"
+    folder = data_dir / "skills" / "burner_left_on"
     rois = json.loads((folder / "roi.json").read_text())
     rois[1]["best"] = {"box": [10, 20, 200, 180], "score": 0.8}
     (folder / "roi.json").write_text(json.dumps(rois))
-    bare = skills.skill_detail(data_dir, "washer_done", public=True)
+    bare = skills.skill_detail(data_dir, "burner_left_on", public=True)
     assert bare["keyframes"] == [] and bare["roi"]["frame"] is None  # not blurred yet
     blur(folder / "keyframes", folder / "keyframes_blurred")
     for f in (folder / "synthetic").glob("*.png"):
         f.unlink()  # the public copy's data has no generated image: counts stay
-    detail = skills.skill_detail(data_dir, "washer_done", public=True)
+    detail = skills.skill_detail(data_dir, "burner_left_on", public=True)
     assert detail["wall"] == [] and detail["wall_note"] == skills.WALL_NOTE
     assert detail["wall_total"] == 12
     originals = skills.keyframe_files(folder)
     assert [k["file"] for k in detail["keyframes"]] == originals
     assert detail["keyframes"][0]["spark_label"] == "no"  # same names: labels still match
     for k in detail["keyframes"]:
-        assert k["url"].startswith("media/skills/washer_done/keyframes_blurred/")
+        assert k["url"].startswith("media/skills/burner_left_on/keyframes_blurred/")
         assert data.media_path(data_dir, tmp_path, k["url"][6:], public=True)
     frame = detail["roi"]["frame"]  # found through sources.json: the bytes differ
     assert frame["url"] == detail["keyframes"][1]["url"] and frame["box"][0] == 10.0
@@ -165,7 +165,7 @@ def test_public_copy_shows_blurred_keyframes_and_no_generated_images(tmp_path):
     assert listed["variations"] == 12 and listed["keyframes"] == len(originals)
     assert skills.list_skills(data_dir)[0]["variations"] == 0  # locally: only files that exist
     assert skills.examples(data_dir, public=True) == []
-    assert skills.skill_detail(data_dir, "washer_done")["wall_note"] is None
+    assert skills.skill_detail(data_dir, "burner_left_on")["wall_note"] is None
 
 
 def test_public_copy_offers_only_curated_blurred_keyframes(tmp_path):

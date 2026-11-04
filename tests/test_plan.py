@@ -21,10 +21,10 @@ TIMING = {"seconds": 400.0, "train_runtime": 100.0, "train_samples_per_second": 
 
 
 def test_every_run_has_te_train_arguments_and_the_same_fixed_steps():
-    runs = training_runs(["washer_done"])
+    runs = training_runs(["burner_left_on"])
     assert [r["name"] for r in runs] == NAMES
     assert {r["max_steps"] for r in runs} == {10}
-    assert {r["max_steps"] for r in training_runs(["washer_done", "boil_over", "bus_m4"])} == {29}
+    assert {r["max_steps"] for r in training_runs(["burner_left_on", "fridge_left_open", "tap_left_running"])} == {29}
     by_name = {r["name"]: r for r in runs}
     assert by_name["exp2-filtered"]["same_bundle_as"] == "exp1-mixed"
     assert by_name["exp3-25"]["args"][-4:] == ["--limit", "25", "--max-steps", "10"]
@@ -35,12 +35,12 @@ def test_every_run_has_te_train_arguments_and_the_same_fixed_steps():
 
 
 def test_with_the_data_runs_get_counts_and_say_what_they_need(tmp_path):
-    for skill in ("washer_done", "boil_over"):
+    for skill in ("burner_left_on", "fridge_left_open"):
         teach_dataset(tmp_path / "skills", skill)  # 10 real and 40 generated examples each
-    runs = {r["name"]: r for r in training_runs(["washer_done", "boil_over"],
+    runs = {r["name"]: r for r in training_runs(["burner_left_on", "fridge_left_open"],
                                                 skills_root=tmp_path / "skills")}
     assert runs["exp1-mixed"]["examples"]["train"] + runs["exp1-mixed"]["examples"]["val"] == 100
-    assert runs["exp3-25"]["examples"]["per_skill"]["boil_over"]["synthetic"] == 25
+    assert runs["exp3-25"]["examples"]["per_skill"]["fridge_left_open"]["synthetic"] == 25
     assert runs["exp3-25"]["same_bundle_as"] is None and not runs["exp3-25"]["needs"]
     for name in ("exp3-50", "exp3-300"):  # 40 is all there is: the same as exp1-synthetic
         assert runs[name]["same_bundle_as"] == "exp1-synthetic"
@@ -50,8 +50,8 @@ def test_with_the_data_runs_get_counts_and_say_what_they_need(tmp_path):
 
 
 def test_the_cost_uses_te_trains_estimate_and_counts_repeats(tmp_path):
-    teach_dataset(tmp_path / "skills", "washer_done")
-    runs = training_runs(["washer_done"], skills_root=tmp_path / "skills")
+    teach_dataset(tmp_path / "skills", "burner_left_on")
+    runs = training_runs(["burner_left_on"], skills_root=tmp_path / "skills")
     cost = plan_cost(runs, TIMING)
     mixed = next(r for r in cost["runs"] if r["name"] == "exp1-mixed")
     assert mixed["usd"] == round(train_estimate(320 + 8 * 5, TIMING)["usd"], 2)  # 8 val passes
@@ -77,9 +77,9 @@ def test_the_cost_uses_te_trains_estimate_and_counts_repeats(tmp_path):
 
 
 def test_the_credit_check_adds_the_final_run_spend_exports_and_serving(tmp_path):
-    for skill in ("washer_done", "boil_over", "bus_m4"):
+    for skill in ("burner_left_on", "fridge_left_open", "tap_left_running"):
         teach_dataset(tmp_path / "skills", skill)
-    skills = ["washer_done", "boil_over", "bus_m4"]
+    skills = ["burner_left_on", "fridge_left_open", "tap_left_running"]
     runs = training_runs(skills, skills_root=tmp_path / "skills")
     final = final_run(skills, skills_root=tmp_path / "skills")
     assert final["max_steps"] is None and "--max-steps" not in final["args"]
@@ -123,11 +123,11 @@ def test_progress_reads_finished_runs_and_exports(tmp_path):
 
 def test_counts_add_the_session_clips_to_real_and_mixed(tmp_path):
     taught_with_clips(tmp_path)  # 10 real and 40 generated; 24 session 1, 9 session 2 frames
-    runs = {r["name"]: r for r in training_runs(["washer_done"],
+    runs = {r["name"]: r for r in training_runs(["burner_left_on"],
                                                 skills_root=tmp_path / "skills")}
     mixed, real = runs["exp1-mixed"]["examples"], runs["exp1-real"]["examples"]
     assert (mixed["train"], mixed["val"]) == (45 + 24, 5 + 9)  # 10% of the 50 taught
     assert (real["train"], real["val"]) == (10 + 24, 9)  # under 50 taught: no teach val
-    assert real["per_skill"]["washer_done"]["clips_train"] == 24
+    assert real["per_skill"]["burner_left_on"]["clips_train"] == 24
     synthetic = runs["exp1-synthetic"]["examples"]
     assert (synthetic["train"], synthetic["val"]) == (40, 0)  # never the clips

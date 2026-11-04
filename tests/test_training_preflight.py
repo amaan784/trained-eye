@@ -68,7 +68,7 @@ class FakeProcessor:
 
 
 def record(i, answer, folded=False):
-    example = Example(f"washer_done-real-{i:03d}", b"", answer, "real", "washer_done",
+    example = Example(f"burner_left_on-real-{i:03d}", b"", answer, "real", "burner_left_on",
                       "the display shows End", ["display off"])
     return build_record(example, Path(f"/vol/bundles/exp1/images/{i}.png"), folded)
 

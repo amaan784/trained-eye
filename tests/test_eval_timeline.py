@@ -11,11 +11,11 @@ def rows(n=120, alerts=(), errors=(), threshold=0.62):
     out = []
     for t in range(n):
         if t in errors:
-            out.append({"t": float(t), "skill": "washer_done", "threshold": threshold,
+            out.append({"t": float(t), "skill": "burner_left_on", "threshold": threshold,
                         "p": None, "error": "endpoint down"})
             continue
         p = 0.9 if 60 <= t <= 90 else 0.1
-        r = {"t": float(t), "skill": "washer_done", "threshold": threshold, "p": p,
+        r = {"t": float(t), "skill": "burner_left_on", "threshold": threshold, "p": p,
              "over": p >= threshold, "fires": t in alerts, "latency_s": 0.3}
         if t in alerts:
             r.update(alert=True, cloud="yes")
@@ -24,7 +24,7 @@ def rows(n=120, alerts=(), errors=(), threshold=0.62):
 
 
 def draw(**kwargs):
-    svg = timeline("Live timeline: washer_done", "clip 1, fine-tuned student",
+    svg = timeline("Live timeline: burner_left_on", "clip 1, fine-tuned student",
                    rows(**kwargs), [[58, 92]], alert_text="Laundry's <done> & dry")
     return svg, ET.fromstring(svg)
 

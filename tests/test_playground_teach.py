@@ -100,7 +100,7 @@ def test_bad_input_and_the_ledger_cap_send_nothing(tmp_path):
         assert teacher.start(condition, keyframe, KEYS)[0] == 400
     status, body = teacher.start("the kettle light is off", kf, KEYS)  # over the skill cap
     assert status == 429 and "total budget" in body["message"]
-    assert [e["skill"] for e in body["examples"]] == ["washer_done"]  # precomputed instead
+    assert [e["skill"] for e in body["examples"]] == ["burner_left_on"]  # precomputed instead
     assert fake.calls == {}
 
 

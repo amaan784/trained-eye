@@ -24,7 +24,7 @@ from backend.teach import TeachOptions, estimate, normalise_labels, run_teach
 PROVENANCE = "fake-c2pa: made with Muse Image"
 
 SPEC_REPLY = {
-    "refused": False, "refusal_reason": None, "name": "washer_done",
+    "refused": False, "refusal_reason": None, "name": "burner_left_on",
     "sam_prompt": "washing machine display",
     "target_description": "the digital display on the front of the washer",
     "positive": "the display shows the cycle has finished (e.g. 'End' or '0:00')",
@@ -144,12 +144,12 @@ def client_for(tmp_path, fake):
 def test_teach_end_to_end(tmp_path):
     fake = FakeMeta(sam=boxed)
     client = client_for(tmp_path, fake)
-    opts = TeachOptions(skill="washer_done", clip=clip(tmp_path / "clip"),
+    opts = TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"),
                         audio=wav(tmp_path / "request.wav"), positives=12, negatives=12)
     said = []
     report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: True, say=said.append)
 
-    root = tmp_path / "skills" / "washer_done"
+    root = tmp_path / "skills" / "burner_left_on"
     spec = json.loads((root / "spec.json").read_text())
     assert spec["target"]["sam_prompt"] == "washing machine display"
     assert report["read_back"].startswith("I'll watch the digital display")
@@ -170,14 +170,14 @@ def test_teach_end_to_end(tmp_path):
     assert with_box + report["roi_frames_without_box"] == n_kf
     assert 0 < with_box < n_kf and report["crop_examples"] == with_box  # one crop per box
     assert ds["examples"] == stats["kept"] + n_kf + with_box
-    assert (root / "dataset" / "washer_done-teach.jsonl").is_file()
+    assert (root / "dataset" / "burner_left_on-teach.jsonl").is_file()
     assert any(s.startswith("dataset:") for s in said)
     assert {e["original_sha256"] for e in ds["examples_index"] if e["source"] == "synthetic"} <= {
         r["image_sha256"] for r in rows}
     entries = client.ledger.entries()
     assert {e["endpoint"] for e in entries} == {"/audio/transcriptions", "/chat/completions",
                                                 "/responses", "/images/edits"}
-    assert {e["skill"] for e in entries} == {"washer_done"}  # every call counts to the cap
+    assert {e["skill"] for e in entries} == {"burner_left_on"}  # every call counts to the cap
     assert len(json.loads((root / "roi.json").read_text())) == n_kf
     assert len((root / "labels.jsonl").read_text().splitlines()) == n_kf + 24
     assert json.loads((root / "label_stats.json").read_text()) == stats
@@ -186,12 +186,12 @@ def test_teach_end_to_end(tmp_path):
     assert "  images 24/24  $0.24 spent  (0 from cache)" in said
     assert any(s.startswith(f"  labels {n_kf + 24}/{n_kf + 24}") for s in said)
 
-    spent = client.ledger.spent("washer_done")
+    spent = client.ledger.spent("burner_left_on")
     calls_before = dict(fake.calls)
     said.clear()
     again = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: True, say=said.append)
     assert fake.calls == calls_before  # second run: every call is a cache hit
-    assert client.ledger.spent("washer_done") == spent
+    assert client.ledger.spent("burner_left_on") == spent
     assert again["dataset"]["jsonl_sha256"] == ds["jsonl_sha256"]
     assert "  images 24/24  $0.00 spent  (24 from cache)" in said
     rerun_rows = [json.loads(x) for x in
@@ -206,37 +206,37 @@ def test_one_bad_edit_or_label_does_not_stop_the_run(tmp_path):
     fake = FakeMeta(reject_edit=lambda body: b"dim evening light" in body,
                     refuse_label=lambda n: n == 30)
     client = client_for(tmp_path, fake)
-    opts = TeachOptions(skill="washer_done", clip=clip(tmp_path / "clip"),
+    opts = TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"),
                         request="let me know when the washer says done", positives=12,
                         negatives=12)
     report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: True,
                        say=lambda s: None)
-    root = tmp_path / "skills" / "washer_done"
+    root = tmp_path / "skills" / "burner_left_on"
     rows = [json.loads(x) for x in (root / "synthetic/manifest.jsonl").read_text().splitlines()]
     failed = [r for r in rows if r["file"] is None]
     assert len(rows) == 24 and failed and all("content_policy" in r["error"] for r in failed)
     assert report["generation_failed"] == len(failed)
     assert report["label_stats"]["label_errors"] == 1
-    assert (root / "dataset" / "washer_done-teach.jsonl").is_file()
+    assert (root / "dataset" / "burner_left_on-teach.jsonl").is_file()
 
 
 def test_systematic_edit_failures_stop_the_run(tmp_path):
     fake = FakeMeta(reject_edit=lambda body: True)
     client = client_for(tmp_path, fake)
-    opts = TeachOptions(skill="washer_done", clip=clip(tmp_path / "clip"),
+    opts = TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"),
                         request="let me know when the washer says done", positives=20,
                         negatives=20)
     with pytest.raises(MetaAPIError, match="image edits failed"):
         run_teach(client, opts, tmp_path / "skills", confirm=lambda s: True,
                   say=lambda s: None)
     assert fake.edits == 9  # stops after max(5, 20%) failures instead of paying for all 40
-    assert not (tmp_path / "skills/washer_done/labels.jsonl").exists()
+    assert not (tmp_path / "skills/burner_left_on/labels.jsonl").exists()
 
 
 def test_teach_stops_when_not_confirmed(tmp_path):
     fake = FakeMeta()
     client = client_for(tmp_path, fake)
-    opts = TeachOptions(skill="washer_done", clip=clip(tmp_path / "clip"),
+    opts = TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"),
                         request="let me know when the washer says done")
     report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: False,
                        say=lambda s: None)
@@ -259,13 +259,13 @@ def fallback_client(tmp_path, fake):
 
 
 def keyframe_names(tmp_path):
-    return sorted(p.name for p in (tmp_path / "skills/washer_done/keyframes").iterdir())
+    return sorted(p.name for p in (tmp_path / "skills/burner_left_on/keyframes").iterdir())
 
 
 def test_fallback_trains_on_real_frames_with_human_labels_only(tmp_path):
     fake = FakeMeta()
     client = fallback_client(tmp_path, fake)
-    opts = TeachOptions(skill="washer_done", clip=clip(tmp_path / "clip"),
+    opts = TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"),
                         request="let me know when the washer says done", positives=4,
                         negatives=4)
     first = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: True,
@@ -276,13 +276,13 @@ def test_fallback_trains_on_real_frames_with_human_labels_only(tmp_path):
     report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: True,
                        say=lambda s: None)
     assert report["dataset"]["examples"] == 2
-    assert set(report["dataset"]["counts"]) == {"washer_done/real/no", "washer_done/real/yes"}
+    assert set(report["dataset"]["counts"]) == {"burner_left_on/real/no", "burner_left_on/real/yes"}
 
 
 def test_own_labels_are_normalised_and_win_over_spark(tmp_path):
     fake = FakeMeta()
     client = client_for(tmp_path, fake)
-    opts = TeachOptions(skill="washer_done", clip=clip(tmp_path / "clip"),
+    opts = TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"),
                         request="let me know when the washer says done", positives=2,
                         negatives=2)
     run_teach(client, opts, tmp_path / "skills", confirm=lambda s: False, say=lambda s: None)
@@ -291,10 +291,10 @@ def test_own_labels_are_normalised_and_win_over_spark(tmp_path):
     report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: True,
                        say=lambda s: None)
     rows = [json.loads(x) for x in
-            (tmp_path / "skills/washer_done/labels.jsonl").read_text().splitlines()]
+            (tmp_path / "skills/burner_left_on/labels.jsonl").read_text().splitlines()]
     human = {r["file"]: r["human_label"] for r in rows if r["source"] == "real"}
     assert human[f"keyframes/{names[0]}"] == "yes" and human[f"keyframes/{names[1]}"] == "no"
-    assert report["dataset"]["counts"]["washer_done/real/yes"] == 1  # Spark said no to all
+    assert report["dataset"]["counts"]["burner_left_on/real/yes"] == 1  # Spark said no to all
 
 
 @pytest.mark.parametrize("labels", [{"kf_99_00000000.jpg": "yes"}, {"FIRST": "maybe"},
@@ -302,10 +302,10 @@ def test_own_labels_are_normalised_and_win_over_spark(tmp_path):
 def test_unusable_own_labels_stop_before_any_paid_call(tmp_path, labels):
     fake = FakeMeta()
     client = client_for(tmp_path, fake)
-    opts = TeachOptions(skill="washer_done", clip=clip(tmp_path / "clip"),
+    opts = TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"),
                         request="let me know when the washer says done", real_labels=labels)
     if labels == {"FIRST": "maybe"}:
-        run_teach(client, TeachOptions(skill="washer_done", clip=opts.clip, request="x"),
+        run_teach(client, TeachOptions(skill="burner_left_on", clip=opts.clip, request="x"),
                   tmp_path / "skills", confirm=lambda s: False, say=lambda s: None)
         opts.real_labels = {keyframe_names(tmp_path)[0]: "maybe"}
         fake.calls.clear()
@@ -318,7 +318,7 @@ def test_labels_for_another_take_do_not_carry_over(tmp_path):
     fake = FakeMeta()
     client = fallback_client(tmp_path, fake)
     first = clip(tmp_path / "a", n=30)
-    opts = TeachOptions(skill="washer_done", clip=first,
+    opts = TeachOptions(skill="burner_left_on", clip=first,
                         request="let me know when the washer says done")
     run_teach(client, opts, tmp_path / "skills", confirm=lambda s: True, say=lambda s: None)
     old_names = keyframe_names(tmp_path)
@@ -326,7 +326,7 @@ def test_labels_for_another_take_do_not_carry_over(tmp_path):
     second.mkdir()
     for p in sorted(first.iterdir())[5:25]:  # a new, shorter take of the same scene
         (second / p.name).write_bytes(p.read_bytes())
-    opts = TeachOptions(skill="washer_done", clip=second,
+    opts = TeachOptions(skill="burner_left_on", clip=second,
                         request="let me know when the washer says done",
                         real_labels=dict.fromkeys(old_names, "no"))
     report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: True,
@@ -339,7 +339,7 @@ def test_labels_for_another_take_do_not_carry_over(tmp_path):
 def test_correction_recompiles_and_is_recorded(tmp_path):
     fake = FakeMeta()
     client = client_for(tmp_path, fake)
-    opts = TeachOptions(skill="washer_done", clip=clip(tmp_path / "clip"),
+    opts = TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"),
                         audio=wav(tmp_path / "request.wav"))
     run_teach(client, opts, tmp_path / "skills", confirm=lambda s: False, say=lambda s: None)
     assert fake.calls["/chat/completions"] == 1
@@ -348,7 +348,7 @@ def test_correction_recompiles_and_is_recorded(tmp_path):
                        say=lambda s: None)
     assert report["stopped"] == "not confirmed"
     assert fake.calls["/chat/completions"] == 2 and fake.calls["/audio/transcriptions"] == 1
-    request = json.loads((tmp_path / "skills/washer_done/request.json").read_text())
+    request = json.loads((tmp_path / "skills/burner_left_on/request.json").read_text())
     assert request["correction"] == "the light on the lid"
 
 
@@ -365,18 +365,18 @@ def test_fallback_without_labels_stops_before_any_paid_call(tmp_path):
     settings = load_settings(env={"TE_DATA_DIR": str(tmp_path / "data"), "MODEL_API_KEY": "k",
                                   "TE_TRAIN_ON_MODEL_OUTPUTS": "0"}, env_file=None)
     client = MetaClient(settings, transport=httpx.MockTransport(fake), sleep=lambda s: None)
-    opts = TeachOptions(skill="washer_done", clip=clip(tmp_path / "clip"),
+    opts = TeachOptions(skill="burner_left_on", clip=clip(tmp_path / "clip"),
                         audio=wav(tmp_path / "request.wav"))
     report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: True,
                        say=lambda s: None)
     assert "needs your own labels" in report["stopped"]
     assert fake.calls == {} and client.ledger.entries() == []
-    assert any((tmp_path / "skills" / "washer_done" / "keyframes").iterdir())
+    assert any((tmp_path / "skills" / "burner_left_on" / "keyframes").iterdir())
 
 
 def teach(tmp_path, client, **kw):
     said = []
-    opts = TeachOptions(skill="washer_done", clip=kw.pop("clip", None) or clip(tmp_path / "clip"),
+    opts = TeachOptions(skill="burner_left_on", clip=kw.pop("clip", None) or clip(tmp_path / "clip"),
                         request="let me know when the washer says done",
                         **{"positives": 6, "negatives": 6, **kw})
     report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: True,
@@ -387,7 +387,7 @@ def teach(tmp_path, client, **kw):
 def test_a_one_class_dataset_stops_instead_of_being_written(tmp_path):
     report, _ = teach(tmp_path, client_for(tmp_path, FakeMeta(answer=lambda label, real: "no")))
     assert "only 'no' examples" in report["stopped"] and report["label_stats"]["kept"] == 6
-    assert not (tmp_path / "skills/washer_done/dataset").exists()
+    assert not (tmp_path / "skills/burner_left_on/dataset").exists()
 
 
 def test_the_dataset_line_shows_both_answers(tmp_path):
@@ -419,19 +419,19 @@ def test_a_new_spec_removes_the_old_dataset(tmp_path):
     fake = FakeMeta()
     client = client_for(tmp_path, fake)
     teach(tmp_path, client)
-    assert (tmp_path / "skills/washer_done/dataset/washer_done-teach.jsonl").is_file()
-    opts = TeachOptions(skill="washer_done", clip=tmp_path / "clip", correction="the lid light",
+    assert (tmp_path / "skills/burner_left_on/dataset/burner_left_on-teach.jsonl").is_file()
+    opts = TeachOptions(skill="burner_left_on", clip=tmp_path / "clip", correction="the lid light",
                         request="let me know when the washer says done")
     report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: False,
                        say=lambda s: None)
     assert report["stopped"] == "not confirmed"
-    assert not (tmp_path / "skills/washer_done/dataset").exists()
+    assert not (tmp_path / "skills/burner_left_on/dataset").exists()
 
 
 def test_the_skill_folder_is_never_read_as_the_clip_and_only_keyframes_are_cleaned(tmp_path):
     client = fallback_client(tmp_path, FakeMeta())
     teach(tmp_path, client)
-    kf_dir = tmp_path / "skills/washer_done/keyframes"
+    kf_dir = tmp_path / "skills/burner_left_on/keyframes"
     with pytest.raises(ValueError, match="inside this skill's own folder"):
         teach(tmp_path, client, clip=kf_dir)
     (kf_dir / "notes.txt").write_text("frame 3 is the best")
@@ -456,7 +456,7 @@ def test_labels_so_far_are_saved_when_labelling_stops(tmp_path):
     with pytest.raises(TooManyFailures, match="labels failed so far") as err:
         teach(tmp_path, client_for(tmp_path, fake))
     rows = [json.loads(x) for x in
-            (tmp_path / "skills/washer_done/labels.jsonl").read_text().splitlines()]
+            (tmp_path / "skills/burner_left_on/labels.jsonl").read_text().splitlines()]
     assert rows and all(r["label_error"] for r in rows)
     assert str(err.value).startswith(f"{len(rows)} of ")
 
@@ -506,7 +506,7 @@ def test_te_teach_says_which_image_tokens_it_used(tmp_path, monkeypatch, capsys)
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("TE_DATA_DIR", str(tmp_path / "data"))
-    args = ["teach", "--skill", "washer_done", "--clip", str(clip(tmp_path / "clip")),
+    args = ["teach", "--skill", "burner_left_on", "--clip", str(clip(tmp_path / "clip")),
             "--request", "let me know when the washer says done", "--estimate-only"]
     assert cli.main(args) == 0
     assert "image tokens: 1500 per image, a guess" in capsys.readouterr().out
@@ -523,10 +523,10 @@ def test_te_system_in_user_folds_the_system_prompt_into_the_dataset(tmp_path):
     client = MetaClient(settings, transport=httpx.MockTransport(FakeMeta()), sleep=lambda s: None)
     report, _ = teach(tmp_path, client)
     assert report["dataset"]["system_in_user"] is True
-    root = tmp_path / "skills/washer_done/dataset"
-    record = json.loads((root / "washer_done-teach.jsonl").read_text().splitlines()[0])
+    root = tmp_path / "skills/burner_left_on/dataset"
+    record = json.loads((root / "burner_left_on-teach.jsonl").read_text().splitlines()[0])
     assert [m["role"] for m in record["messages"]] == ["user", "assistant"]
-    assert json.loads((root / "washer_done-teach.manifest.json").read_text())["system_in_user"]
+    assert json.loads((root / "burner_left_on-teach.manifest.json").read_text())["system_in_user"]
 
 
 def test_keyframes_with_a_box_add_a_crop_labelled_like_them(tmp_path):
@@ -534,7 +534,7 @@ def test_keyframes_with_a_box_add_a_crop_labelled_like_them(tmp_path):
     from backend.eval.spark_errors import write_unfiltered_dataset
 
     report, said = teach(tmp_path, client_for(tmp_path, FakeMeta(sam=boxed)))
-    root = tmp_path / "skills/washer_done"
+    root = tmp_path / "skills/burner_left_on"
     rois = {r["keyframe_sha256"]: r for r in json.loads((root / "roi.json").read_text())}
     index = {e["id"]: e for e in report["dataset"]["examples_index"]}
     crops = [e for e in index.values() if e.get("kind") == "crop"]

@@ -12,7 +12,7 @@ from backend.release.faces import SOURCES_FILE, blur_folder
 from backend.skills.spec import SkillSpec, Target
 from tests.test_teach import FakeMeta, client_for, png
 
-SPEC = SkillSpec(name="washer_done", request="tell me when the washer is done",
+SPEC = SkillSpec(name="burner_left_on", request="tell me when the washer is done",
                  target=Target(sam_prompt="washer display", description="the display"),
                  positive="the display says End", negatives=["the display shows time left"],
                  alert="Laundry's done.")
@@ -24,7 +24,7 @@ def taught(tmp_path):
     plan = synth.plan_variations(SPEC, [sha256_hex(k) for k in keyframes], 3, 3)
     fake = FakeMeta(reject_edit=lambda body: plan[0].prompt.encode() in body)
     client = client_for(tmp_path, fake)
-    skill = client.settings.data_dir / "skills" / "washer_done"
+    skill = client.settings.data_dir / "skills" / "burner_left_on"
     (skill / "keyframes").mkdir(parents=True)
     for i, data in enumerate(keyframes):
         (skill / "keyframes" / f"kf_{i:02d}.png").write_bytes(data)
@@ -35,9 +35,9 @@ def taught(tmp_path):
 
 def test_export_keeps_what_regenerates_and_checks_provenance(tmp_path):
     client, _, plan, skill, manifest = taught(tmp_path)
-    (client.settings.data_dir / "skills" / "bus_m4").mkdir()  # nothing generated yet
+    (client.settings.data_dir / "skills" / "tap_left_running").mkdir()  # nothing generated yet
     assert export_manifests(client.settings.data_dir, tmp_path / "manifests") == [manifest]
-    assert manifest == tmp_path / "manifests" / "washer_done.jsonl"
+    assert manifest == tmp_path / "manifests" / "burner_left_on.jsonl"
     rows = [json.loads(line) for line in manifest.read_text().splitlines()]
     assert [r["id"] for r in rows] == sorted(v.id for v in plan)
     ok = [r for r in rows if r.get("image_sha256")]
@@ -103,6 +103,6 @@ def test_nothing_is_spent_without_a_yes_and_the_input_is_never_overwritten(tmp_p
         regenerate(client, skill / "synthetic" / "manifest.jsonl", skill / "keyframes",
                    skill / "synthetic")
     broken = tmp_path / "broken.jsonl"
-    broken.write_text(json.dumps({"id": "x", "skill": "washer_done"}) + "\n")
+    broken.write_text(json.dumps({"id": "x", "skill": "burner_left_on"}) + "\n")
     with pytest.raises(ValueError, match="line 1"):
         regenerate(client, broken, skill / "keyframes", tmp_path / "again")

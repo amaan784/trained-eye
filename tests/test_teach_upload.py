@@ -28,23 +28,23 @@ def frames(tmp_path):
 def upload(tmp_path, files, env=None, **fields):
     settings = load_settings(env={"TE_DATA_DIR": str(tmp_path / "data"), "MODEL_API_KEY": "k",
                                   **(env or {})}, env_file=None)
-    form = parse_multipart(*encode({"skill": "washer_done", **fields}, files))
+    form = parse_multipart(*encode({"skill": "burner_left_on", **fields}, files))
     return new_session(form, settings, MetaClient, 5.0), settings
 
 
 def test_the_multipart_body_is_read_as_sent():
     tricky = b"\xff\xd8\r\n--not-the-boundary\r\n\r\nstill the frame\r\n"
-    form = parse_multipart(*encode({"skill": "washer_done"}, [
+    form = parse_multipart(*encode({"skill": "burner_left_on"}, [
         ("frames", ("a.jpg", tricky, "image/jpeg")), ("frames", ("b.jpg", b"", "image/jpeg")),
         ("audio", ("request.m4a", b"\0\1\2", "audio/mp4"))]))
-    assert form == {"skill": [(None, b"washer_done")],
+    assert form == {"skill": [(None, b"burner_left_on")],
                     "frames": [("a.jpg", tricky), ("b.jpg", b"")],
                     "audio": [("request.m4a", b"\0\1\2")]}
-    body, content_type = encode({"skill": "washer_done"}, [("audio", ("r.wav", b"x"))])
+    body, content_type = encode({"skill": "burner_left_on"}, [("audio", ("r.wav", b"x"))])
     with pytest.raises(ValueError, match="cut off"):
         parse_multipart(body[:-10], content_type)
     with pytest.raises(ValueError, match="multipart/form-data"):
-        parse_multipart(b"skill=washer_done", "application/x-www-form-urlencoded")
+        parse_multipart(b"skill=burner_left_on", "application/x-www-form-urlencoded")
 
 
 def test_an_upload_becomes_a_session_waiting_for_the_spend(tmp_path, frames):
@@ -54,7 +54,7 @@ def test_an_upload_becomes_a_session_waiting_for_the_spend(tmp_path, frames):
     opts = session.opts
     assert (opts.positives, opts.negatives, opts.audio_s, opts.request) == (7, 0, 4.5, None)
     assert opts.audio.name == "request.m4a" and opts.audio.read_bytes() == b"\0aac"
-    assert opts.clip.parent == settings.data_dir / "teach" / "washer_done"
+    assert opts.clip.parent == settings.data_dir / "teach" / "burner_left_on"
     assert min(p.name for p in opts.clip.glob("*.jpg")) == "f000.jpg"
     assert session.status()["estimate"]["images"] == pytest.approx(7 * 0.01)
     assert session.status()["warning"] is None
@@ -104,6 +104,6 @@ def test_own_labels_needed_saves_the_keyframes_and_says_how(tmp_path, frames):
     with pytest.raises(Problem, match="needs your own labels") as err:
         upload(tmp_path, [*frames, audio], env={"TE_TRAIN_ON_MODEL_OUTPUTS": "0"})
     assert err.value.status == 422
-    assert "te teach --skill washer_done --clip " in str(err.value)
+    assert "te teach --skill burner_left_on --clip " in str(err.value)
     assert "--audio " in str(err.value) and str(err.value).endswith("--labels <file>")
-    assert any((tmp_path / "data/skills/washer_done/keyframes").iterdir())
+    assert any((tmp_path / "data/skills/burner_left_on/keyframes").iterdir())

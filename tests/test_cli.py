@@ -87,11 +87,11 @@ def write_clip(folder, n=12):
 def test_teach_estimate_only_makes_no_call(env, monkeypatch, capsys):
     calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
     clip = write_clip(env / "clip")
-    code = cli.main(["teach", "--skill", "washer_done", "--clip", str(clip), "--request",
+    code = cli.main(["teach", "--skill", "burner_left_on", "--clip", str(clip), "--request",
                      "let me know when the washer says done", "--estimate-only"])
     assert code == 0 and calls == []
     out = capsys.readouterr().out
-    assert out.startswith("estimate for washer_done") and "images $3.00" in out
+    assert out.startswith("estimate for burner_left_on") and "images $3.00" in out
     assert "train on model outputs: yes" in out
 
 
@@ -116,14 +116,14 @@ def test_teach_rejects_a_bad_skill_name_before_anything(env, monkeypatch, capsys
 
 
 SPEC_REPLY = {
-    "refused": False, "refusal_reason": None, "name": "washer_done",
+    "refused": False, "refusal_reason": None, "name": "burner_left_on",
     "sam_prompt": "washing machine display",
     "target_description": "the digital display on the front of the washer",
     "positive": "the display shows the cycle has finished (e.g. 'End' or '0:00')",
     "negatives": ["display shows time remaining", "display off"],
     "alert": "Your laundry's done.", "cooldown_s": 600, "confirm_with_cloud": True,
 }
-TEACH = ["teach", "--skill", "washer_done", "--request", "let me know when the washer says done"]
+TEACH = ["teach", "--skill", "burner_left_on", "--request", "let me know when the washer says done"]
 
 
 def answer(monkeypatch, *replies):
@@ -202,7 +202,7 @@ def test_teach_warns_when_the_estimate_is_over_what_is_left(env, monkeypatch, ca
     monkeypatch.setenv("TE_SKILL_CAP_USD", "0.20")
     assert cli.main([*TEACH, "--clip", clip, "--estimate-only"]) == 0
     err = capsys.readouterr().err
-    assert "only $0.20 is left under the spend caps for washer_done" in err
+    assert "only $0.20 is left under the spend caps for burner_left_on" in err
     assert "TE_SKILL_CAP_USD" in err and calls == []
 
 
@@ -247,7 +247,7 @@ def test_api_smoke_bad_reply_is_not_cached(env, monkeypatch, capsys, bad):
 def test_teach_checks_its_inputs_before_any_estimate(env, monkeypatch, capsys, problem, message):
     calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
     clip = write_clip(env / "clip")
-    args = ["teach", "--skill", "washer_done", "--clip", str(clip), "--request",
+    args = ["teach", "--skill", "burner_left_on", "--clip", str(clip), "--request",
             "let me know when the washer says done"]
     if problem == "missing clip":
         args[4] = str(env / "nope.mp4")
@@ -285,7 +285,7 @@ def test_teach_fallback_without_labels_stops_before_the_question(env, monkeypatc
     assert cli.main([*TEACH, "--clip", str(write_clip(env / "clip"))]) == 1
     out = capsys.readouterr().out
     assert prompts == [] and calls == [] and "needs your own labels" in out
-    assert list((env / "data/skills/washer_done/keyframes").glob("kf_*.jpg"))  # to label
+    assert list((env / "data/skills/burner_left_on/keyframes").glob("kf_*.jpg"))  # to label
 
 
 def test_teach_shows_the_worst_case_and_asks_with_it(env, monkeypatch, capsys):
@@ -352,7 +352,7 @@ def test_server_log_lines_reach_the_console_handler(capsys):
     assert "session opened" in capsys.readouterr().err
 
 
-def taught(env, skill="washer_done", n=40):
+def taught(env, skill="burner_left_on", n=40):
     from backend.cli import synthetic_jpeg
     from backend.dataengine.dataset import Example, write_dataset
     from backend.skills.spec import SkillSpec, Target
@@ -388,14 +388,14 @@ def fake_modal(monkeypatch, result=None, code=0):
     return runs
 
 
-TRAIN = ["train", "--skills", "washer_done", "--run", "exp1-mixed"]
+TRAIN = ["train", "--skills", "burner_left_on", "--run", "exp1-mixed"]
 
 
 def test_teach_rejects_a_blank_request_and_negative_counts_before_any_estimate(env, monkeypatch,
                                                                                capsys):
     calls = use_transport(monkeypatch, lambda r: pytest.fail("no request should be sent"))
     clip = str(write_clip(env / "clip"))
-    assert cli.main(["teach", "--skill", "washer_done", "--clip", clip, "--request", "   "]) == 2
+    assert cli.main(["teach", "--skill", "burner_left_on", "--clip", clip, "--request", "   "]) == 2
     captured = capsys.readouterr()
     assert "pass --audio or --request" in captured.err and "estimate" not in captured.out
     with pytest.raises(SystemExit) as stop:

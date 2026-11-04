@@ -18,7 +18,7 @@ from backend.dataengine.realclips import (
 )
 from backend.skills.spec import SkillSpec, Target
 
-SPEC = SkillSpec(name="washer_done", request="tell me when the washer says End",
+SPEC = SkillSpec(name="burner_left_on", request="tell me when the washer says End",
                  target=Target(sam_prompt="washer display", description="the washer display"),
                  positive="the display shows End", negatives=["display off"],
                  alert="Laundry's done.")
@@ -86,11 +86,11 @@ def test_labelled_clips_become_real_examples_split_by_session(tmp_path):
     skill = skill_folder(tmp_path / "skills")
     manifest = write_clip_dataset(skill, session_clips(tmp_path / "clips"))
     out = skill / "dataset-clips"
-    assert (out / "washer_done-clips.jsonl").is_file()
-    assert json.loads((out / "washer_done-clips.manifest.json").read_text()) == manifest
+    assert (out / "burner_left_on-clips.jsonl").is_file()
+    assert json.loads((out / "burner_left_on-clips.manifest.json").read_text()) == manifest
     # session 1: 30 frames less 6 near a change; session 2: 12 frames less 3 around 5 s
     assert manifest["examples"] == 24 + 9 and manifest["splits"] == {"train": 24, "val": 9}
-    assert manifest["counts"] == {"washer_done/real/no": 17 + 5, "washer_done/real/yes": 7 + 4}
+    assert manifest["counts"] == {"burner_left_on/real/no": 17 + 5, "burner_left_on/real/yes": 7 + 4}
     by_clip = {c["clip"]: c for c in manifest["clips"]}
     assert by_clip["session1_kitchen"] == {
         "clip": "session1_kitchen", "session": "session1", "split": "train",
@@ -100,14 +100,14 @@ def test_labelled_clips_become_real_examples_split_by_session(tmp_path):
     [skipped] = manifest["skipped"]
     assert skipped["clip"] == "session1_unlabelled" and "te label --clip" in skipped["reason"]
     index = {e["id"]: e for e in manifest["examples_index"]}
-    entry = index["washer_done-real-session1_kitchen-00015.0s"]
+    entry = index["burner_left_on-real-session1_kitchen-00015.0s"]
     assert {k: entry[k] for k in ("kind", "clip", "t_s", "session", "split", "source",
                                   "answer")} == {
         "kind": "clip", "clip": "session1_kitchen", "t_s": 15.0, "session": "session1",
         "split": "train", "source": "real", "answer": "yes"}
     assert {e["split"] for e in index.values() if e["session"] == "session2"} == {"val"}
-    assert "washer_done-real-session1_kitchen-00010.0s" not in index  # at the change
-    record = json.loads((out / "washer_done-clips.jsonl").read_text().splitlines()[0])
+    assert "burner_left_on-real-session1_kitchen-00010.0s" not in index  # at the change
+    record = json.loads((out / "burner_left_on-clips.jsonl").read_text().splitlines()[0])
     assert record["messages"][1]["content"][1]["text"].startswith(
         "Condition: the display shows End. Not: display off.")
     again = write_clip_dataset(skill, tmp_path / "clips")
@@ -117,7 +117,7 @@ def test_labelled_clips_become_real_examples_split_by_session(tmp_path):
 def test_clips_need_a_spec_usable_labels_and_the_teach_layout(tmp_path):
     clips = tmp_path / "clips"
     with pytest.raises(ValueError, match="no spec yet: run te teach"):
-        write_clip_dataset(tmp_path / "skills/washer_done", clips)
+        write_clip_dataset(tmp_path / "skills/burner_left_on", clips)
     skill = skill_folder(tmp_path / "skills")
     with pytest.raises(ValueError, match="no session1_. or session2_. clips"):
         write_clip_dataset(skill, clips)
@@ -136,7 +136,7 @@ def test_clips_need_a_spec_usable_labels_and_the_teach_layout(tmp_path):
 
     from tests.test_training_prep import teach_dataset
 
-    teach_dataset(tmp_path / "skills", "washer_done", system_in_user=True)
+    teach_dataset(tmp_path / "skills", "burner_left_on", system_in_user=True)
     with pytest.raises(ValueError, match="TE_SYSTEM_IN_USER=1, but it is 0 now"):
         write_clip_dataset(skill, clips, system_in_user=False)
     manifest = write_clip_dataset(skill, clips)  # the teach dataset's layout
@@ -146,18 +146,18 @@ def test_clips_need_a_spec_usable_labels_and_the_teach_layout(tmp_path):
 def test_te_clips_writes_the_dataset_and_says_what_it_left_out(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("TE_DATA_DIR", str(tmp_path / "data"))
-    assert cli.main(["clips", "--skill", "washer_done"]) == 2
+    assert cli.main(["clips", "--skill", "burner_left_on"]) == 2
     assert "no spec yet" in capsys.readouterr().err
     skill_folder(tmp_path / "data/skills")
-    session_clips(tmp_path / "data/clips/washer_done")
-    assert cli.main(["clips", "--skill", "washer_done"]) == 0
+    session_clips(tmp_path / "data/clips/burner_left_on")
+    assert cli.main(["clips", "--skill", "burner_left_on"]) == 0
     out = capsys.readouterr().out
     assert "  session1_kitchen (train): 24 of 30 frames, 7 yes and 17 no; 6 near a change" in out
     assert "  left out session1_unlabelled: no session1_unlabelled.labels.json" in out
-    assert ("washer_done: dataset-clips with 33 examples (24 from session 1 to train, 9 from "
-            "session 2 to validate) -> data/skills/washer_done/dataset-clips") in out
+    assert ("burner_left_on: dataset-clips with 33 examples (24 from session 1 to train, 9 from "
+            "session 2 to validate) -> data/skills/burner_left_on/dataset-clips") in out
     elsewhere = frame_clip(tmp_path / "drive/session1_a", 3, {"true": []})
-    assert cli.main(["clips", "--skill", "washer_done", "--clips", str(elsewhere.parent)]) == 0
+    assert cli.main(["clips", "--skill", "burner_left_on", "--clips", str(elsewhere.parent)]) == 0
     assert "no session 2 frames, so the clips hold nothing out" in capsys.readouterr().out
     assert cli.main(["clips", "--skill", "Bad-Name"]) == 2
 

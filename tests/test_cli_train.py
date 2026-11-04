@@ -38,7 +38,7 @@ def test_train_smoke_asks_runs_modal_and_saves_the_timing(env, monkeypatch, caps
     assert command[:3] == ["modal", "run", "backend/training/modal_train.py"]
     assert command[-1] == "--smoke" and "--bundle" in command
     tags = command[command.index("--tags") + 1].split(",")
-    assert {"exp:exp1", "skills:washer_done", "mix:mixed", "seed:42",
+    assert {"exp:exp1", "skills:burner_left_on", "mix:mixed", "seed:42",
             "commit:abc1234"} <= set(tags) and any(t.startswith("examples:") for t in tags)
     timing = json.loads((env / "data/train/smoke-timing.json").read_text())
     assert timing["train_samples_per_second"] == 0.5
@@ -75,7 +75,7 @@ def test_train_over_fifteen_dollars_asks_even_with_yes(env, monkeypatch, capsys)
 
 
 @pytest.mark.parametrize("args, message", [
-    (["--skills", "washer_done", "--run", "Exp 1"], "run name"),
+    (["--skills", "burner_left_on", "--run", "Exp 1"], "run name"),
     (["--skills", "nope", "--run", "exp1"], "no dataset yet"),
     (["--skills", ",", "--run", "exp1"], "at least one"),
 ])
@@ -132,7 +132,7 @@ def test_train_marks_the_run_running_then_done_or_failed(env, monkeypatch):
     assert cli.main([*TRAIN, "--smoke", "--yes"]) == 0
     [running] = during
     assert (running["state"], running["skills"], running["finished"], running["smoke"]) == (
-        "running", ["washer_done"], None, True)
+        "running", ["burner_left_on"], None, True)
     done = status_of(env)
     assert done["state"] == "done" and done["started"] == running["started"]
     assert done["finished"] >= done["started"]
@@ -196,7 +196,7 @@ def test_wandb_artifacts_ask_even_with_yes_and_say_what_becomes_visible(env, mon
     assert len(prompts) == 1  # --yes skipped the cost question, never this one
     [command] = runs
     assert "--wandb-artifacts" in command
-    copied = env / "data/train/exp1-mixed/provenance/washer_done-teach.manifest.json"
+    copied = env / "data/train/exp1-mixed/provenance/burner_left_on-teach.manifest.json"
     assert json.loads(copied.read_text())["examples_index"]  # the provenance goes along
 
 
@@ -242,7 +242,7 @@ def test_train_detach_outlives_the_client_and_collect_fetches_the_result(env, mo
     assert timing["train_samples_per_second"] == 0.5
     done = status_of(env)
     assert (done["state"], done["finished"], done["skills"]) == (
-        "done", remote["finished"], ["washer_done"])
+        "done", remote["finished"], ["burner_left_on"])
     out = capsys.readouterr().out
     assert "collected:" in out and "smoke timing saved" in out and "done: 900 s" in out
     assert not list((env / "data/train").glob(".collect-*"))
@@ -260,7 +260,7 @@ def test_collect_says_when_there_is_no_result_or_only_an_earlier_one(env, monkey
     assert "no result for exp1-mixed on the Modal volume yet" in capsys.readouterr().err
     assert cli.main(["train", "--collect", "Bad Run"]) == 2
     assert cli.main(["train"]) == 2 and "--skills and --run" in capsys.readouterr().err
-    run_files.write_status(env / "data", "exp1-mixed", "running", ["washer_done"],
+    run_files.write_status(env / "data", "exp1-mixed", "running", ["burner_left_on"],
                            started="2026-11-03T15:00:00Z", detached=True)
 
     def stale(command, **kw):

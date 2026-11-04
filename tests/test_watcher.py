@@ -16,7 +16,7 @@ from backend.watch.watcher import (
 )
 
 
-def spec(name="washer_done", confirm=True, cooldown=600):
+def spec(name="burner_left_on", confirm=True, cooldown=600):
     return SkillSpec(name=name, request="tell me when the washer says End",
                      target=Target(sam_prompt="washer display", description="the display"),
                      positive="the display shows End", negatives=["display off"],
@@ -52,18 +52,18 @@ def test_an_alert_after_three_of_four_frames_confirmed_by_spark(tmp_path):
         return Label("yes", "End shows", 0.003, False)
 
     log = FrameLog(tmp_path / "watch/s1.jsonl")
-    watcher = Watcher([watched(spec())], Scores(washer_done=[0.1, 0.9, 0.8, 0.9, 0.95]),
+    watcher = Watcher([watched(spec())], Scores(burner_left_on=[0.1, 0.9, 0.8, 0.9, 0.95]),
                       confirm=spark, log=log)
     results = run(watcher, 5)
     alerts = [a for _, fired in results for a in fired]
     assert [(a.skill, a.text, a.t, a.confirmed) for a in alerts] == [
-        ("washer_done", "Laundry's done.", 3.0, True)]
-    assert asked == ["washer_done"]  # Spark only when the trigger fires
+        ("burner_left_on", "Laundry's done.", 3.0, True)]
+    assert asked == ["burner_left_on"]  # Spark only when the trigger fires
     rows = [json.loads(x) for x in log.path.read_text().splitlines()]
     assert [r["p"] for r in rows] == [0.1, 0.9, 0.8, 0.9, 0.95]
     assert [r.get("alert") for r in rows] == [None, None, None, True, None]
     assert rows[3]["cloud"] == "yes" and "image" not in json.dumps(rows)
-    assert alert_message(alerts[0]) == {"type": "alert", "skill": "washer_done",
+    assert alert_message(alerts[0]) == {"type": "alert", "skill": "burner_left_on",
                                         "text": "Laundry's done.", "t": 3.0, "p": 0.9,
                                         "confirmed": True}
 
@@ -75,7 +75,7 @@ def test_a_cloud_no_snoozes_for_a_minute_instead_of_alerting():
         calls.append(1)
         return Label("no" if len(calls) == 1 else "yes", "", 0.003, False)
 
-    watcher = Watcher([watched(spec())], Scores(washer_done=[0.9] * 80), confirm=spark)
+    watcher = Watcher([watched(spec())], Scores(burner_left_on=[0.9] * 80), confirm=spark)
     alerts = [(a.t, a.confirmed) for _, fired in run(watcher, 80) for a in fired]
     assert alerts == [(62.0, True)]  # first fire at t=2 rejected, next after 60 s
 
@@ -84,16 +84,16 @@ def test_a_failed_cloud_check_still_alerts_unconfirmed():
     def spark(image, s):
         raise ConnectionError("no network")
 
-    watcher = Watcher([watched(spec())], Scores(washer_done=[0.9] * 3), confirm=spark)
+    watcher = Watcher([watched(spec())], Scores(burner_left_on=[0.9] * 3), confirm=spark)
     [(_, [alert])] = run(watcher, 3)[2:]
     assert alert.confirmed is None
-    error = Watcher([watched(spec())], Scores(washer_done=[0.9] * 3),
+    error = Watcher([watched(spec())], Scores(burner_left_on=[0.9] * 3),
                     confirm=lambda i, s: Label("unsure", "no label: 400", 0.0, False, error=True))
     assert run(error, 3)[2][1][0].confirmed is None
 
 
 def test_skills_without_the_cloud_check_never_call_spark():
-    watcher = Watcher([watched(spec(confirm=False))], Scores(washer_done=[0.9] * 3),
+    watcher = Watcher([watched(spec(confirm=False))], Scores(burner_left_on=[0.9] * 3),
                       confirm=lambda i, s: pytest.fail("Spark must not be asked"))
     assert run(watcher, 3)[2][1][0].confirmed is None
 
@@ -101,9 +101,9 @@ def test_skills_without_the_cloud_check_never_call_spark():
 def test_student_errors_are_logged_and_do_not_count(tmp_path):
     log = FrameLog(tmp_path / "w.jsonl")
     watcher = Watcher([watched(spec(confirm=False))],
-                      Scores(washer_done=[0.9, None, 0.9, None, 0.9]), log=log)
+                      Scores(burner_left_on=[0.9, None, 0.9, None, 0.9]), log=log)
     results = run(watcher, 5)
-    assert [scores["washer_done"] for scores, _ in results] == [0.9, None, 0.9, None, 0.9]
+    assert [scores["burner_left_on"] for scores, _ in results] == [0.9, None, 0.9, None, 0.9]
     assert [a.t for _, fired in results for a in fired] == [4.0]
     rows = [json.loads(x) for x in log.path.read_text().splitlines()]
     assert rows[1]["error"] == "endpoint down" and rows[1]["p"] is None
@@ -127,10 +127,10 @@ def test_frames_that_were_not_timed_log_no_latency(tmp_path):
 
 
 def test_each_skill_has_its_own_trigger():
-    watcher = Watcher([watched(spec("washer_done", confirm=False)),
+    watcher = Watcher([watched(spec("burner_left_on", confirm=False)),
                        watched(spec("pot_boils", confirm=False), threshold=0.95)],
-                      Scores(washer_done=[0.9] * 3, pot_boils=[0.9] * 3))
-    assert [a.skill for a in run(watcher, 3)[2][1]] == ["washer_done"]
+                      Scores(burner_left_on=[0.9] * 3, pot_boils=[0.9] * 3))
+    assert [a.skill for a in run(watcher, 3)[2][1]] == ["burner_left_on"]
 
 
 def test_load_skill_reads_the_spec_and_the_calibrated_threshold(tmp_path):
@@ -150,11 +150,11 @@ def test_load_skill_reads_the_spec_and_the_calibrated_threshold(tmp_path):
 def test_thresholds_come_from_the_flag_then_the_run_then_the_skill(tmp_path):
     from backend.watch.watcher import run_threshold_file
 
-    skill_dir = tmp_path / "skills/washer_done"
+    skill_dir = tmp_path / "skills/burner_left_on"
     skill_dir.mkdir(parents=True)
     (skill_dir / "spec.json").write_text(spec().model_dump_json())
-    path = run_threshold_file(tmp_path, "exp1-mixed", "washer_done")
-    assert path == tmp_path / "watch/exp1-mixed/washer_done/threshold.json"
+    path = run_threshold_file(tmp_path, "exp1-mixed", "burner_left_on")
+    assert path == tmp_path / "watch/exp1-mixed/burner_left_on/threshold.json"
 
     def picked(**kw):
         skill = load_skill(skill_dir, **kw)
@@ -180,7 +180,7 @@ def test_thresholds_come_from_the_flag_then_the_run_then_the_skill(tmp_path):
 def test_the_frame_log_says_which_threshold_and_run_it_used(tmp_path):
     log = FrameLog(tmp_path / "w.jsonl", {"run": "exp1-mixed"})
     skill = WatchedSkill(spec(confirm=False), Trigger(0.6, 600.0), True, "run")
-    run(Watcher([skill], Scores(washer_done=[None, 0.9]), log=log), 2)
+    run(Watcher([skill], Scores(burner_left_on=[None, 0.9]), log=log), 2)
     rows = [json.loads(x) for x in log.path.read_text().splitlines()]
     assert [(r["run"], r["threshold"], r["threshold_source"]) for r in rows] == [
         ("exp1-mixed", 0.6, "run")] * 2
@@ -197,7 +197,7 @@ def test_the_prompt_layout_follows_the_run_then_the_datasets(tmp_path):
     from backend.watch.watcher import system_in_user
 
     folded = write_manifest(tmp_path / "pot_boils", system_in_user=True)
-    plain = write_manifest(tmp_path / "washer_done", system_in_user=False)
+    plain = write_manifest(tmp_path / "burner_left_on", system_in_user=False)
     untaught = tmp_path / "hot_pan"
     assert system_in_user([folded, untaught]) is True
     assert system_in_user([plain]) is False
@@ -214,16 +214,16 @@ def test_two_watchers_sharing_a_cooldown_book_alert_once_per_cooldown():
     from backend.watch.watcher import CooldownBook
 
     book = CooldownBook()
-    first = Watcher([watched(spec(confirm=False))], Scores(washer_done=[0.9] * 3),
+    first = Watcher([watched(spec(confirm=False))], Scores(burner_left_on=[0.9] * 3),
                     cooldowns=book)
     assert [a.t for _, fired in run(first, 3) for a in fired] == [2.0]
     # a reconnect: a new session, a new watcher, the condition still true
-    second = Watcher([watched(spec(confirm=False))], Scores(washer_done=[0.9] * 700),
+    second = Watcher([watched(spec(confirm=False))], Scores(burner_left_on=[0.9] * 700),
                      cooldowns=book)
     fired = [a.t for i in range(3, 700)
              for a in second.on_frame(b"jpeg", t=float(i))[1]]
     assert fired == [602.0]  # only once the first alert's cooldown is over
-    alone = Watcher([watched(spec(confirm=False))], Scores(washer_done=[0.9] * 3))
+    alone = Watcher([watched(spec(confirm=False))], Scores(burner_left_on=[0.9] * 3))
     assert [a.t for _, f in run(alone, 3) for a in f] == [2.0]  # no book: as before
 
 
@@ -231,15 +231,15 @@ def test_a_spark_no_snooze_is_shared_and_does_not_shorten_a_newer_cooldown():
     from backend.watch.watcher import CooldownBook
 
     book = CooldownBook()
-    no = Watcher([watched(spec())], Scores(washer_done=[0.9] * 3), cooldowns=book,
+    no = Watcher([watched(spec())], Scores(burner_left_on=[0.9] * 3), cooldowns=book,
                  confirm=lambda i, s: Label("no", "", 0.003, False))
-    assert run(no, 3)[2][1] == [] and book.quiet_until("washer_done") == 62.0
-    other = Watcher([watched(spec(confirm=False))], Scores(washer_done=[0.9] * 80),
+    assert run(no, 3)[2][1] == [] and book.quiet_until("burner_left_on") == 62.0
+    other = Watcher([watched(spec(confirm=False))], Scores(burner_left_on=[0.9] * 80),
                     cooldowns=book)
     fired = [a.t for i in range(3, 80) for a in other.on_frame(b"jpeg", t=float(i))[1]]
     assert fired == [62.0]  # quiet for the snooze, then it fires
-    book.set("washer_done", 50.0, only_if=602.0)  # an old value: left alone
-    assert book.quiet_until("washer_done") == 662.0
+    book.set("burner_left_on", 50.0, only_if=602.0)  # an old value: left alone
+    assert book.quiet_until("burner_left_on") == 662.0
 
 
 def test_the_cooldown_book_survives_a_restart_in_wall_clock_time(tmp_path):
@@ -248,13 +248,13 @@ def test_the_cooldown_book_survives_a_restart_in_wall_clock_time(tmp_path):
     path = tmp_path / "watch/cooldowns.json"
     now = {"mono": 100.0, "wall": 1_800_000_000.0}
     book = CooldownBook(path, clock=lambda: now["mono"], wall=lambda: now["wall"])
-    book.set("washer_done", 700.0)  # 600 s from now
+    book.set("burner_left_on", 700.0)  # 600 s from now
     book.set("pot_boils", 50.0)  # already over: not saved
     saved = json.loads(path.read_text())
-    assert saved == {"quiet_until": {"washer_done": 1_800_000_600.0}}
+    assert saved == {"quiet_until": {"burner_left_on": 1_800_000_600.0}}
     now.update(mono=5.0, wall=1_800_000_010.0)  # te serve restarted 10 s later
     again = CooldownBook(lambda: path, clock=lambda: now["mono"], wall=lambda: now["wall"])
-    assert again.quiet_until("washer_done") == pytest.approx(595.0)
+    assert again.quiet_until("burner_left_on") == pytest.approx(595.0)
     assert again.quiet_until("pot_boils") == float("-inf")
     path.write_text("not json")
-    assert CooldownBook(path).quiet_until("washer_done") == float("-inf")  # lost, no crash
+    assert CooldownBook(path).quiet_until("burner_left_on") == float("-inf")  # lost, no crash

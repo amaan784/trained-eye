@@ -88,6 +88,38 @@ private struct StyledLabel: View {
   }
 }
 
+/// A switch whose state reads at a glance in light and dark mode: on is a solid Ink (or
+/// Paper) track with a knob in the page colour, off an outlined track with a grey knob.
+struct InkSwitchStyle: ToggleStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    Button {
+      configuration.isOn.toggle()
+    } label: {
+      HStack(alignment: .center, spacing: 12) {
+        configuration.label
+        Spacer(minLength: 12)
+        ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+          Capsule()
+            .fill(configuration.isOn ? Theme.text : Color.clear)
+            .overlay(Capsule().stroke(configuration.isOn ? Theme.text : Theme.secondary,
+                                      lineWidth: 1.5))
+            .frame(width: 52, height: 30)
+          Circle()
+            .fill(configuration.isOn ? Theme.ground : Theme.secondary)
+            .frame(width: 22, height: 22)
+            .padding(4)
+        }
+        .animation(.easeOut(duration: 0.15), value: configuration.isOn)
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityElement(children: .combine)
+    .accessibilityValue(configuration.isOn ? "On" : "Off")
+    .accessibilityAddTraits(.isToggle)
+  }
+}
+
 /// The camera-on dot: Marker while the camera is live.
 struct StatusDot: View {
   let on: Bool

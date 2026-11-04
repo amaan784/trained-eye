@@ -47,7 +47,7 @@ private struct SkillRow: View {
           Text(state).font(Theme.caption).foregroundStyle(Theme.secondary)
         }
       }
-      .tint(Theme.text)
+      .toggleStyle(InkSwitchStyle())
       .padding(.vertical, 14)
     }
     .accessibilityElement(children: .combine)

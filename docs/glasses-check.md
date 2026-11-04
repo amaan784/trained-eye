@@ -73,8 +73,8 @@ wearables.developer.meta.com could not be reached from the build machine.
    choose Allow once (or Allow always) in Meta AI. Allow the Local Network prompt too; the
    stream waits for it.
 6. Success looks like this: a moving full-screen view from the glasses, and the stream
-   chip shows it is streaming, with a green dot. Look at the washer display or printed text and
-   check it is readable. Keep the app in the foreground; leaving it ends the session.
+   chip shows it is streaming, with a green dot. Look at the stove's burner and knob, or
+   printed text, and check it is readable. Keep the app in the foreground; leaving it ends the session.
 7. Watch the capture LED on the glasses while the preview runs and tell me what it does.
    Trained Eye must never hide it, so I need to know how it behaves.
 8. A single tap on the glasses' touchpad pauses the stream ("Paused", "Tap your glasses
@@ -111,7 +111,7 @@ the Trained Eye app will use for alerts.
    output button and check that the glasses are listed and selected.
 2. In the iPhone's Settings, open Accessibility, then Spoken Content, and turn on Speak
    Selection.
-3. In Notes, type "Your laundry's done", select it and tap Speak.
+3. In Notes, type "The burner is still on", select it and tap Speak.
 4. Success: you hear it from the glasses' speakers, not the phone.
 
 Optional: Meta's BirdSpotter sample (needs iOS 18) speaks through the glasses too. Build it

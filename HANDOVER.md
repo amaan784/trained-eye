@@ -43,7 +43,7 @@ Code map (all under `backend/`, namespace packages without `__init__.py`):
 | `training/modal_train.py` | Modal app that trains on one H100 with the recipe's pins; smoke mode, detached runs, the processor preflight (`training/preflight.py`) |
 | `training/runs.py`, `training/gpu_ledger.py` | Training run status for GET /skills; the Modal spend ledger `data/modal_ledger.jsonl` checked against the $150 credit |
 | `inference/student.py` | Scores a frame on an OpenAI-compatible endpoint from the answer token's logprobs |
-| `watch/trigger.py` | 3-of-4 smoothing with a cooldown; threshold calibration on labelled clips |
+| `watch/trigger.py` | 3-of-4 smoothing, the skill's hold (hold_s) and a cooldown; threshold calibration on labelled clips |
 | `watch/watcher.py` | Watch mode: scores, the Muse Spark check, alerts, the frame log |
 | `teach_api.py`, `teach_upload.py`, `teach_session.py` | Teaching from the phone: the upload, the checks before any spend, the session with its two questions |
 | `training/export.py`, `training/export_check.py` | Modal app that merges the adapter and checks the merged model's answers |
@@ -64,7 +64,7 @@ Code map (all under `backend/`, namespace packages without `__init__.py`):
 | `dataengine/dataset.py` | Axolotl JSONL in Meta's recipe format, 512x512 padded PNGs, manifest with provenance index |
 | `teach.py` | The teach flow end to end, cached; fallback switch `TE_TRAIN_ON_MODEL_OUTPUTS=0` |
 
-Other files: `tests/` (1012 tests pass, all offline; one more skips without OpenCV),
+Other files: `tests/` (1033 tests pass, all offline; one more skips without OpenCV),
 `docs/glasses-check.md`, `docs/recording-protocol.md`, `.env.example`,
 `.github/workflows/ci.yml` (ruff and pytest on every push), `CLAUDE.md` (short
 conventions file the author asked for).
@@ -112,12 +112,12 @@ Local data, all under `data/` and gitignored: `cache/`, `ledger.jsonl`, and
   the web playground (`te playground`), the iOS app (`ios/`, not compiled) and
   CONTRIBUTIONS.md.
 - **M2, the parts that run without the Mac or Modal** (tested offline with fakes): the
-  watch trigger (3 of the last 4 frames over the threshold, then the cooldown) and the
-  threshold calibration, the student scorer for an OpenAI-compatible endpoint (vLLM on
-  Modal or llama.cpp's llama-server), the watcher (Muse Spark check, frame log), watch
-  mode on the WebSocket (`"watch"` in the hello, scores in each ack, alert messages), the
-  training bundle and the Axolotl config from Meta's recipe, the Modal training app, and
-  `te train` and `te watch`.
+  watch trigger (3 of the last 4 frames over the threshold for the skill's hold, then the
+  cooldown) and the threshold calibration, the student scorer for an OpenAI-compatible
+  endpoint (vLLM on Modal or llama.cpp's llama-server), the watcher (Muse Spark check,
+  frame log), watch mode on the WebSocket (`"watch"` in the hello, scores in each ack,
+  alert messages), the training bundle and the Axolotl config from Meta's recipe, the
+  Modal training app, and `te train` and `te watch`.
 - Spend so far: $0.00 Meta API, $0.00 Modal. Nothing has called a paid service yet.
 
 ### Not done yet, in priority order
@@ -134,12 +134,12 @@ PROGRESS.md.
    400 about the request shape, adapt only `MetaClient.structured`.
 3. **W&B smoke from Modal:** `modal run backend/training/wandb_smoke.py`. Creates the
    `trained-eye` project. It stays private; making it public counts as publishing.
-4. **First washer teach run, small:**
-   `te teach --skill washer_done --clip data/teach/washer_done/teach.mp4 --audio data/teach/washer_done/request.m4a --positives 6 --negatives 6`
+4. **First burner teach run, small:**
+   `te teach --skill burner_left_on --clip data/teach/burner_left_on/teach.mp4 --audio data/teach/burner_left_on/request.m4a --positives 6 --negatives 6`
    (for 20 to 24 keyframes, what a 10 s clip gives, the estimator prints about $0.48 to
    $0.52, and at most $1.11 to $1.22 if every label has to be asked again with the larger
    token budget; `te teach` prints the figure for the real clip first). Then look at
-   `data/skills/washer_done/`. The
+   `data/skills/burner_left_on/`. The
    request shapes for Voice Transcribe (multipart file + model to
    `/audio/transcriptions`), SAM (`/responses`, streamed) and Muse Image (`/images/edits`
    multipart, `/images/generations` JSON) come from SPEC.md and are unconfirmed; fix
@@ -152,15 +152,17 @@ PROGRESS.md.
    the boxes in `roi.json` against that text, fix the reader if they disagree, and add a
    test with the text as a fixture. Masks are not decoded; that needs Meta's
    `meta-sam-parser` package, a download, so ask first.
-6. **Full washer run:** the same command with the default 150 and 150. The estimator
+6. **Full burner run:** the same command with the default 150 and 150. The estimator
    prints about $5.25 to $5.28 for 20 to 24 keyframes, and at most $11.52 to $11.63 if
    every label is asked again with the larger budget. That worst case is under the $15
    ask threshold but over the $10 skill cap: the cap would stop the run partway, and a
    rerun with a higher `TE_SKILL_CAP_USD` continues from the cache. Image tokens are
    guessed at 1,500 per image, so treat these as estimates, not bounds.
-7. **Real clips** for washer_done, boil_over and bus_m4 (`docs/recording-protocol.md`):
-   about 5 minutes of training and validation per skill from sessions 1 and 2, about 5
-   minutes of test per skill from a different session, with near-misses.
+7. **Real clips** for burner_left_on, fridge_left_open and tap_left_running, and
+   egg_whisked if you record it (`docs/recording-protocol.md`): about 5 minutes of
+   training and validation per skill from sessions 1 and 2, about 5 minutes of test per
+   skill from a different session, with near-misses, and each true stretch well past the
+   skill's hold.
 8. **Questions for the organizers:** does self-hosting Glimmer on Modal count as partner
    inference (the cookbook lists only Together AI as a Glimmer host)? The human answer on
    training Glimmer on Muse outputs is still pending; if it is no, set
@@ -176,18 +178,18 @@ PROGRESS.md.
      pytest, wandb, modal and opencv-python-headless, but `pip install -e ".[dev]"` also
      installs numpy, pillow, pydantic, starlette, uvicorn with its extras, and ruff.
      Ask whether those count as approved.
-10. **M2 on Modal and the Mac**, after the washer dataset exists (item 6):
+10. **M2 on Modal and the Mac**, after the burner dataset exists (item 6):
    - Check the H100 price in `MODAL_GPU_USD_PER_HOUR` (backend/config.py) against
      modal.com/pricing; it could not be checked from the build sandbox.
-   - `te train --skills washer_done --run exp1-mixed --preflight` first (a CPU Modal job;
+   - `te train --skills burner_left_on --run exp1-mixed --preflight` first (a CPU Modal job;
      asks): it renders a few examples with the pinned processor and says whether to set
-     `TE_SYSTEM_IN_USER=1` before the datasets are written. `te clips --skill washer_done`
+     `TE_SYSTEM_IN_USER=1` before the datasets are written. `te clips --skill burner_left_on`
      adds the labelled session 1 clips as training frames and session 2 as validation.
-   - `te train --skills washer_done --run exp1-mixed --smoke` asks, then runs the recipe's
+   - `te train --skills burner_left_on --run exp1-mixed --smoke` asks, then runs the recipe's
      two-step smoke. The first run builds the image (flash-attn compiles; the CUDA image
      tag `nvidia/cuda:13.0.0-devel-ubuntu24.04` is unverified) and downloads the 30B base
      to the volume. It saves the timing that prices the real run.
-   - `te train --skills washer_done --run exp1-mixed` prints the estimate from that
+   - `te train --skills burner_left_on --run exp1-mixed` prints the estimate from that
      timing and asks (always, if it is over $15). `--detach` keeps it running if the Mac
      sleeps (`te train --collect <run>` fetches the result); `--wandb-entity` names the
      team; `--wandb-artifacts` is off by default and asks every time. Modal spend is kept
@@ -207,18 +209,20 @@ PROGRESS.md.
      `te serve-student --base` serves base Glimmer (Experiment 4, te regress) on its own
      app; `--runs a,b,c` serves several adapters on one base, each run a model name
      (untried: check that vLLM's LoRA serving works for Glimmer before relying on it).
-   - `te watch --skills washer_done --clip <recorded clip>` replays a clip through watch
-     mode and writes a frame log; `te serve` then serves it to the phone. Thresholds stay
+   - `te watch --skills burner_left_on --clip <recorded clip>` replays a clip through watch
+     mode and writes a frame log (each skill fires only after its hold: the fridge 30 s,
+     the tap 20 s, the burner 10 s); `te serve` then serves it to the phone. Thresholds stay
      at 0.5 until `te calibrate` has labelled validation clips (`te label --clip`, M3);
      `--run` keeps a threshold per training run. Teaching from the phone needs
      `SERVER_TOKEN`; GET /skills tells the app which skills are training, trained or
      served, and cooldowns survive reconnects (`data/watch/cooldowns.json`).
    - The iOS app: `ios/README.md` (create the Xcode project, add DAT 1.0.1, the
      Info.plist keys). It has never been compiled; its TODOs are listed there.
-11. **M3 on the Mac:** teach boil_over and bus_m4 as in item 4; record the clips in
+11. **M3 on the Mac:** teach fridge_left_open and tap_left_running (and egg_whisked if
+   recorded) as in item 4; record the clips in
    `docs/recording-protocol.md`; label the test clips with `te label --clip <clip>` and
    200 generated images with `te label --skill <skill> --sample 200`; then
-   `te experiments --skills washer_done,boil_over,bus_m4` prints every training run of
+   `te experiments --skills burner_left_on,fridge_left_open,tap_left_running` prints every training run of
    Experiments 1 to 3 with its price (steps stay fixed per run, see backend/eval/plan.py)
    and `--write-plan` writes `eval/plan.json` for `make eval` (the $150 check counts the
    final run, an export and serving per model and the Modal spend so far;
@@ -430,7 +434,7 @@ copied files, and list them in CONTRIBUTIONS.md.
 ### M2 (Fri to Sat): training, serving, watching
 
 - `backend/training/`: a Modal function with Axolotl in the image and data on a Modal
-  volume; `te train --skills washer_done --run exp1-mixed`. One multi-skill adapter (the
+  volume; `te train --skills burner_left_on --run exp1-mixed`. One multi-skill adapter (the
   condition is in the prompt). W&B through Axolotl (`wandb_project: trained-eye`,
   `wandb_name` like `exp1-mixed`, tags for experiment, skills, mix, image count, seed and
   git commit), WANDB_API_KEY from the Modal Secret. Log the full config, the dataset
@@ -443,12 +447,14 @@ copied files, and list them in CONTRIBUTIONS.md.
   Modal endpoint; check the merged model makes the same yes/no decisions as the adapter
   on 50 frames.
 - `backend/inference/`: one student interface (Mac or Modal) scoring frames as above;
-  frames at 1 fps (downscaled with `dataset.pad_image`); alert when 3 of the last 4 frames
-  are over the threshold, then the skill's cooldown; threshold = the lowest meeting at
-  most 1 false alarm per hour on validation footage; if `confirm_with_cloud`, send the
-  last frame to Muse Spark first and log both decisions (this is the live Meta call kept
-  in every demo); send `{"type": "alert", "text": ...}` to the phone over the WebSocket;
-  log every scored frame (time, probability, decision) for the timeline visual.
+  frames at 1 fps (downscaled with `dataset.pad_image`); alert when 3 of the last 4
+  frames are over the threshold and that has lasted the skill's hold (hold_s: the fridge
+  30 s, the tap 20 s, the burner 10 s, the egg 0 s), then the skill's cooldown; threshold
+  = the lowest meeting at most 1 false alarm per hour on validation footage; if
+  `confirm_with_cloud`, send the last frame to Muse Spark first and log both decisions
+  (this is the live Meta call kept in every demo); send `{"type": "alert", "text": ...}`
+  to the phone over the WebSocket; log every scored frame (time, probability, decision)
+  for the timeline visual.
 - Built so far: everything in the first and third bullets except the threshold from
   real footage, which needs M3's labels. Since Nov 2 the export, serving on Modal and
   `ios/` are written too (section 3, item 10); none of it has run yet.
@@ -462,10 +468,11 @@ copied files, and list them in CONTRIBUTIONS.md.
 
 ### M3 (Sat to Sun): all skills, evaluation, experiments
 
-- Teach boil_over and bus_m4. A small web labeling tool that marks the time ranges where
+- Teach fridge_left_open and tap_left_running (egg_whisked if recorded). A small web
+  labeling tool that marks the time ranges where
   the condition is true and writes JSON; test labels are human only.
-- `backend/eval/` and `make eval`: frame precision, recall and F1; event recall within
-  5 s; false alarms per hour; time to alert; latency per frame; dollars per hour. Writes
+- `backend/eval/` and `make eval`: frame precision, recall and F1; event recall on time
+  (a per-skill window counted from the end of the hold, `metrics.ON_TIME_S`); false alarms per hour; time to alert; latency per frame; dollars per hour. Writes
   `eval/results.md` and charts (one palette, values labelled, readable in dark and
   light) and logs everything to W&B. Built: the charts are SVG (matplotlib could not be
   installed), W&B logging is optional (`te eval --wandb`).
@@ -541,4 +548,8 @@ copied files, and list them in CONTRIBUTIONS.md.
   no change in behaviour, so each file arrives whole (`stagetools/CONSOLIDATED_PLAN.md`
   maps the old stage numbers to the new ones). Then, at the author's request, v31 to v92
   went to `main` after v1 to v30, one commit per stage, with CI green on each (v92 at
-  1:21 pm EST). v93 brings these notes up to date and changes no code.
+  1:21 pm EST). v93 brings these notes up to date and changes no code. After it, at the
+  author's request and directly on `main` (no new stage folders): the skills became
+  burner_left_on, fridge_left_open and tap_left_running (egg_whisked if recorded), each
+  with a hold before its alert (hold_s in the spec and the watch trigger) and its own
+  on-time window in the evaluation, counted from the end of the hold.

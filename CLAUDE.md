@@ -21,27 +21,27 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
     te ws-selftest                   # synthetic frames through the WebSocket, in process
     te api-smoke                     # one tiny paid Muse Spark call (needs MODEL_API_KEY)
     te policy "<request>"            # local policy check, free
-    te teach --skill washer_done --clip <video or frame folder> --audio <request audio>
+    te teach --skill burner_left_on --clip <video or frame folder> --audio <request audio>
                                      # teach flow; prints a cost estimate and asks first
                                      # --correct "<fix>" after a wrong read-back,
                                      # --labels <json> with names from keyframes/
-    te train --skills washer_done --run exp1-mixed --smoke
+    te train --skills burner_left_on --run exp1-mixed --smoke
                                      # the recipe's two-step smoke on Modal; asks first.
                                      # Without --smoke: the real run, priced from the smoke.
                                      # --preflight renders examples with the pinned processor
                                      # (CPU job, asks); --detach, then --collect <run>
-    te clips --skill washer_done     # labelled session1_/session2_ clips -> dataset-clips (free)
-    te watch --skills washer_done --clip <video or frame folder>
+    te clips --skill burner_left_on  # labelled session1_/session2_ clips -> dataset-clips (free)
+    te watch --skills burner_left_on --clip <video or frame folder>
                                      # replay a clip through watch mode (needs TE_STUDENT_URL);
                                      # --run <run> uses that run's threshold
-    te calibrate --skill washer_done --log <frame log> --labels <true ranges json>
+    te calibrate --skill burner_left_on --log <frame log> --labels <true ranges json>
                                      # threshold from labelled validation clips (--run: per run)
     te export --run exp1-mixed       # merge the adapter on Modal and check it (asks)
     te serve-student --run exp1-mixed  # the trained model on Modal (asks); --stop stops it;
                                      # --base: base Glimmer; --runs a,b: adapters on one base
     te label --clip <clip>           # mark where the condition is true (writes <clip>.labels.json)
-    te label --skill washer_done --sample 200   # hand-label generated images (Experiment 2)
-    te experiments --skills washer_done [--write-plan]  # every training run with its price
+    te label --skill burner_left_on --sample 200   # hand-label generated images (Experiment 2)
+    te experiments --skills burner_left_on [--write-plan]  # every training run with its price
     te replay --run exp1-mixed       # the run's clips in eval/plan.json: threshold from its
                                      # session 2 replays, then the test clips into the logs
     te unfiltered / te spark-errors  # Experiment 2: the unfiltered arm, Spark's error rate
@@ -65,6 +65,10 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
 - Local data (footage, cache, ledger, generated images, weights) lives in data/ and is gitignored.
 - Packages under backend/ are namespace packages (no __init__.py files).
 - Ask before any job over $15, before publishing anything, and before anything physical.
+- Skills: burner_left_on, fridge_left_open, tap_left_running (egg_whisked if recorded). Each
+  alerts only after its hold (SKILL_HOLDS in backend/skills/spec.py: 10, 30, 20, 0 s), and
+  the evaluation's on-time window per skill (ON_TIME_S in backend/eval/metrics.py) counts
+  from the end of the hold.
 - Policy: no skills about specific people, and none about politics or war; never hide the
   capture LED; keep Muse Image provenance; blur faces in anything published.
 - Numbers in docs come only from eval scripts.

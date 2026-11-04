@@ -4,7 +4,7 @@ Teach your glasses to notice anything.
 
 Meta glasses answer when you ask them something, but they can't keep an eye on
 anything for you. With Trained Eye you look at something for about ten seconds and
-say what to watch for ("let me know when the washer says done"). Meta's models label
+say what to watch for ("tell me if I leave the burner on"). Meta's models label
 that footage and generate training variations, a small open model (Muse Glimmer) is
 fine-tuned on them, and from then on the glasses speak up when it happens.
 
@@ -140,7 +140,8 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   keeps generated images only when Spark agrees, and agreement stats.
 - `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
 - `backend/watch/trigger.py`: when a skill fires: 3 of the last 4 frames over the
-  threshold, then the cooldown; the threshold calibration on labelled clips.
+  threshold for the skill's hold (the fridge 30 s, the tap 20 s, the burner 10 s), then
+  the cooldown; the threshold calibration on labelled clips.
 - `backend/inference/student.py`: scores a frame with the trained model on an
   OpenAI-compatible endpoint, read at its yes or no answer token.
 - `backend/watch/watcher.py`: watch mode: scores, the Muse Spark check before an
@@ -175,7 +176,7 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   git on the stage branch.
 - `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
 - `CONTRIBUTIONS.md`: credits, licenses and the copied Meta sample files.
-- `tests/`: 1012 tests, all offline; none calls a paid API.
+- `tests/`: 1033 tests, all offline; none calls a paid API.
 
 ## Next
 

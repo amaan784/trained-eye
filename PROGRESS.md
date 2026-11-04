@@ -1,13 +1,15 @@
 # Progress
 
 The source of truth between sessions. Updated at the end of every milestone.
-Last update: 2026-11-03, the code for M2 to M4 (stages v31 to v92), tested offline only;
+Last update: 2026-11-03, the code for M2 to M4 (stages v31 to v92) and the kitchen skills with
+their holds (on main directly), tested offline only;
 v1 to v93 are on main.
 
 ## Status
 
 M0 and M1 code are done and tested offline. M2 to M4 are written and tested offline too
-(stages v31 to v92; 1012 tests pass and one skips without OpenCV, none calls a paid API);
+(stages v31 to v92, then the kitchen skills with a hold per skill, committed directly to
+main; 1033 tests pass and one skips without OpenCV, none calls a paid API);
 none of it has run against Meta, Modal or a phone yet, and the iOS app has never been
 compiled. A full review after M1 (bugs, version compatibility, functionality against
 SPEC.md, the UI) found 27 confirmed problems in F1 to F29, fixed in stages v23 to v30. The
@@ -21,7 +23,7 @@ open needs the Mac, the keys, the glasses or new footage:
 1. the glasses check with Meta's sample app (`docs/glasses-check.md`)
 2. the first live Meta calls: `te models` (free), then `te api-smoke` (under $0.01)
 3. the W&B smoke run from Modal: `modal run backend/training/wandb_smoke.py`
-4. the first real washer teach run: `te teach --skill washer_done --clip <10 s clip>
+4. the first real burner teach run: `te teach --skill burner_left_on --clip <10 s clip>
    --audio <request>`. For a 10 s clip (20 to 24 keyframes) and the default 150 positives
    and 150 negatives the estimator prints about $5.25 to $5.28, and at most $11.52 to
    $11.63 if every label has to be asked again with the larger budget (over the $10 skill
@@ -42,7 +44,7 @@ open needs the Mac, the keys, the glasses or new footage:
 - [ ] Glasses check: camera frames, glasses mic and speakers with Meta's CameraAccess sample
 - [x] Backend skeleton receiving frames over WebSocket (`te serve`, `te ws-selftest`)
 
-### M1, Thu to Fri: teach flow for one skill (washer)
+### M1, Thu to Fri: teach flow for one skill (washer, since replaced by the burner)
 
 - [x] voice to skill spec (Voice Transcribe, Wonder), with policy refusals and read-back
 - [x] keyframe selection (sharpness and near-duplicate filtering)
@@ -52,7 +54,7 @@ open needs the Mac, the keys, the glasses or new footage:
 - [x] Muse Spark labels and filtering, with agreement stats
 - [x] Axolotl dataset in the cookbook's format
 - [x] `te teach` end to end, `te policy`
-- [ ] First live washer run on the Mac
+- [ ] First live teach run on the Mac (burner_left_on)
 - [x] Ask for real clips for all 3 skills (`docs/recording-protocol.md`)
 - [ ] Real clips recorded
 
@@ -115,9 +117,10 @@ open needs the Mac, the keys, the glasses or new footage:
 
 ### M2, Fri to Sat: training and watching
 
-- [x] Watch trigger: 3 of the last 4 frames over the threshold, then the cooldown; a
-  stream pause starts the window again; `calibrate()` picks the lowest threshold with at
-  most one false alarm per hour of labelled footage
+- [x] Watch trigger: 3 of the last 4 frames over the threshold, for the skill's hold
+  (hold_s), then the cooldown; a stream pause starts the window and the hold again;
+  `calibrate()` picks the lowest threshold with at most one false alarm per hour of
+  labelled footage
 - [x] Student scorer for an OpenAI-compatible endpoint, sending each frame as the
   training examples were built and reading the answer token's logprobs
 - [x] Watcher: Muse Spark checks an alert first (a no snoozes the skill for a minute, a
@@ -299,10 +302,25 @@ served run's threshold.
   logprobs and reads the last generated yes or no, renormalised over the two; a reply
   without one is an error, never a guess. It needs no chat template, so it works the same
   on vLLM and on llama-server.
-- **Alerts:** a skill fires on 3 of its last 4 frames at or over its threshold, then waits
-  for its cooldown. If Muse Spark says no, the skill waits a minute instead; if the check
-  fails, the alert goes out marked unconfirmed (missing the washer is worse than one
-  unchecked alert). Frames are never written; the log holds times, scores and decisions.
+- **Alerts:** a skill fires on 3 of its last 4 frames at or over its threshold, once that
+  has lasted its hold, then waits for its cooldown. If Muse Spark says no, the skill
+  waits a minute instead; if the check fails, the alert goes out marked unconfirmed
+  (missing a burner left on is worse than one unchecked alert). Frames are never written;
+  the log holds times, scores and decisions.
+- **The skills and their holds (Nov 3):** the skills are burner_left_on, fridge_left_open
+  and tap_left_running, with egg_whisked if it is recorded; they replace washer_done,
+  boil_over and bus_m4. Each has a hold (hold_s in the spec): the condition must stay on,
+  after the 3-of-4 smoothing, that long before it alerts, counted from the first frame
+  over the threshold, so using the fridge or the tap briefly says nothing. The author set
+  them: the fridge 30 s, the tap 20 s, the burner 10 s, the egg 0 s (`SKILL_HOLDS`); the
+  compiler gives these names these holds and any other skill the model's own value, kept
+  between 0 and 600 s. The evaluation counts an alert as on time when it comes within the
+  skill's window after the end of the hold (`metrics.ON_TIME_S`): 5 s for the burner and
+  the tap, which are seen at once and matter soonest, 10 s for the fridge, whose view
+  changes as the wearer moves, and for the egg, whose foam builds up gradually; a plan's
+  `on_time_s` can change them. A labelled range shorter than the hold expects no alert, and
+  an alert before the hold ended is a false alarm. The burner skill is a reminder, never
+  a safety device.
 - **Student sampling follows Meta's serving notes:** no temperature in the request (the
   cookbook advises against greedy decoding for Glimmer) and reasoning_strength low; the
   answer token's logprobs are read either way.

@@ -174,7 +174,7 @@ After `pip install -e .`, `te <command>` is the same as `python -m backend.cli <
   the docs.
 - `SETUP.md`: accounts and keys, setting up the Mac, setting up a cloud session, and
   git on the stage branch.
-- `ios/README.md`: how to build the iPhone app in Xcode (not compiled yet).
+- `ios/README.md`: how to build the iPhone app in Xcode (it builds for the simulator).
 - `CONTRIBUTIONS.md`: credits, licenses and the copied Meta sample files.
 - `tests/`: 1039 tests, all offline; none calls a paid API.
 

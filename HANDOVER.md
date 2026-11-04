@@ -2,8 +2,17 @@
 
 Read this first when picking the project up in a new session, local or cloud. It says
 where everything is, what is done, what is not, the rules the author set, and what to
-build next. Last updated 2026-11-03: the code for M0 to M4 is written and tested offline
-(never run against Meta, Modal or a phone), and every stage, v1 to v93, is on `main`.
+build next. Last updated 2026-11-04: the code for M0 to M4 is written and tested offline,
+the iPhone app builds for the simulator (Xcode 27.2, from `ios/project.yml`), nothing has
+run against Meta or Modal yet, and all work now goes straight to `main`.
+
+**Today's plan (Nov 4, submission due 9 PM ET, aim for 6 PM):** two skills,
+burner_left_on and tap_left_running; Experiments 1 and 4 only; the final model is
+exp1-mixed. In order: the free and cheap live checks (section 3, items 2 and 3), the glasses
+check with Meta's CameraAccess sample, the small burner teach run, then start the Modal
+preflight and smoke at once (they run while the author records), the app on the phone,
+the session clips and labels, training, serving, `te replay`, `make eval`, the release
+and the video. `docs/how-it-works.html` shows the whole flow.
 
 ## 1. Read in this order
 
@@ -109,7 +118,7 @@ Local data, all under `data/` and gitignored: `cache/`, `ledger.jsonl`, and
   evaluation harness (`te eval`, `make eval`, SVG charts), the experiments (`te
   experiments`, `te unfiltered`, `te spark-errors`, `te regress`, `te watch --scorer
   spark`), the release tools (`te manifests`, `te regenerate`, `te blur`, `te release`),
-  the web playground (`te playground`), the iOS app (`ios/`, not compiled) and
+  the web playground (`te playground`), the iOS app (`ios/`, builds for the simulator) and
   CONTRIBUTIONS.md.
 - **M2, the parts that run without the Mac or Modal** (tested offline with fakes): the
   watch trigger (3 of the last 4 frames over the threshold for the skill's hold, then the
@@ -217,7 +226,8 @@ PROGRESS.md.
      `SERVER_TOKEN`; GET /skills tells the app which skills are training, trained or
      served, and cooldowns survive reconnects (`data/watch/cooldowns.json`).
    - The iOS app: `ios/README.md` (create the Xcode project, add DAT 1.0.1, the
-     Info.plist keys). It has never been compiled; its TODOs are listed there.
+     Info.plist keys), or `xcodegen generate --spec ios/project.yml`. It builds for the
+     simulator (Xcode 27.2, Nov 4) but has not run on a phone yet; its checks are listed there.
 11. **M3 on the Mac:** teach fridge_left_open and tap_left_running (and egg_whisked if
    recorded) as in item 4; record the clips in
    `docs/recording-protocol.md`; label the test clips with `te label --clip <clip>` and
@@ -339,12 +349,12 @@ stages after the newest folder (v93 now). The rules, as the author gave them:
 
 ### Git
 
-- Commit to `build-stages`, with the author as author and committer, unsigned, with no
-  attribution trailers (SETUP.md section 5 has the exact command). Push with
-  `git push -u origin build-stages`. Stages go to `main` only when the author asks: one
-  commit per stage, copied from the stage folder, with the author's identity, the
-  stage's summary and description from VERSIONS.md, and no attribution trailers. Do not
-  open pull requests unless asked.
+- Since Nov 3, commit straight to `main` (the author's choice; no new stage folders), with
+  the author as author and committer, unsigned, with no attribution trailers or AI credit
+  of any kind (SETUP.md section 5 has the exact command), and push with
+  `git push origin main`. Keep committing as work finishes, each commit green (pytest and
+  ruff). `build-stages` keeps the stage folders v1 to v93 and is behind `main`; leave it
+  unless the author asks. Do not open pull requests unless asked.
 
 ## 5. Facts from the docs that the next milestones depend on
 

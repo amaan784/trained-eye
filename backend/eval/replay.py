@@ -32,12 +32,16 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from backend.dataengine import parallel
 from backend.eval.gallery import find_clip
 from backend.eval.report import Plan
 from backend.inference.student import StudentError
 from backend.watch.watcher import FrameLog, WatchedSkill, Watcher
 
 WAIT_S = 15.0  # between warm-up requests
+# Frames scored at once (our choice): vLLM batches requests and Spark allows 3,000 a
+# minute; the watch trigger still sees the scores in frame order.
+SCORE_WORKERS = 8
 DEFAULT_WARM_UP_S = 900.0  # te replay --warm-up-s; modal_serve.py allows 30 min to start
 RETRY_STATUS = (408, 425, 429)  # client errors worth sending again
 STATUS = re.compile(r"Client error '(\d{3})")
@@ -154,12 +158,38 @@ def warm_up(score: Callable[[], object], deadline_s: float, *, wait_s: float = W
         return True
 
 
+class Prefetched:
+    """A scorer answering from scores fetched ahead for `frames`, `workers` at a time. A
+    StudentError is kept and raised when its frame comes, as the scorer would have."""
+
+    def __init__(self, scorer, spec, frames: list, workers: int):
+        self._spec, self._by_frame = spec, {}
+        for i, score, err in parallel.run_all(frames, lambda f: scorer.score(f.data, spec),
+                                              workers):
+            if err is not None and not isinstance(err, StudentError):
+                raise err
+            self._by_frame[id(frames[i].data)] = (score, err)
+
+    def score(self, image: bytes, spec):
+        if spec is not self._spec:
+            raise ValueError("prefetched for another skill")
+        score, err = self._by_frame.pop(id(image))
+        if err is not None:
+            raise err
+        return score
+
+
 def replay_clip(job: Job, skill: WatchedSkill, scorer, frames: Iterable, *, run: str,
-                confirm: Callable | None = None) -> tuple[int, int]:
+                confirm: Callable | None = None, workers: int = 1) -> tuple[int, int]:
     """Replay one clip's frames for its skill into job.log (through <log>.partial).
-    Returns (frames scored, student errors); the log is written only if one scored."""
+    Returns (frames scored, student errors); the log is written only if one scored. With
+    `workers` above 1 the frames are scored that many at a time first, then fed to the
+    watch trigger in order, so the log and alerts are as with one at a time."""
     partial = job.log.with_name(job.log.name + ".partial")
     partial.unlink(missing_ok=True)
+    if workers > 1:
+        frames = list(frames)
+        scorer = Prefetched(scorer, skill.spec, frames, workers)
     watcher = Watcher([skill], scorer, confirm=confirm, log=FrameLog(partial, {"run": run}))
     scored = errors = 0
     for frame in frames:

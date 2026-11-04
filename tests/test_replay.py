@@ -123,6 +123,37 @@ def test_replay_clip_writes_the_log_only_when_frames_scored(tmp_path, monkeypatc
     assert not job.log.exists() and not list(job.log.parent.iterdir())  # still pending
 
 
+def test_scoring_frames_at_once_logs_them_as_one_at_a_time(tmp_path, monkeypatch):
+    import random
+    import time
+
+    from backend.dataengine.keyframes import load_frames
+    from tests.test_realclips import SPEC, skill_folder
+
+    frames = load_frames(frame_folder(tmp_path / "clip", 8), fps=1.0)
+    logs = []
+    for workers in (1, 4):
+        skill = load_skill(skill_folder(tmp_path / f"skills{workers}", SPEC))
+        job = replay.Job("burner_left_on", "test", tmp_path / f"w{workers}/a.jsonl",
+                         tmp_path / "a.json", tmp_path / "clip", "clip")
+        seen = fake_student(monkeypatch, true=lambda i: 2 <= i <= 6, fail=lambda i: i == 4)
+        scoring = student.OpenAIStudent("http://x/v1", "m")
+        slow = scoring.score
+
+        def jittered(image, spec, slow=slow):
+            time.sleep(random.random() / 100)  # answers come back out of order
+            return slow(image, spec)
+
+        scoring.score = jittered
+        assert replay.replay_clip(job, skill, scoring, frames, run="exp1-mixed",
+                                  workers=workers) == (7, 1)
+        assert sorted(i for i in seen if isinstance(i, int)) == list(range(8))
+        logs.append([{k: v for k, v in json.loads(line).items() if k != "latency_s"}
+                     for line in job.log.read_text().splitlines()])
+    assert logs[0] == logs[1]  # the same scores, errors and trigger decisions, in order
+    assert [r["p"] for r in logs[1]][:5] == [0.2, 0.2, 0.9, 0.9, None]
+
+
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)

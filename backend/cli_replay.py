@@ -249,7 +249,8 @@ def cmd_replay(args) -> int:
             if scorer == "spark" and args.threshold is None:  # only a yes counts
                 skill.trigger.threshold, skill.threshold_source = 1.0, "spark"
             scored, errors = replay.replay_clip(job, skill, scoring, frames, run=run,
-                                                confirm=confirm if kind == "test" else None)
+                                                confirm=confirm if kind == "test" else None,
+                                                workers=replay.SCORE_WORKERS)
             print(f"  {kind} {shown_path(job.log)}: {scored} frames scored, {errors} student "
                   f"errors, threshold {skill.trigger.threshold:.3f} ({skill.threshold_source})")
             if scored:

@@ -63,6 +63,10 @@ PRICES = {
 # not reachable from the build sandbox. Check modal.com/pricing and fix it here.
 MODAL_GPU_USD_PER_HOUR = {"H100": 3.95}
 ASK_ABOVE_USD = 15.0  # the author's rule: ask before any job estimated over this
+# Meta API pace and parallelism (the author's request, Nov 4: 10 to 20 calls at a time,
+# under 150 requests a minute, Muse Image's limit on dev.meta.ai/docs/pricing-rate-limits)
+MAX_RPM = 120
+PARALLEL_CALLS = 12
 MODAL_CREDIT_USD = 150.0  # HANDOVER, M2: stop and ask if the Modal runs would pass this
 
 

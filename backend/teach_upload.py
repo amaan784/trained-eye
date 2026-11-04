@@ -18,7 +18,7 @@ from email.message import Message
 from email.utils import collapse_rfc2231_value
 from pathlib import Path
 
-from backend.config import ASK_ABOVE_USD, Settings, shown_path
+from backend.config import ASK_ABOVE_USD, PARALLEL_CALLS, Settings, shown_path
 from backend.dataengine.keyframes import load_frames, select_keyframes
 from backend.meta.client import MetaClient, sniff_mime, wav_duration_s
 from backend.skills.compiler import MAX_REQUEST
@@ -187,6 +187,7 @@ def new_session(form: Form, settings: Settings, client_factory: Callable[[Settin
                    "cap may stop the run partway (raise TE_SKILL_CAP_USD on the Mac and start "
                    "again; finished calls are cached)")
     opts = TeachOptions(skill=skill, clip=capture, audio=audio_path, request=request or None,
-                        positives=positives, negatives=negatives, audio_s=audio_s or None)
+                        positives=positives, negatives=negatives, audio_s=audio_s or None,
+                        workers=PARALLEL_CALLS)
     return TeachSession(client, opts, settings.data_dir / "skills", estimate=parts,
                         capture=shown_path(capture), warning=warning, timeout_s=timeout_s)

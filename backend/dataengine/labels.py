@@ -37,8 +37,11 @@ SYSTEM = (
     "one-sentence reason."
 )
 # Spark reasons before answering and shares max_tokens with the reasoning; only a reply
-# cut off for length is asked again with the larger budget.
-MAX_TOKENS = (1024, 4096)
+# cut off for length is asked again with the larger budget. The first budget was 1024
+# until the first live runs (Nov 4): with real keyframes (about 3,500 image tokens) 11 of
+# 36 labels used all of it on reasoning and were paid twice. Billing follows the tokens
+# used, not the budget, so a larger first budget costs nothing when it is not needed.
+MAX_TOKENS = (2048, 4096)
 SKIPPABLE_STATUSES = frozenset({400, 422})
 
 

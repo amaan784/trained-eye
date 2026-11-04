@@ -281,11 +281,11 @@ def create_app(watcher_factory: Callable[[list[str], str, CooldownBook], object]
 
 def default_teach_api() -> tuple[list, Callable[[], None]]:
     """The phone's teach API and its stop(), with the settings and Meta client from .env."""
+    from backend.cli import make_client  # paced, as te teach's
     from backend.config import load_settings
-    from backend.meta.client import MetaClient
     from backend.teach_api import teach_api
 
-    return teach_api(load_settings, MetaClient)
+    return teach_api(load_settings, make_client)
 
 
 _teach_routes, _teach_stop = default_teach_api()

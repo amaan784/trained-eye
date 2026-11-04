@@ -29,7 +29,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from backend.dataengine import dataset, labels, roi, synth
+from backend.dataengine import dataset, labels, parallel, roi, synth
 from backend.dataengine.keyframes import load_frames, select_keyframes
 from backend.meta.cache import sha256_hex
 from backend.meta.client import EXTENSIONS, MetaClient, sniff_mime, to_wav, wav_duration_s
@@ -60,6 +60,7 @@ class TeachOptions:
     audio_s: float | None = None  # length of the audio, if the caller measured it
     real_labels: dict[str, str] = field(default_factory=dict)  # keyframe file -> yes/no
     correction: str | None = None  # the user's fix for a wrong read-back
+    workers: int = 1  # image edits and labels at a time (te teach: config.PARALLEL_CALLS)
 
 
 def estimate(client: MetaClient, *, audio_s: float, keyframes: int, positives: int,
@@ -244,7 +245,8 @@ def run_teach(
     say(f"generating {len(plan)} images with Muse Image (finished calls are cached, so "
         "stopping and rerunning costs nothing for them)")
     generated = synth.generate(client, plan, by_hash, root / "synthetic",
-                               progress=_progress(say, "images", len(plan)))
+                               progress=_progress(say, "images", len(plan)),
+                               workers=opts.workers)
     report["generation_failed"] = len(plan) - len(generated)
     failed = f", {report['generation_failed']} failed" if report["generation_failed"] else ""
     say(f"generated: {len(generated)} images{failed}")
@@ -255,18 +257,25 @@ def run_teach(
     jobs += [({**row, "file": f"synthetic/{row['file']}", "source": "synthetic"}, None)
              for row in generated]
     tick = _progress(say, "labels", len(jobs))
-    label_rows, label_errors = [], 0
+    done, label_errors = {}, 0
+
+    def label(job):
+        base, data = job
+        return labels.label_image(client, spec, data or (root / base["file"]).read_bytes())
+
     try:
-        for base, data in jobs:
-            lab = labels.label_image(client, spec, data or (root / base["file"]).read_bytes())
+        for i, lab, err in parallel.run_all(jobs, label, opts.workers):
+            if err is not None:
+                raise err
             tick(lab.cached, lab.cost_usd)
-            label_rows.append({**base, "spark_label": lab.label, "reason": lab.reason,
-                               "label_error": lab.error})
+            done[i] = {**jobs[i][0], "spark_label": lab.label, "reason": lab.reason,
+                       "label_error": lab.error}
             label_errors += lab.error
             if lab.error and synth.too_many_failures(label_errors, len(jobs)):
                 raise synth.TooManyFailures(f"{label_errors} of {len(jobs)} labels failed so "
                                             f"far; last: {lab.reason}")
     finally:  # also when the run stops, so the failures so far can be looked at
+        label_rows = [done[i] for i in sorted(done)]  # in job order, however they finished
         _write_jsonl(root / "labels.jsonl", label_rows)
     kept, stats = labels.filter_generated([r for r in label_rows if r["source"] == "synthetic"])
     _write_json(root / "label_stats.json", stats)

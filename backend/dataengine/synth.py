@@ -20,6 +20,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from backend.dataengine import parallel
 from backend.meta.cache import sha256_hex
 from backend.meta.client import EXTENSIONS, MetaAPIError, MetaClient, OutputError, sniff_mime
 from backend.skills.spec import SkillSpec, distinct, lower_first
@@ -130,8 +131,10 @@ def generate(
     keyframes: dict[str, bytes],
     out_dir: Path,
     progress: Callable[[bool, float], None] | None = None,
+    workers: int = 1,
 ) -> list[dict]:
-    """Run the plan (cached), save images untouched, write manifest.jsonl.
+    """Run the plan (cached), `workers` edits at a time, save images untouched, write
+    manifest.jsonl in plan order.
 
     A variation whose edit is rejected is recorded in the manifest with file null and the
     error, and left out of the returned rows; failed calls are not cached, so a rerun
@@ -140,15 +143,17 @@ def generate(
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    rows, failed = [], []
+    rows, failed, order = [], [], {v.id: i for i, v in enumerate(plan)}
+
+    def edit(v: Variation):
+        return client.image_edit(keyframes[v.keyframe_sha256], v.prompt, skill=v.skill)
+
     try:
-        for v in plan:
-            try:
-                result = client.image_edit(keyframes[v.keyframe_sha256], v.prompt,
-                                           skill=v.skill)
-            except MetaAPIError as err:
-                if not skippable(err):
-                    raise
+        for i, result, err in parallel.run_all(plan, edit, workers):
+            v = plan[i]
+            if err is not None:
+                if not isinstance(err, MetaAPIError) or not skippable(err):
+                    raise err
                 failed.append({**asdict(v), "file": None, "error": str(err)[:300],
                                "cost_usd": err.cost_usd})
                 if too_many_failures(len(failed), len(plan)):
@@ -167,6 +172,8 @@ def generate(
             if progress:
                 progress(result.info.cached, result.info.cost_usd)
     finally:
+        rows.sort(key=lambda row: order[row["id"]])  # plan order, however they finished
+        failed.sort(key=lambda row: order[row["id"]])
         tmp = out_dir / "manifest.jsonl.tmp"
         with tmp.open("w", encoding="utf-8") as fh:
             for row in rows + failed:

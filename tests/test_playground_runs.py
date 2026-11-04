@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from backend.config import load_settings
+from backend.dataengine.labels import MAX_TOKENS
 from backend.meta.client import MetaClient
 from backend.meta.ledger import BudgetExceeded, Entry, Ledger
 from backend.playground.budget import Budget, CapReached
@@ -30,9 +31,9 @@ def metered(tmp_path, visitor_cap, fake=None):
 def test_estimate():
     settings = load_settings(env={}, env_file=None)
     # Muse Wonder 2400 tokens in and 4096 out; Muse Image $0.01 an image; Muse Spark 1750
-    # in and 1024 out per label (config.PRICES)
+    # in and the first label budget out per label (config.PRICES, labels.MAX_TOKENS)
     compile_ = (2400 * 4.00 + 4096 * 20.00) / 1e6
-    label = (1750 * 1.25 + 1024 * 4.25) / 1e6
+    label = (1750 * 1.25 + MAX_TOKENS[0] * 4.25) / 1e6
     assert estimate_usd(settings) == pytest.approx(compile_ + 12 * (0.01 + label))
     assert estimate_usd(settings, 0) == pytest.approx(compile_)
 
@@ -120,6 +121,6 @@ def test_estimate_prices_images_at_the_tokens_measured_in_the_ledger(tmp_path):
                         input_text_tokens=900,
                         usage={"prompt_tokens": 1700, "completion_tokens": 500}))
     compile_ = (1700 * 4.00 + 4096 * 20.00) / 1e6  # 800 per image, measured
-    label = (1050 * 1.25 + 1024 * 4.25) / 1e6
+    label = (1050 * 1.25 + MAX_TOKENS[0] * 4.25) / 1e6
     assert estimate_usd(settings, ledger=ledger) == pytest.approx(compile_ + 12 * (0.01 + label))
     assert estimate_usd(settings) == estimate_usd(settings, ledger=ledger)  # the same file

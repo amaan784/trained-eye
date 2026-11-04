@@ -60,6 +60,7 @@ from backend.meta.ledger import (
     token_cost,
     unit_cost,
 )
+from backend.meta.pace import Pacer
 
 RETRY_STATUSES = frozenset({408, 429})
 # Statuses after which the server may already have done (and billed) the work.
@@ -327,8 +328,10 @@ class MetaClient:
         cache: Cache | None = None,
         ledger: Ledger | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        pacer: Pacer | None = None,
     ):
         self.settings = settings
+        self._pacer = pacer  # spaces the requests that go out, per endpoint (te uses one)
         self.cache = cache or Cache(settings.cache_dir)
         self.ledger = ledger or Ledger(
             settings.ledger_path, settings.skill_cap_usd, settings.global_cap_usd
@@ -372,6 +375,8 @@ class MetaClient:
                    "Authorization": f"Bearer {self.settings.secret('MODEL_API_KEY')}"}
         retries = self.settings.max_retries
         for attempt in range(retries + 1):
+            if self._pacer:
+                self._pacer.wait(path)
             try:
                 resp = self._http.request(method, path, headers=headers, **kwargs)
             except TRANSIENT_ERRORS as err:

@@ -56,7 +56,7 @@ def test_label_cut_off_for_length_is_asked_again_with_a_bigger_budget(tmp_path):
     client, budgets = client_for(tmp_path, [reply("", "length"),
                                             reply('{"label": "yes", "reason": "End shows"}')])
     lab = label_image(client, SPEC, JPEG)
-    assert (lab.label, lab.error) == ("yes", False) and budgets == [1024, 4096]
+    assert (lab.label, lab.error) == ("yes", False) and budgets == [2048, 4096]
 
 
 @pytest.mark.parametrize("bad", [
@@ -92,7 +92,7 @@ def test_a_label_that_needed_the_bigger_budget_costs_nothing_on_a_rerun(tmp_path
                                                for e in client.ledger.entries()))
     again = label_image(client, SPEC, JPEG)  # no replies left: any request would fail
     assert (again.label, again.cached, again.cost_usd) == ("yes", True, 0.0)
-    assert budgets == [1024, 4096] and len(client.ledger.entries()) == 2
+    assert budgets == [2048, 4096] and len(client.ledger.entries()) == 2
 
 
 def test_a_label_cut_off_mid_answer_is_asked_again(tmp_path):
@@ -100,7 +100,7 @@ def test_a_label_cut_off_mid_answer_is_asked_again(tmp_path):
                                             reply('{"label": "no", "reason": "dark"}')])
     lab = label_image(client, SPEC, JPEG)
     assert (lab.label, lab.error, lab.cached) == ("no", False, False)
-    assert budgets == [1024, 4096]
+    assert budgets == [2048, 4096]
 
 
 def test_a_failed_label_still_reports_what_it_cost(tmp_path):

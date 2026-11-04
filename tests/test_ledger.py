@@ -10,6 +10,7 @@ import pytest
 
 from backend.cli import main
 from backend.config import Price, load_settings
+from backend.dataengine.labels import MAX_TOKENS
 from backend.meta.ledger import (
     IMAGE_TOKENS,
     STALE_S,
@@ -217,6 +218,7 @@ def test_stale_dead_and_unreadable_reservations_are_dropped(tmp_path):
 CHILD = """
 import sys
 from backend.meta.ledger import Ledger
+from backend.dataengine.labels import MAX_TOKENS
 Ledger(sys.argv[1], 1.0, 100.0).check(0.6, "a")
 print("reserved", flush=True)
 sys.stdin.readline()
@@ -304,8 +306,8 @@ def test_the_plans_spark_price_uses_the_measured_image_tokens(tmp_path):
 
     settings = load_settings(env={"TE_DATA_DIR": str(tmp_path)}, env_file=None)
     price = settings.price(SPARK_MODEL)
-    assert spark_usd_per_check(settings) == round(token_cost(price, 1500 + 250, 1024), 6)
+    assert spark_usd_per_check(settings) == round(token_cost(price, 1500 + 250, MAX_TOKENS[0]), 6)
     Ledger(settings.ledger_path, 10.0, 120.0).record(Entry(
         SPARK_MODEL, "/chat/completions", 0.01, 0.002, input_images=1, input_text_tokens=250,
         usage={"prompt_tokens": 1050, "completion_tokens": 9}))
-    assert spark_usd_per_check(settings) == round(token_cost(price, 800 + 250, 1024), 6)
+    assert spark_usd_per_check(settings) == round(token_cost(price, 800 + 250, MAX_TOKENS[0]), 6)

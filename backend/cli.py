@@ -48,7 +48,9 @@ from pathlib import Path
 # are the values they had when backend.cli was loaded, as for the commands in this module.
 from backend.config import (  # noqa: F401 - some are used only by the cli_* modules
     ASK_ABOVE_USD,
+    MAX_RPM,
     MODAL_GPU_USD_PER_HOUR,
+    PARALLEL_CALLS,
     PROJECT_ROOT,
     ConfigError,
     load_settings,
@@ -56,6 +58,7 @@ from backend.config import (  # noqa: F401 - some are used only by the cli_* mod
 )
 from backend.meta.client import MetaAPIError, MetaClient, OutputError
 from backend.meta.ledger import BudgetExceeded, Ledger, format_report, token_cost
+from backend.meta.pace import Pacer
 from backend.training import gpu_ledger
 
 SMOKE_SCHEMA = {
@@ -71,7 +74,9 @@ def make_ledger(settings) -> Ledger:
 
 
 def make_client(settings) -> MetaClient:
-    return MetaClient(settings)
+    """te's Meta client: requests paced to MAX_RPM per endpoint (te teach runs
+    PARALLEL_CALLS at a time)."""
+    return MetaClient(settings, pacer=Pacer(MAX_RPM))
 
 
 def cmd_spend(args) -> int:
@@ -354,7 +359,8 @@ def cmd_teach(args) -> int:
     opts = TeachOptions(skill=args.skill, clip=Path(args.clip),
                         audio=Path(args.audio) if args.audio else None, request=args.request,
                         positives=args.positives, negatives=args.negatives, real_labels=labels,
-                        audio_s=audio_s or None, correction=args.correct)
+                        audio_s=audio_s or None, correction=args.correct,
+                        workers=PARALLEL_CALLS)
     confirm = (lambda sentence: True) if args.yes else (lambda sentence: ask("Is that right?"))
     try:
         report = run_teach(client, opts, settings.data_dir / "skills", confirm=confirm)

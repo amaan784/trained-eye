@@ -265,7 +265,9 @@ def test_image_tokens_fall_back_to_the_guess_without_data():
         ImageTokens(1500)
     assert image_tokens(SETTINGS, FakeLedger(error=ValueError("half a line"))).calls == 0
     assert "a guess" in image_tokens(SETTINGS, FakeLedger()).describe()
-    assert image_tokens(SETTINGS).per_image == 1500  # the settings' own ledger: none yet
+    # The settings' own ledger, in this test's project folder (conftest): none yet. Not the
+    # module's SETTINGS, which were loaded before conftest moved the project folder.
+    assert image_tokens(load_settings(env={}, env_file=None)).per_image == 1500
 
 
 def test_image_tokens_are_the_mean_over_ok_compile_and_label_calls():

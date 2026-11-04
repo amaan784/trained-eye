@@ -140,10 +140,11 @@ PROGRESS.md.
    $0.52, and at most $1.11 to $1.22 if every label has to be asked again with the larger
    token budget; `te teach` prints the figure for the real clip first). Then look at
    `data/skills/burner_left_on/`. The
-   request shapes for Voice Transcribe (multipart file + model to
-   `/audio/transcriptions`), SAM (`/responses`, streamed) and Muse Image (`/images/edits`
-   multipart, `/images/generations` JSON) come from SPEC.md and are unconfirmed; fix
-   them in `client.py` if the API disagrees. Keep tests offline: turn real responses
+   request shapes were confirmed by the first live teach run on Nov 4 (dev.meta.ai API
+   reference): Voice Transcribe is `/asr/transcribe` (a JSON `request` part and a WAV
+   `audio` part; other audio is converted with ffmpeg first), SAM is `/responses`
+   streamed, Muse Image edits are JSON with an `images` array. The live replies are
+   fixtures in `tests/fixtures/meta/`. Keep tests offline: turn real responses
    into fixtures in the tests, never call the API from a test.
 5. **SAM parser.** After step 4, the raw SAM text is in `roi.json` and in the cache
    (`data/cache/*/*.json` with endpoint `/responses`). `parse_sam_output` in

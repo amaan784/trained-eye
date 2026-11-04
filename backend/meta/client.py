@@ -18,10 +18,11 @@ such retry. Unusable outputs are charged but never cached, and a cached reply th
 today's checks reject is fetched again. A failed call's error carries what it was
 charged as `cost_usd`.
 
-Request shapes are OpenAI-compatible. Structured output uses Chat Completions with a
-json_schema response_format, as in Meta's cookbook recipes. SAM 3.1 uses the Responses
-API and Muse Image / Voice Transcribe use the images and audio endpoints, as described
-in SPEC.md; those three shapes still need confirming with a live call.
+Structured output uses Chat Completions with a json_schema response_format, as in Meta's
+cookbook recipes. The media shapes follow the API reference on dev.meta.ai (read Nov 4):
+Voice Transcribe is POST /asr/transcribe, a multipart body with a JSON `request` part and
+a WAV `audio` part; SAM 3.1 is a streamed Responses API call; Muse Image edits take a
+JSON body with an `images` array of data URLs.
 
 The API key is only ever sent to the configured Meta base URL, and secret values are
 removed from any error text.
@@ -36,10 +37,14 @@ import json
 import math
 import random
 import re
+import shutil
+import subprocess
+import tempfile
 import time
 import wave
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -183,6 +188,8 @@ def _parse_json_text(text: str) -> Any:
 # -- media endpoints (Voice Transcribe, SAM 3.1, Muse Image) -------------------
 
 EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+TRANSCRIBE_MODE = "PUSH_TO_TALK"  # one spoken request, one transcript
+WAV_RATE = 16000  # our choice: 16 kHz mono 16-bit PCM, the realtime API's smaller rate
 
 
 def wav_duration_s(audio: bytes) -> float | None:
@@ -191,6 +198,29 @@ def wav_duration_s(audio: bytes) -> float | None:
             return w.getnframes() / float(w.getframerate())
     except (wave.Error, EOFError, ZeroDivisionError):
         return None
+
+
+def to_wav(path: Path) -> bytes:
+    """The recording at `path` as WAV bytes for Voice Transcribe, which takes WAV only: a
+    WAV file as it is, anything else (m4a from the phone, ...) converted with ffmpeg to
+    16 kHz mono 16-bit PCM, bit-exact so the same file gives the same bytes (and cache
+    key) every time."""
+    data = path.read_bytes()
+    if sniff_mime(data) == "audio/wav":
+        return data
+    if shutil.which("ffmpeg") is None:
+        raise RuntimeError("ffmpeg is needed to convert the audio to WAV (brew install ffmpeg)")
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "request.wav"
+        done = subprocess.run(
+            ["ffmpeg", "-nostdin", "-v", "error", "-i", str(path), "-vn", "-map_metadata", "-1",
+             "-ac", "1", "-ar", str(WAV_RATE), "-c:a", "pcm_s16le", "-fflags", "+bitexact",
+             "-flags:a", "+bitexact", str(out)],
+            capture_output=True, text=True, check=False)
+        if done.returncode != 0 or not out.is_file():
+            raise ValueError(f"cannot read the audio {path.name}: "
+                             f"{(done.stderr or 'ffmpeg failed').strip()[:200]}")
+        return out.read_bytes()
 
 
 def parse_sse(body: str) -> list[dict]:
@@ -338,7 +368,8 @@ class MetaClient:
     def _send(self, method: str, path: str, tally: _Tally | None = None,
               **kwargs) -> httpx.Response:
         tally = tally or _Tally()
-        headers = {"Authorization": f"Bearer {self.settings.secret('MODEL_API_KEY')}"}
+        headers = {**(kwargs.pop("headers", None) or {}),
+                   "Authorization": f"Bearer {self.settings.secret('MODEL_API_KEY')}"}
         retries = self.settings.max_retries
         for attempt in range(retries + 1):
             try:
@@ -580,41 +611,53 @@ class MetaClient:
         skill: str | None = None,
         duration_s: float | None = None,
     ) -> Transcript:
-        """Speech to text with Muse Voice Transcribe (file endpoint)."""
-        endpoint = "/audio/transcriptions"
+        """Speech to text with Muse Voice Transcribe: POST /asr/transcribe, a multipart body
+        with the settings as a JSON `request` part and the clip as a WAV `audio` part. The
+        API takes WAV only, so convert other formats first (`to_wav`). The reply is
+        {sessionId, transcript, audioDurationMs, turns}; `turns` is empty in PUSH_TO_TALK."""
+        endpoint = "/asr/transcribe"
         model = self.settings.model("transcribe")
+        if sniff_mime(audio) != "audio/wav":
+            raise ValueError("Voice Transcribe takes WAV only: convert the audio first "
+                             "(backend.meta.client.to_wav)")
         duration = duration_s if duration_s is not None else wav_duration_s(audio)
         if duration is None:
-            raise ValueError("pass duration_s for non-WAV audio so the cost can be estimated")
+            raise ValueError("the WAV header is unreadable: pass duration_s")
         price = self.settings.price(model)
         estimate = unit_cost(price, audio_s=duration)
+        settings = {"model": model, "audioEncoding": "WAV", "mode": TRANSCRIBE_MODE}
 
         def send(tally):
-            files = {"file": (filename, audio, sniff_mime(audio))}
-            resp = self._send("POST", endpoint, tally, data={"model": model}, files=files)
+            files = {"request": (None, json.dumps(settings), "application/json"),
+                     "audio": (filename, audio, "audio/wav")}
+            resp = self._send("POST", endpoint, tally, files=files,
+                              headers={"Accept": "application/json"})
             return _with_usage((self._json(resp), {}), {"audio_s": duration})
 
+        def seconds_of(r) -> float:
+            return float(r["audioDurationMs"]) / 1000 if r.get("audioDurationMs") else duration
+
         def cost(r):
-            return unit_cost(price, audio_s=float(r.get("duration") or duration))
+            return unit_cost(price, audio_s=seconds_of(r))
 
         def check(r):
-            text = r.get("text")
+            text = r.get("transcript")
             if not isinstance(text, str) or not text.strip():
                 raise OutputError("the recording transcribed to no words: check the audio, "
                                   "or pass the request as text with --request")
             return text
 
         response, _, info, text = self._call(
-            endpoint=endpoint, model=model, key_request={"file": audio}, skill=skill,
-            estimate_usd=estimate, send=send, cost=cost, check=check,
+            endpoint=endpoint, model=model, key_request={**settings, "audio": audio},
+            skill=skill, estimate_usd=estimate, send=send, cost=cost, check=check,
         )
         try:
-            seconds = float(response.get("duration") or duration)
+            seconds = seconds_of(response)
         except (TypeError, ValueError):
             seconds = duration
         return Transcript(
             text=text,
-            segments=response.get("segments") or [],
+            segments=response.get("turns") or [],
             duration_s=seconds,
             info=info,
         )
@@ -626,6 +669,7 @@ class MetaClient:
         payload = {
             "model": model,
             "input": [{
+                "type": "message",
                 "role": "user",
                 "content": [
                     {"type": "input_text", "text": prompt},
@@ -638,7 +682,8 @@ class MetaClient:
         price = self.settings.price(model)
 
         def send(tally):
-            resp = self._send("POST", endpoint, tally, json=payload)
+            resp = self._send("POST", endpoint, tally, json=payload,
+                              headers={"Accept": "text/event-stream"})
             if resp.headers.get("content-type", "").startswith("text/event-stream"):
                 try:
                     events = parse_sse(resp.text)
@@ -690,14 +735,10 @@ class MetaClient:
         fields = {k: v for k, v in fields.items() if v is not None}
 
         def send(tally):
-            if images:
-                name = "image" if len(images) == 1 else "image[]"
-                files = [(name, (f"ref{i}.{EXTENSIONS.get(sniff_mime(img), 'bin')}", img,
-                                 sniff_mime(img))) for i, img in enumerate(images)]
-                resp = self._send("POST", endpoint, tally, files=files,
-                                  data={k: str(v) for k, v in fields.items()})
-            else:
-                resp = self._send("POST", endpoint, tally, json=fields)
+            # Edits as JSON with an `images` array of data URLs: the API reference's raw
+            # HTTP shape (its multipart form takes one PNG only; keyframes are JPEG).
+            body = {**fields, "images": [{"image_url": data_url(img)} for img in images]}
+            resp = self._send("POST", endpoint, tally, json=body if images else fields)
             body = self._json(resp)
             blobs: dict[str, bytes] = {}
             kept = []

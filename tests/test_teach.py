@@ -76,9 +76,10 @@ class FakeMeta:
     def __call__(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path.removeprefix("/v1")
         self.calls[path] = self.calls.get(path, 0) + 1
-        if path == "/audio/transcriptions":
-            return httpx.Response(200, json={"text": "tell me if I leave the burner on",
-                                             "duration": 3.0})
+        if path == "/asr/transcribe":
+            return httpx.Response(200, json={"sessionId": "voyager/transcribe/T1",
+                                             "transcript": "tell me if I leave the burner on",
+                                             "audioDurationMs": 3000, "turns": []})
         if path == "/responses":
             url = json.loads(request.content)["input"][0]["content"][1]["image_url"]
             size = Image.open(io.BytesIO(base64.b64decode(url.split(",", 1)[1]))).size
@@ -175,7 +176,7 @@ def test_teach_end_to_end(tmp_path):
     assert {e["original_sha256"] for e in ds["examples_index"] if e["source"] == "synthetic"} <= {
         r["image_sha256"] for r in rows}
     entries = client.ledger.entries()
-    assert {e["endpoint"] for e in entries} == {"/audio/transcriptions", "/chat/completions",
+    assert {e["endpoint"] for e in entries} == {"/asr/transcribe", "/chat/completions",
                                                 "/responses", "/images/edits"}
     assert {e["skill"] for e in entries} == {"burner_left_on"}  # every call counts to the cap
     assert len(json.loads((root / "roi.json").read_text())) == n_kf
@@ -241,7 +242,7 @@ def test_teach_stops_when_not_confirmed(tmp_path):
     report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: False,
                        say=lambda s: None)
     assert report["stopped"] == "not confirmed"
-    assert "/images/edits" not in fake.calls and "/audio/transcriptions" not in fake.calls
+    assert "/images/edits" not in fake.calls and "/asr/transcribe" not in fake.calls
 
 
 def test_refusal_costs_nothing(tmp_path):
@@ -347,7 +348,7 @@ def test_correction_recompiles_and_is_recorded(tmp_path):
     report = run_teach(client, opts, tmp_path / "skills", confirm=lambda s: False,
                        say=lambda s: None)
     assert report["stopped"] == "not confirmed"
-    assert fake.calls["/chat/completions"] == 2 and fake.calls["/audio/transcriptions"] == 1
+    assert fake.calls["/chat/completions"] == 2 and fake.calls["/asr/transcribe"] == 1
     request = json.loads((tmp_path / "skills/burner_left_on/request.json").read_text())
     assert request["correction"] == "the light on the lid"
 

@@ -32,7 +32,7 @@ from pathlib import Path
 from backend.dataengine import dataset, labels, roi, synth
 from backend.dataengine.keyframes import load_frames, select_keyframes
 from backend.meta.cache import sha256_hex
-from backend.meta.client import EXTENSIONS, MetaClient, sniff_mime, wav_duration_s
+from backend.meta.client import EXTENSIONS, MetaClient, sniff_mime, to_wav, wav_duration_s
 from backend.meta.ledger import (
     IMAGE_TOKENS,  # noqa: F401 - the guess, still importable from here
     image_tokens,
@@ -198,10 +198,10 @@ def run_teach(
 
     # 2. request text
     if opts.audio:
-        audio = Path(opts.audio).read_bytes()
+        audio = to_wav(Path(opts.audio))  # Voice Transcribe takes WAV only
         duration = wav_duration_s(audio) or opts.audio_s or 10.0
-        transcript = client.transcribe(audio, filename=Path(opts.audio).name, skill=opts.skill,
-                                       duration_s=duration)
+        transcript = client.transcribe(audio, filename=f"{Path(opts.audio).stem}.wav",
+                                       skill=opts.skill, duration_s=duration)
         request = transcript.text.strip()
     else:
         request = (opts.request or "").strip()

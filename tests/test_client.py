@@ -4,8 +4,11 @@ network and nothing is billed."""
 import base64
 import io
 import json
+import shutil
+import subprocess
 import threading
 import wave
+from pathlib import Path
 
 import httpx
 import pytest
@@ -18,6 +21,8 @@ from backend.meta.client import (
     OutputError,
     image_part,
     text_part,
+    to_wav,
+    wav_duration_s,
 )
 from backend.meta.ledger import BudgetExceeded
 
@@ -29,6 +34,7 @@ SCHEMA = {
     "additionalProperties": False,
 }
 JPEG = b"\xff\xd8\xff\xe0fake-jpeg"
+FIXTURES = Path(__file__).parent / "fixtures" / "meta"  # live replies, sizes cut
 
 
 def chat_reply(content, usage=None, finish_reason="stop", refusal=None):
@@ -300,7 +306,8 @@ def test_odd_200_replies_are_always_recorded(tmp_path, body):
 
 @pytest.mark.parametrize("duration", ["NaN", "-9e9", "1e999"])
 def test_a_reported_cost_that_is_not_a_cost_is_charged_at_the_estimate(tmp_path, duration):
-    body = ('{"text": "tell me when the pot boils", "duration": ' + duration + "}").encode()
+    body = ('{"transcript": "tell me when the pot boils", "audioDurationMs": ' + duration
+            + "}").encode()
     rec = Recorder(httpx.Response(200, content=body), chat_reply('{"label": "yes"}'))
     client, _ = make_client(tmp_path, rec)
     client.transcribe(wav_bytes(), skill="pot_boils")
@@ -403,27 +410,73 @@ def wav_bytes(seconds=2.0, rate=16000):
     return buf.getvalue()
 
 
-def test_transcribe(tmp_path):
-    rec = Recorder({"text": "tell me if I leave the burner on", "duration": 2.0,
-                    "segments": [{"start": 0.0, "end": 2.0, "text": "let me know..."}]})
+def multipart_parts(request: httpx.Request) -> dict[str, tuple[str, bytes]]:
+    """name -> (the part's headers, its body) of a multipart request."""
+    boundary = request.headers["content-type"].split("boundary=")[1].encode()
+    parts = {}
+    for chunk in request.content.split(b"--" + boundary)[1:-1]:
+        head, _, body = chunk.strip(b"\r\n").partition(b"\r\n\r\n")
+        name = head.split(b'name="')[1].split(b'"')[0].decode()
+        parts[name] = (head.decode(), body)
+    return parts
+
+
+def test_transcribe_sends_the_documented_request_and_reads_the_real_reply(tmp_path):
+    reply = json.loads((FIXTURES / "asr_transcribe.json").read_text())  # a live reply, Nov 4
+    rec = Recorder(reply)
     client, _ = make_client(tmp_path, rec)
-    t = client.transcribe(wav_bytes(), skill="burner_left_on")
-    assert t.text.startswith("tell me if") and t.duration_s == 2.0 and len(t.segments) == 1
-    assert t.info.cost_usd == pytest.approx(0.18 * 2 / 3600)
+    t = client.transcribe(wav_bytes(6.5), skill="fridge_left_open")
+    assert t.text == "Tell me when the fridge door is left open."
+    assert t.duration_s == 6.56 and t.segments == []  # turns: empty in PUSH_TO_TALK
+    assert t.info.cost_usd == pytest.approx(0.18 * 6.56 / 3600)  # the reported duration
     [entry] = client.ledger.entries()
-    assert entry["skill"] == "burner_left_on" and entry["actual_usd"] == t.info.cost_usd
+    assert entry["skill"] == "fridge_left_open" and entry["actual_usd"] == t.info.cost_usd
     request = rec.requests[0]
-    assert request.url.path == "/v1/audio/transcriptions"
-    assert b'name="model"' in request.content and b"muse-voice-transcribe-1.0" in request.content
-    assert client.transcribe(wav_bytes(), skill="burner_left_on").info.cached
+    assert request.url.path == "/v1/asr/transcribe"
+    assert request.headers["accept"] == "application/json"
+    parts = multipart_parts(request)
+    assert set(parts) == {"request", "audio"}
+    head, settings = parts["request"]
+    assert "filename" not in head and "Content-Type: application/json" in head
+    assert json.loads(settings) == {"model": "muse-voice-transcribe-1.0",
+                                    "audioEncoding": "WAV", "mode": "PUSH_TO_TALK"}
+    head, audio = parts["audio"]
+    assert "Content-Type: audio/wav" in head and audio == wav_bytes(6.5)
+    assert client.transcribe(wav_bytes(6.5), skill="fridge_left_open").info.cached
     assert len(client.ledger.entries()) == 1
-    with pytest.raises(ValueError, match="duration_s"):
-        client.transcribe(b"not a wav")
 
 
-@pytest.mark.parametrize("reply", [{"text": ""}, {"text": "  "}, {}, {"text": None}])
+def test_transcribe_takes_wav_only(tmp_path):
+    client, _ = make_client(tmp_path, Recorder())
+    with pytest.raises(ValueError, match="WAV only"):
+        client.transcribe(b"\x00\x00\x00\x20ftypM4A m4a audio", duration_s=6.5)
+    assert client.ledger.entries() == []
+
+
+def test_to_wav_converts_other_audio_the_same_way_every_time(tmp_path):
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg is not installed")
+    wav = tmp_path / "request.wav"
+    wav.write_bytes(wav_bytes(1.0, rate=44100))
+    assert to_wav(wav) == wav.read_bytes()  # WAV goes as it is
+    m4a = tmp_path / "request.m4a"
+    subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi", "-i",
+                    "sine=frequency=440:duration=1.5", "-c:a", "aac", str(m4a)], check=True)
+    converted = to_wav(m4a)
+    assert converted == to_wav(m4a) and converted[:4] == b"RIFF"
+    with wave.open(io.BytesIO(converted)) as w:
+        assert (w.getnchannels(), w.getframerate(), w.getsampwidth()) == (1, 16000, 2)
+    assert wav_duration_s(converted) == pytest.approx(1.5, abs=0.05)
+    bad = tmp_path / "bad.m4a"
+    bad.write_bytes(b"not audio")
+    with pytest.raises(ValueError, match="cannot read the audio bad.m4a"):
+        to_wav(bad)
+
+
+@pytest.mark.parametrize("reply", [{"transcript": ""}, {"transcript": "  "}, {},
+                                   {"transcript": None}, {"text": "an older shape"}])
 def test_an_empty_transcript_is_billed_but_not_cached(tmp_path, reply):
-    rec = Recorder(reply, {"text": "tell me when the pot boils"})
+    rec = Recorder(reply, {"transcript": "tell me when the pot boils"})
     client, _ = make_client(tmp_path, rec)
     with pytest.raises(OutputError, match="no words.*--request"):
         client.transcribe(wav_bytes(), skill="pot_boils")
@@ -521,6 +574,35 @@ def test_sam_done_text_alone_is_the_whole_output(tmp_path):
     assert client.sam_image("pot", JPEG).text == SAM_LINE
 
 
+def test_sam_reads_a_real_stream(tmp_path):
+    # A live SAM 3.1 stream (Nov 4) with each mask payload cut to 40 characters.
+    body = (FIXTURES / "sam_stream.txt").read_text()
+    rec = Recorder(httpx.Response(200, headers={"content-type": "text/event-stream"},
+                                  text=body))
+    client, _ = make_client(tmp_path, rec)
+    result = client.sam_image("refrigerator door", JPEG, skill="fridge_left_open")
+    assert result.text.startswith("<0f>0<|box;x1=1101;y1=654;x2=1551;y2=2055;w=1552;h=2064;")
+    assert result.text.count("<|box;") == 2 and result.text.endswith("|>\n")
+    assert result.info.cost_usd == pytest.approx(0.0025)
+    request = rec.requests[0]
+    assert request.headers["accept"] == "text/event-stream"
+    sent = json.loads(request.content)
+    assert sent["input"][0]["type"] == "message" and sent["input"][0]["role"] == "user"
+
+
+def test_image_edit_reads_the_real_reply(tmp_path):
+    # A live Muse Image edit reply (Nov 4); only the image is replaced by a 4x4 WebP.
+    reply = json.loads((FIXTURES / "images_edit.json").read_text())
+    assert set(reply) == {"created", "data", "output_format", "background", "usage"}
+    client, _ = make_client(tmp_path, Recorder(reply))
+    result = client.image_edit(JPEG, "open the right door", skill="fridge_left_open")
+    [image] = result.images
+    assert image == base64.b64decode(reply["data"][0]["b64_json"])
+    assert image[:4] == b"RIFF" and image[8:12] == b"WEBP" and result.revised_prompts == []
+    assert result.info.cost_usd == pytest.approx(0.01)  # per image, whatever the tokens
+    assert result.info.usage == reply["usage"]
+
+
 def test_image_edit_keeps_bytes_exactly(tmp_path):
     rec = Recorder({"data": [{"b64_json": base64.b64encode(PNG).decode(),
                               "revised_prompt": "stove burner showing End"}]})
@@ -530,7 +612,10 @@ def test_image_edit_keeps_bytes_exactly(tmp_path):
     assert result.info.cost_usd == pytest.approx(0.01)
     request = rec.requests[0]
     assert request.url.path == "/v1/images/edits"
-    assert b'name="image"' in request.content and b'name="prompt"' in request.content
+    body = json.loads(request.content)  # JSON with an images array (a JPEG cannot go multipart)
+    assert body["prompt"] == "make the display show End" and body["model"] == "muse-image-1.0"
+    assert body["images"] == [{"image_url": "data:image/jpeg;base64,"
+                                            + base64.b64encode(JPEG).decode()}]
     cached = client.image_edit(JPEG, "make the display show End", skill="burner_left_on")
     assert cached.info.cached and cached.images == [PNG]
     [entry] = client.ledger.entries()
@@ -581,7 +666,7 @@ def test_image_generate_with_refs_uses_edits(tmp_path):
     result = client.image_generate("same washer, dim light", refs=[JPEG, JPEG + b"2"], n=2)
     assert len(result.images) == 2 and result.info.cost_usd == pytest.approx(0.02)
     assert rec.requests[0].url.path == "/v1/images/edits"
-    assert rec.requests[0].content.count(b'name="image[]"') == 2
+    assert len(json.loads(rec.requests[0].content)["images"]) == 2
 
 
 # -- spend caps with calls running at once (te serve: phone teach and watch sessions) ----

@@ -97,7 +97,7 @@ def test_a_full_run_from_the_phone(api, fake, settings, frames, audio):
     assert answer(api, "spend", True).json()["state"] == "running"
     asked = wait(api, lambda s: s["state"] == "waiting_read_back")
     assert asked["question"] == "read_back" and asked["read_back"].startswith("I'll watch")
-    assert fake.calls["/audio/transcriptions"] == 1 and "/images/edits" not in fake.calls
+    assert fake.calls["/asr/transcribe"] == 1 and "/images/edits" not in fake.calls
     assert answer(api, "read_back", True).status_code == 200
     done = wait(api, ended)
     assert done["state"] == "done", done
@@ -125,7 +125,7 @@ def test_a_correction_at_the_read_back_compiles_again(api, fake, settings, frame
     again = wait(api, lambda s: s["state"] == "waiting_read_back"
                  and 'correction: "the light on the lid"' in s["lines"])
     assert again["read_back"].startswith("I'll watch")
-    assert fake.calls["/chat/completions"] == 2 and fake.calls["/audio/transcriptions"] == 1
+    assert fake.calls["/chat/completions"] == 2 and fake.calls["/asr/transcribe"] == 1
     answer(api, "read_back", False)
     stopped = wait(api, ended)
     assert stopped["state"] == "stopped" and stopped["stopped"] == "not confirmed"

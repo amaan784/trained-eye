@@ -13,7 +13,7 @@ long, so opening the fridge for a moment says nothing.
 | Skill | Hold | What to record | Near-misses to include |
 |---|---|---|---|
 | `burner_left_on` | 10 s | A gas or electric burner lit (a flame, or a glowing ring) with no pan on it, or a pan nobody is tending, for well over 10 s | the burner off; a burner lit for a few seconds and turned off; a pan being stirred on a lit burner; the oven light or another appliance's light |
-| `fridge_left_open` | 30 s | The fridge door standing open, from the moment it opens until well past 30 s | the door closed; opened for 10 s and shut; the freezer or a cupboard door open |
+| `fridge_left_open` | 20 s | The fridge door standing open, from the moment it opens until well past 20 s | the door closed; opened for 10 s and shut; the freezer or a cupboard door open |
 | `tap_left_running` | 20 s | The kitchen tap running into the sink with nobody using it, for well over 20 s | the tap off; filling a glass or rinsing a cup for a few seconds; water dripping; the dishwasher running |
 | `egg_whisked` (only if you record it) | 0 s | Eggs or egg whites being whisked in a bowl until they are foamy (or form peaks), and a while after | unbeaten eggs; eggs half whisked; a bowl of milk or batter |
 

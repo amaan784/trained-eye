@@ -146,6 +146,7 @@ final class AppModel {
       message = BackendError.noAddress.localizedDescription
       return
     }
+    speaker.prepare()  // the audio session is set before the stream, not at the first alert
     guard let source = await startCamera() else { return }
     throttle.setInterval(1)
     isWatching = true

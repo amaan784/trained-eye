@@ -105,7 +105,7 @@ threshold for the skill's hold, then waits for its cooldown (`backend/watch/`).
   keeps generated images only when Spark agrees, and agreement stats.
 - `backend/teach.py`: the teach flow end to end, cached so a rerun costs nothing.
 - `backend/watch/trigger.py`: when a skill fires: 3 of the last 4 frames over the
-  threshold for the skill's hold (the fridge 30 s, the tap 20 s, the burner 10 s), then
+  threshold for the skill's hold (the fridge 20 s, the tap 20 s, the burner 10 s), then
   the cooldown; the threshold calibration on labelled clips.
 - `backend/inference/student.py`: scores a frame with the trained model on an
   OpenAI-compatible endpoint, read at its yes or no answer token.

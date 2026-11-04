@@ -66,7 +66,8 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
 - Packages under backend/ are namespace packages (no __init__.py files).
 - Ask before any job over $15, before publishing anything, and before anything physical.
 - Skills: burner_left_on, fridge_left_open, tap_left_running (egg_whisked if recorded). Each
-  alerts only after its hold (SKILL_HOLDS in backend/skills/spec.py: 10, 30, 20, 0 s), and
+  alerts only after its hold (SKILL_HOLDS in backend/skills/spec.py: 10, 20, 20, 0 s) and
+  repeats while it stays true (SKILL_REPEATS: burner 20 s, fridge and tap 30 s), and
   the evaluation's on-time window per skill (ON_TIME_S in backend/eval/metrics.py) counts
   from the end of the hold.
 - Policy: no skills about specific people, and none about politics or war; never hide the

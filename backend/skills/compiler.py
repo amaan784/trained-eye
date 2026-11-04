@@ -18,6 +18,7 @@ from backend.skills.spec import (
     REFUSALS,
     SENSITIVE_WORDS,
     SKILL_HOLDS,
+    SKILL_REPEATS,
     SkillSpec,
     Target,
     _has_word,
@@ -155,7 +156,7 @@ def compile_skill(
                 positive=_clip(condition_clause(data["positive"]), 300),
                 negatives=distinct([_clip(n, 300) for n in data["negatives"] if n.strip()])[:8],
                 alert=_clip(data["alert"], 120),
-                cooldown_s=min(max(int(data["cooldown_s"]), COOLDOWN_S[0]), COOLDOWN_S[1]),
+                cooldown_s=cooldown_for(skill_name, data["cooldown_s"]),
                 hold_s=hold_for(name or slugify(data.get("name") or request),
                                 data.get("hold_s", 0)),
                 confirm_with_cloud=bool(data["confirm_with_cloud"]),
@@ -198,6 +199,14 @@ def compile_skill(
                              refusal_reason=reason[:300])
         raise
     return build(result.data)
+
+
+def cooldown_for(name: str, model_value) -> int:
+    """How often a compiled skill's alert may repeat: the project's own for its skills
+    (SKILL_REPEATS), else the model's value kept within COOLDOWN_S."""
+    if name in SKILL_REPEATS:
+        return SKILL_REPEATS[name]
+    return min(max(int(model_value), COOLDOWN_S[0]), COOLDOWN_S[1])
 
 
 def hold_for(name: str, model_value) -> int:

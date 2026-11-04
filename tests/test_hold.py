@@ -28,9 +28,22 @@ def run(trigger, probs, start=0.0, step=1.0):
 # The trigger
 
 
-def test_the_project_skills_have_the_authors_holds():
-    assert SKILL_HOLDS == {"fridge_left_open": 30, "tap_left_running": 20,
+def test_the_project_skills_have_the_authors_holds_and_repeats():
+    from backend.skills.spec import SKILL_REPEATS
+
+    assert SKILL_HOLDS == {"fridge_left_open": 20, "tap_left_running": 20,
                            "burner_left_on": 10, "egg_whisked": 0}
+    assert SKILL_REPEATS == {"fridge_left_open": 30, "tap_left_running": 30,
+                             "burner_left_on": 20}
+    # each repeat is at least the hold, so the trigger repeats on the cooldown
+    assert all(SKILL_REPEATS[k] >= SKILL_HOLDS[k] for k in SKILL_REPEATS)
+
+
+def test_a_condition_that_stays_true_repeats_its_alert_on_the_cooldown():
+    # the fridge: first after its 20 s hold, then every 30 s while the door stays open
+    assert run(Trigger(0.5, cooldown_s=30, hold_s=20), [0.9] * 90) == [20.0, 50.0, 80.0]
+    # the burner: after 10 s, then every 20 s until it is off
+    assert run(Trigger(0.5, cooldown_s=20, hold_s=10), [0.9] * 55) == [10.0, 30.0, 50.0]
 
 
 def test_a_hold_waits_until_the_condition_has_lasted_it():
@@ -214,7 +227,8 @@ def test_the_compiler_asks_for_a_hold_and_the_project_skills_keep_theirs(tmp_pat
     monkeypatch.chdir(tmp_path)
     assert "hold_s" in COMPILE_SCHEMA["required"] and "hold_s:" in SYSTEM
     fridge, requests = compiled(REPLY, "fridge_left_open", tmp_path)
-    assert fridge.hold_s == 30  # the author's hold, not the model's 5
+    assert fridge.hold_s == 20  # the author's hold, not the model's 5
+    assert fridge.cooldown_s == 30  # and the author's repeat
     assert requests[0]["response_format"]["json_schema"]["schema"] == COMPILE_SCHEMA
     other, _ = compiled({**REPLY, "hold_s": 12}, "freezer_door", tmp_path)
     assert other.hold_s == 12

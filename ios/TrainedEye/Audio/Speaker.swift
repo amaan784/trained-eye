@@ -26,6 +26,17 @@ final class Speaker: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable 
     synthesizer.delegate = self
   }
 
+  /// Sets the audio session up for speech once, when watching starts, so an alert does not
+  /// switch it mid-stream: switching while the glasses camera streamed held up the frames
+  /// and the line for about 16 s on Nov 4.
+  func prepare() {
+    let session = AVAudioSession.sharedInstance()
+    if session.category == .soloAmbient {
+      try? session.setCategory(.playback, mode: .spokenAudio)
+    }
+    try? session.setActive(true)
+  }
+
   /// Says `text` if a Bluetooth output is connected and nothing is being recorded.
   /// Returns whether it was spoken. Lines queue rather than interrupt each other.
   @discardableResult

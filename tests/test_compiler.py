@@ -41,7 +41,7 @@ def test_compiles_a_spec_with_wonder(tmp_path, monkeypatch):
                          name="burner_left_on")
     assert spec.target.sam_prompt == "stove burner"
     assert spec.negatives == ["the burner is off", "a pan being stirred on it"]
-    assert spec.cooldown_s == 3600  # 99999 asked for: clamped to what SYSTEM allows
+    assert spec.cooldown_s == 20  # the project's burner repeats every 20 s (SKILL_REPEATS)
     [body] = requests
     assert body["model"] == "muse-wonder-1.0"
     assert body["response_format"]["json_schema"]["schema"] == COMPILE_SCHEMA

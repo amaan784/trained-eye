@@ -23,8 +23,12 @@ SPEC_VERSION = 1
 NAME_PATTERN = r"^[a-z][a-z0-9_]{1,39}$"
 # The project's skills and how long each condition must stay true before it alerts. The
 # compiler gives these names these holds; any other skill takes the model's own value.
-SKILL_HOLDS = {"fridge_left_open": 30, "tap_left_running": 20, "burner_left_on": 10,
+SKILL_HOLDS = {"fridge_left_open": 20, "tap_left_running": 20, "burner_left_on": 10,
                "egg_whisked": 0}
+# How often the alert repeats while the condition stays true (the cooldown): a reminder
+# until it is dealt with, the burner, the riskier one, more often. Any other skill takes
+# the model's own cooldown.
+SKILL_REPEATS = {"fridge_left_open": 30, "tap_left_running": 30, "burner_left_on": 20}
 MAX_HOLD_S = 600
 
 

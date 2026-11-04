@@ -10,7 +10,7 @@ Watch mode scores one frame a second. For each skill, over a set of test clips:
 
 - **Frame precision, recall and F1:** a frame says yes when its score is at or over the
   run's threshold, and it is true when its time is inside a labelled range.
-- **Events:** a labelled range that lasts at least the skill's hold (the fridge 30 s, the
+- **Events:** a labelled range that lasts at least the skill's hold (the fridge 20 s, the
   tap 20 s, the burner 10 s) is an event. Its alert is due when the hold ends and is on
   time within the skill's window after that. Shorter ranges expect no alert.
 - **False alarms per hour:** alerts no event explains.
@@ -58,7 +58,7 @@ Each plan names its footage, and its results say it in their heading.
 - **Other kitchens (EPIC-KITCHENS-100, head-mounted camera):** fridge windows from two
   kitchens to test and one to calibrate on, labelled from the dataset's public open and
   close annotations (`eval/plan-epic.json`). Few of those openings last past the
-  fridge's 30 s hold, so this footage gives frame-level results only, with thresholds
+  fridge's hold (30 s when this was evaluated; 20 s now), so this footage gives frame-level results only, with thresholds
   calibrated for frames. See [data-and-licenses.md](data-and-licenses.md).
 
 ## Reproducing

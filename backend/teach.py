@@ -231,7 +231,7 @@ def run_teach(
     # 4. region of interest
     say(f"region of interest: SAM on {len(keyframes)} keyframes")
     rois = roi.locate(client, spec, list(keyframes.values()),
-                      progress=_progress(say, "sam", len(keyframes)))
+                      progress=_progress(say, "sam", len(keyframes)), workers=opts.workers)
     roi.save(rois, root / "roi.json")
     report["roi_frames_with_box"] = sum(1 for r in rois if r.best)
     report["roi_frames_without_box"] = len(rois) - report["roi_frames_with_box"]

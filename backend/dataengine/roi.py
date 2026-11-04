@@ -127,23 +127,31 @@ def crop_image(image: bytes, crop: tuple[int, int, int, int]) -> bytes:
 
 
 def locate(client: MetaClient, spec: SkillSpec, keyframes: list[bytes],
-           progress: Callable[[bool, float], None] | None = None) -> list[FrameRoi]:
-    """SAM on each keyframe. `progress(cached, cost_usd)` is called after each one.
+           progress: Callable[[bool, float], None] | None = None,
+           workers: int = 1) -> list[FrameRoi]:
+    """SAM on each keyframe, `workers` at a time, in keyframe order.
+    `progress(cached, cost_usd)` is called after each one.
 
     A frame SAM rejects or answers unreadably gets no box (as in synth and labels, a few
     such failures are skipped; more stop the run with TooManyFailures)."""
-    results, failed = [], 0
-    for image in keyframes:
+    from backend.dataengine import parallel
+
+    results: dict[int, FrameRoi] = {}
+    failed = 0
+
+    def ask(image: bytes):
+        return client.sam_image(spec.target.sam_prompt, image, skill=spec.name)
+
+    for i, sam, err in parallel.run_all(keyframes, ask, workers):
+        image = keyframes[i]
         with Image.open(io.BytesIO(image)) as img:
             width, height = img.size
-        try:
-            sam = client.sam_image(spec.target.sam_prompt, image, skill=spec.name)
-        except MetaAPIError as err:
-            if not skippable(err):
-                raise
+        if err is not None:
+            if not isinstance(err, MetaAPIError) or not skippable(err):
+                raise err
             # rejected, or billed but unreadable: no box for this frame
-            results.append(FrameRoi(sha256_hex(image), width, height, "", [], None,
-                                    f"error: {str(err)[:200]}"))
+            results[i] = FrameRoi(sha256_hex(image), width, height, "", [], None,
+                                  f"error: {str(err)[:200]}")
             failed += 1
             if too_many_failures(failed, len(keyframes)):
                 raise TooManyFailures(f"{failed} of {len(keyframes)} SAM calls failed so "
@@ -154,9 +162,9 @@ def locate(client: MetaClient, spec: SkillSpec, keyframes: list[bytes],
         if progress:
             progress(sam.info.cached, sam.info.cost_usd)
         detections, parser, problems = parse_sam_output(sam.text, (width, height))
-        results.append(FrameRoi(sha256_hex(image), width, height, sam.text, detections,
-                                best_detection(detections), parser, problems[:20]))
-    return results
+        results[i] = FrameRoi(sha256_hex(image), width, height, sam.text, detections,
+                              best_detection(detections), parser, problems[:20])
+    return [results[i] for i in sorted(results)]
 
 
 def save(rois: list[FrameRoi], path: Path) -> None:

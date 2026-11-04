@@ -134,3 +134,20 @@ def test_crop_image_cuts_the_pixels_out_as_png():
     with Image.open(io.BytesIO(data)) as part:
         assert part.format == "PNG" and part.size == (40, 20)
         assert part.getpixel((0, 0)) == part.getpixel((39, 19)) == (250, 10, 10)
+
+
+def test_sam_several_at_a_time_keeps_the_keyframe_order():
+    import random
+    import time
+
+    class Jittery(FakeSam):
+        def sam_image(self, prompt, image, skill=None):
+            time.sleep(random.random() / 50)  # replies come back out of order
+            return super().sam_image(prompt, image, skill)
+
+    frames = [jpeg(s) for s in range(10, 250, 30)]
+    rois = locate(Jittery({}), SPEC, frames, workers=4)
+    from backend.meta.cache import sha256_hex
+
+    assert [r.keyframe_sha256 for r in rois] == [sha256_hex(f) for f in frames]
+    assert all(r.best is not None for r in rois)

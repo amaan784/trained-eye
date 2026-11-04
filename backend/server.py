@@ -15,18 +15,18 @@ each with the SERVER_TOKEN from .env. On shutdown a teach run stops before its n
 call and the call in flight is recorded.
 
 GET /skills lists the taught skills for the app's Skills screen:
-{"skills": [{"name", "alert", "cooldown_s", "dataset", "calibrated", "threshold",
-"training", "served"}]}. "training" is null or {"run", "state": "running" | "done" |
+{"skills": [{"name", "alert", "cooldown_s", "hold_s", "dataset", "calibrated",
+"threshold", "training", "served"}]}. "training" is null or {"run", "state": "running" | "done" |
 "failed", "started", "finished"} for the newest te train run whose bundle lists the skill;
 "served" says whether the run te serve-student last deployed lists it
 (backend/training/runs.py). The threshold is the one watch mode uses: the served run's
 (te calibrate --run) if it has one, else the skill's.
 
-Watch mode: a hello with "watch": ["washer_done", ...] scores every frame for those taught
+Watch mode: a hello with "watch": ["burner_left_on", ...] scores every frame for those taught
 skills (backend/watch/watcher.py). The welcome then lists them under "watching", each ack
 carries "scores" ({skill: probability, or null if the student failed}), and an alert is
 
-  server -> phone  text    {"type": "alert", "skill": "washer_done", "text": "...",
+  server -> phone  text    {"type": "alert", "skill": "burner_left_on", "text": "...",
                             "t": ..., "p": 0.93, "confirmed": true}
 
 which the phone speaks through the glasses. Every session's watcher shares one cooldown
@@ -113,6 +113,7 @@ def taught_skills(data_dir: Path) -> list[dict]:
             threshold, source = None, "default"
         calibrated = source in ("run", "skill")
         out.append({"name": spec.name, "alert": spec.alert, "cooldown_s": spec.cooldown_s,
+                    "hold_s": spec.hold_s,
                     "dataset": (folder / "dataset" / f"{spec.name}-teach.jsonl").is_file(),
                     "calibrated": calibrated, "threshold": threshold if calibrated else None,
                     "training": runs.skill_training(statuses, spec.name),

@@ -21,6 +21,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SPEC_VERSION = 1
 NAME_PATTERN = r"^[a-z][a-z0-9_]{1,39}$"
+# The project's skills and how long each condition must stay true before it alerts. The
+# compiler gives these names these holds; any other skill takes the model's own value.
+SKILL_HOLDS = {"fridge_left_open": 30, "tap_left_running": 20, "burner_left_on": 10,
+               "egg_whisked": 0}
+MAX_HOLD_S = 600
 
 
 class Target(BaseModel):
@@ -41,6 +46,9 @@ class SkillSpec(BaseModel):
     negatives: list[str] = Field(default_factory=list, max_length=8)
     alert: str | None = Field(default=None, max_length=120)
     cooldown_s: int = Field(default=600, ge=0, le=86_400)
+    # Seconds the condition must stay true (after the 3-of-4 smoothing) before it alerts:
+    # 0 alerts at once; a fridge left open waits 30 s, so opening it briefly says nothing.
+    hold_s: int = Field(default=0, ge=0, le=MAX_HOLD_S)
     confirm_with_cloud: bool = True
     refused: bool = False
     refusal_reason: str | None = Field(default=None, max_length=300)
@@ -63,7 +71,7 @@ def check_name(name: str) -> str:
     """Raise ValueError unless `name` is a valid skill name (snake_case, 2 to 40 chars)."""
     if not re.fullmatch(NAME_PATTERN, name):
         raise ValueError(f"skill name {name!r} must be snake_case: lower-case letters, digits "
-                         "and underscores, starting with a letter (e.g. washer_done)")
+                         "and underscores, starting with a letter (e.g. burner_left_on)")
     return name
 
 

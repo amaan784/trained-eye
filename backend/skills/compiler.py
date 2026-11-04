@@ -13,9 +13,11 @@ from pydantic import ValidationError
 
 from backend.meta.client import MetaClient, OutputError, image_part, text_part
 from backend.skills.spec import (
+    MAX_HOLD_S,
     OBJECT_PHRASES,
     REFUSALS,
     SENSITIVE_WORDS,
+    SKILL_HOLDS,
     SkillSpec,
     Target,
     _has_word,
@@ -56,7 +58,7 @@ COMPILE_SCHEMA = {
     "additionalProperties": False,
     "required": [
         "refused", "refusal_reason", "name", "sam_prompt", "target_description",
-        "positive", "negatives", "alert", "cooldown_s", "confirm_with_cloud",
+        "positive", "negatives", "alert", "cooldown_s", "hold_s", "confirm_with_cloud",
     ],
     "properties": {
         "refused": {"type": "boolean"},
@@ -68,6 +70,7 @@ COMPILE_SCHEMA = {
         "negatives": {"type": "array", "items": {"type": "string", "maxLength": 300}},
         "alert": {"type": "string", "maxLength": 120},
         "cooldown_s": {"type": "integer"},
+        "hold_s": {"type": "integer"},
         "confirm_with_cloud": {"type": "boolean"},
     },
 }
@@ -75,9 +78,9 @@ COMPILE_SCHEMA = {
 SYSTEM = """You turn a spoken request into a watch skill for camera glasses.
 The user looked at something for ten seconds; the images are frames from that look.
 Fill every field:
-- name: snake_case, at most 40 characters, e.g. washer_done.
+- name: snake_case, at most 40 characters, e.g. burner_left_on.
 - sam_prompt: a short noun phrase naming the one thing to look at, for a segmentation
-  model (e.g. "washing machine display").
+  model (e.g. "stove burner").
 - target_description: that thing in plain words, as seen in the frames.
 - positive: the visible condition that should trigger the alert, concrete enough to
   judge from a single frame, worded to follow "tell you when" (no "when" of its own).
@@ -85,6 +88,9 @@ Fill every field:
   same thing, similar things nearby).
 - alert: what the glasses should say, under 10 words, friendly.
 - cooldown_s: seconds before the same alert may repeat (60 to 3600).
+- hold_s: seconds the condition must stay true before the alert (0 to 600): 0 when it
+  is worth saying at once; longer for something left on, open or running, so that
+  using it briefly says nothing (e.g. 30 for a fridge door left open).
 - confirm_with_cloud: true unless a false alert would be harmless.
 - refusal_reason: null unless refused.
 Refuse (refused=true, a one-sentence refusal_reason, other fields empty) if the request
@@ -150,6 +156,8 @@ def compile_skill(
                 negatives=distinct([_clip(n, 300) for n in data["negatives"] if n.strip()])[:8],
                 alert=_clip(data["alert"], 120),
                 cooldown_s=min(max(int(data["cooldown_s"]), COOLDOWN_S[0]), COOLDOWN_S[1]),
+                hold_s=hold_for(name or slugify(data.get("name") or request),
+                                data.get("hold_s", 0)),
                 confirm_with_cloud=bool(data["confirm_with_cloud"]),
             )
         except (KeyError, OverflowError, TypeError, ValueError, ValidationError) as err:
@@ -190,6 +198,14 @@ def compile_skill(
                              refusal_reason=reason[:300])
         raise
     return build(result.data)
+
+
+def hold_for(name: str, model_value) -> int:
+    """The hold a compiled skill gets: the project's own for its skills (SKILL_HOLDS),
+    else the model's value kept between 0 and MAX_HOLD_S."""
+    if name in SKILL_HOLDS:
+        return SKILL_HOLDS[name]
+    return min(max(int(model_value), 0), MAX_HOLD_S)
 
 
 def _no_reason(reason: str) -> bool:

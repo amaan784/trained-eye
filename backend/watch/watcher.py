@@ -1,14 +1,16 @@
 """Watch mode for a set of taught skills: frames in, alerts out.
 
 For every frame and skill: the student scores the frame, the skill's Trigger decides
-whether it fires (3 of the last 4 frames over the threshold, then the cooldown), and if
+whether it fires (3 of the last 4 frames over the threshold for the skill's hold_s,
+then the cooldown), and if
 the skill asks for it (`confirm_with_cloud`), Muse Spark checks the frame before the
 alert goes out. If Spark says no, the skill is snoozed for a minute instead of the whole
 cooldown. If the check itself fails (network, spend cap), the alert goes out marked as
-unconfirmed: missing the washer is worse than one unchecked alert.
+unconfirmed: missing a burner left on is worse than one unchecked alert.
 
 Every scored frame is logged as one JSON line (time, probability, decision, the cloud
-answer, the threshold and where it came from) for the timeline visual and the evaluation.
+answer, the threshold and where it came from, and the skill's hold_s) for the timeline
+visual and the evaluation, which counts an alert as on time from the end of the hold.
 Frames themselves are never written.
 
 Thresholds, first found: te watch --threshold ("flag"), the trained run's
@@ -124,7 +126,7 @@ def load_skill(skill_dir: Path, *, run: str | None = None,
     if spec.refused:
         raise ValueError(f"{spec.name} was refused when it was taught; it cannot be watched")
     value, source = skill_threshold(skill_dir, run=run, override=threshold)
-    return WatchedSkill(spec, Trigger(value, float(spec.cooldown_s)),
+    return WatchedSkill(spec, Trigger(value, float(spec.cooldown_s), float(spec.hold_s)),
                         source in ("run", "skill"), source)
 
 
@@ -241,7 +243,8 @@ class Watcher:
         scores, fired = {}, []
         for name, skill in self.skills.items():
             row = {"t": round(t, 3), "skill": name, "threshold": skill.trigger.threshold,
-                   "threshold_source": skill.threshold_source}
+                   "threshold_source": skill.threshold_source,
+                   "hold_s": skill.trigger.hold_s}
             try:
                 score = self.scorer.score(image, skill.spec)
             except StudentError as err:

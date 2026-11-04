@@ -2,11 +2,10 @@
 
 The plan is a JSON file that lists the evaluations to score:
 
-    {"window_s": 5,
-     "evaluations": [
-       {"name": "exp1-mixed", "experiment": 1, "skill": "washer_done", "variant": "mixed",
-        "clips": [{"log": "../data/watch/replay-20261101-120000-washer1.jsonl",
-                   "labels": "../data/labels/washer1.json", "timeline": true}],
+    {"evaluations": [
+       {"name": "exp1-mixed", "experiment": 1, "skill": "burner_left_on", "variant": "mixed",
+        "clips": [{"log": "../data/watch/replay-20261101-120000-burner1.jsonl",
+                   "labels": "../data/labels/burner1.json", "timeline": true}],
         "gpu": "H100", "spark_usd_per_check": 0.003}]}
 
 An evaluation has:
@@ -36,10 +35,13 @@ calibration (optional): what te replay --run replays before the test clips, so e
 threshold comes from its own validation clips: [{"run", "skill", "clips": [{"clip", "log",
 "labels"}]}], calibrated into data/watch/<run>/<skill>/threshold.json (te calibrate --run).
 
-window_s (default 5) is the event recall window. An evaluation whose log or labels file
-does not exist yet is pending, not scored, so the plan can come before the clips. A scored
-one also records the threshold its logs were scored at, and where it came from
-(thresholds_used), in results.json, results.md and W&B.
+on_time_s (optional): {skill: seconds}, to change a skill's on-time window from its
+default (metrics.ON_TIME_S): an event's alert is on time when it comes within that many
+seconds after the end of the skill's hold (the hold the logs record). An evaluation whose
+log or labels file does not exist yet is pending, not scored, so the plan can come before
+the clips. A scored one also records the threshold its logs were scored at, and where it
+came from (thresholds_used), and its hold and on-time window ("on_time"), in
+results.json, results.md and W&B.
 
 run_eval also writes, next to the charts: Experiment 4's judges pooled over their skills
 (the cost chart's three points), Experiment 1's failure galleries (gallery.py, local only:
@@ -132,9 +134,22 @@ class Calibration(BaseModel):
 
 class Plan(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    window_s: float = Field(metrics.EVENT_WINDOW_S, gt=0)
+    on_time_s: dict[str, float] = {}
     evaluations: list[Evaluation]
     calibration: list[Calibration] = []
+
+    @field_validator("on_time_s")
+    @classmethod
+    def _windows(cls, value: dict[str, float]) -> dict[str, float]:
+        for skill, seconds in value.items():
+            check_name(skill)
+            if not seconds > 0:
+                raise ValueError(f"on_time_s for {skill} must be over 0 seconds")
+        return value
+
+    def window(self, skill: str) -> float:
+        """The skill's on-time window: this plan's override, else metrics.ON_TIME_S."""
+        return metrics.on_time_window(skill, self.on_time_s)
 
     @model_validator(mode="after")
     def _unique(self) -> Plan:
@@ -176,6 +191,13 @@ def thresholds_used(ev: Evaluation, base: Path) -> dict:
     return {"values": sorted(values), "sources": sorted(sources)}
 
 
+def holds_used(ev: Evaluation, base: Path) -> list[float]:
+    """The holds the replays fired the skill with, from its frame logs (te watch logs the
+    skill's hold_s; a log without it counts as 0)."""
+    return sorted({metrics.hold_of(metrics.read_log(base / c.log), ev.skill)
+                   for c in ev.clips})
+
+
 def score(ev: Evaluation, base: Path, window_s: float,
           counts: metrics.ClipCounts | None = None) -> dict:
     """One evaluation's entry in results.json: scored, or pending without its files."""
@@ -189,7 +211,19 @@ def score(ev: Evaluation, base: Path, window_s: float,
     summary = metrics.summarize([counts])
     cost = metrics.cost_per_hour(summary, **ev.model_dump(include=set(PRICES)))
     return {**entry, "status": "scored", "metrics": summary, "cost_per_hour": cost,
-            "threshold": thresholds_used(ev, base)}
+            "threshold": thresholds_used(ev, base),
+            "on_time": {"hold_s": holds_used(ev, base), "window_s": window_s}}
+
+
+def on_time(plan: Plan, entries: list[dict]) -> dict:
+    """Each plan skill's on-time window and the holds its scored logs used:
+    {skill: {"window_s", "hold_s": [...]}} (no holds while nothing is scored)."""
+    out = {}
+    for skill in sorted({e.skill for e in plan.evaluations}):
+        holds = sorted({h for e in entries if e["skill"] == skill and e["status"] == "scored"
+                        for h in e["on_time"]["hold_s"]})
+        out[skill] = {"window_s": plan.window(skill), "hold_s": holds}
+    return out
 
 
 def pool_judges(entries: list[dict], counts: dict[str, metrics.ClipCounts]) -> list[dict]:
@@ -299,7 +333,7 @@ def log_to_wandb(results: dict, out_dir: Path, entity: str | None = None) -> str
     keys = list(scored[0]["metrics"]) if scored else []
     run = wandb.init(project=WANDB_PROJECT, entity=entity or None, name="eval",
                      job_type="eval", tags=["eval", "m3"],
-                     config={"plan": results["plan"], "window_s": results["window_s"],
+                     config={"plan": results["plan"], "on_time": results["on_time"],
                              "evaluations": [e["name"] for e in results["evaluations"]]})
     for e in scored:
         values = (e.get("threshold") or {}).get("values") or []
@@ -336,9 +370,10 @@ def run_eval(plan_path: Path, out_dir: Path, *, log_wandb: bool = False,
     plan = Plan.model_validate_json(plan_path.read_text(encoding="utf-8"))
     base = plan_path.resolve().parent
     out_dir.mkdir(parents=True, exist_ok=True)
-    counts = {e.name: count(e, base, plan.window_s) for e in plan.evaluations}
-    entries = [score(e, base, plan.window_s, counts[e.name]) for e in plan.evaluations]
-    results = {"plan": plan_path.name, "window_s": plan.window_s, "evaluations": entries,
+    counts = {e.name: count(e, base, plan.window(e.skill)) for e in plan.evaluations}
+    entries = [score(e, base, plan.window(e.skill), counts[e.name]) for e in plan.evaluations]
+    results = {"plan": plan_path.name, "on_time": on_time(plan, entries),
+               "evaluations": entries,
                "experiment4": pool_judges(entries, counts),
                **side_results(sorted({e.skill for e in plan.evaluations}), data_dir,
                               regression)}

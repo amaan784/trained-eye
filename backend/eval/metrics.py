@@ -1,19 +1,28 @@
 """Evaluation metrics for watch mode, from `te watch` frame logs and human labels.
 
 A frame log has one JSON line per scored frame and skill (backend/watch/watcher.py):
-t, skill, threshold, p, over, fires, alert, cloud, latency_s, error. A labels file says
-when the condition was true in the clip: {"true": [[start_s, end_s], ...]}.
+t, skill, threshold, hold_s, p, over, fires, alert, cloud, latency_s, error. A labels
+file says when the condition was true in the clip: {"true": [[start_s, end_s], ...]}.
+
+Each skill has a hold (hold_s in its spec, logged with every row; 0 for a log without it):
+watch mode alerts only once the condition has stayed true that long. So an alert is due
+at the end of the hold, the start of a labelled range plus hold_s, and each skill has
+its own on-time window after that (ON_TIME_S; EVENT_WINDOW_S for any other skill).
 
 Per skill, over one or more clips:
 - frame precision, recall, F1 and accuracy: a frame says "yes" when it scored at or over
   the threshold the watcher used (the log's `over`), and it is true when its time is
   inside a labelled range (ends included);
-- event recall: an event is one labelled true range. It is caught within the window
-  (5 s) when its first alert comes at most 5 s after its start, and caught at all when
-  an alert fires at any time during it;
-- false alarms per hour: alerts on frames labelled false, per hour of clip (a clip lasts
-  from its first frame to one frame step after its last: 3600 frames at 1 fps, one hour);
-- time to alert: seconds from an event's start to its first alert, over caught events;
+- event recall: an event is one labelled true range that lasts at least the hold
+  (shorter ones are short_events: nothing should fire for them). It is caught on time
+  ("in window") when its first alert after the hold ends comes within the skill's
+  on-time window of it, and caught at all when one fires before the event ends;
+- false alarms per hour: alerts that no event explains, per hour of clip: on frames
+  labelled false, or inside a range before its hold ended (early_alerts counts those).
+  A clip lasts from its first frame to one frame step after its last: 3600 frames at
+  1 fps, one hour;
+- time to alert: seconds from the end of an event's hold to its first alert after that,
+  over caught events;
 - latency per frame: latency_s, median and 90th percentile (not rows latency_measured false);
 - scored frames and student errors (rows without a probability).
 
@@ -34,7 +43,30 @@ from pathlib import Path
 
 import numpy as np
 
-EVENT_WINDOW_S = 5.0
+EVENT_WINDOW_S = 5.0  # the on-time window for a skill not in ON_TIME_S
+# How long after the end of its hold an alert still counts as on time, per skill. The
+# burner and the tap are seen at once and matter soonest; a fridge door's view changes as
+# the wearer moves, and an egg's foam builds up gradually, so their labels start softer.
+ON_TIME_S = {"burner_left_on": 5.0, "tap_left_running": 5.0, "fridge_left_open": 10.0,
+             "egg_whisked": 10.0}
+
+
+def on_time_window(skill: str, overrides: dict | None = None) -> float:
+    """The skill's on-time window in seconds: the plan's override, else ON_TIME_S."""
+    if overrides and skill in overrides:
+        return float(overrides[skill])
+    return ON_TIME_S.get(skill, EVENT_WINDOW_S)
+
+
+def hold_of(rows: Iterable[dict], skill: str) -> float:
+    """The hold the watcher used for `skill`, from its frame log rows (0 if none is
+    logged). ValueError if the rows disagree: one evaluation is one hold."""
+    holds = {float(r["hold_s"]) for r in rows
+             if r.get("skill") == skill and r.get("hold_s") is not None}
+    if len(holds) > 1:
+        raise ValueError(f"the frame log has more than one hold_s for {skill}: "
+                         f"{sorted(holds)}")
+    return holds.pop() if holds else 0.0
 
 
 def read_log(path: Path) -> list[dict]:
@@ -83,10 +115,12 @@ class ClipCounts:
     tn: int = 0
     seconds: float = 0.0
     events: int = 0
+    short_events: int = 0  # labelled ranges shorter than the hold
     caught_in_window: int = 0
     caught: int = 0
     alerts: int = 0
     false_alarms: int = 0
+    early_alerts: int = 0  # false alarms inside a range, before its hold ended
     cloud_checks: int = 0
     delays: list[float] = field(default_factory=list)
     latencies: list[float] = field(default_factory=list)
@@ -97,12 +131,18 @@ class ClipCounts:
 
 
 def count_clip(rows: Iterable[dict], skill: str, true_ranges: Iterable[Sequence[float]],
-               window_s: float = EVENT_WINDOW_S) -> ClipCounts:
-    """Counts for one skill in one clip. Raises ValueError if the log has no rows for it."""
+               window_s: float | None = None, hold_s: float | None = None) -> ClipCounts:
+    """Counts for one skill in one clip, with the skill's on-time window (on_time_window
+    unless given) and hold (the log's, hold_of, unless given). Raises ValueError if the
+    log has no rows for it."""
     ranges = check_ranges(true_ranges)
     rows = sorted((r for r in rows if r.get("skill") == skill), key=lambda r: float(r["t"]))
     if not rows:
         raise ValueError(f"the frame log has no rows for {skill}")
+    window_s = on_time_window(skill) if window_s is None else float(window_s)
+    hold_s = hold_of(rows, skill) if hold_s is None else float(hold_s)
+    if window_s <= 0 or hold_s < 0:
+        raise ValueError("the on-time window must be over 0 and the hold 0 or more")
     c = ClipCounts(clips=1, seconds=duration_s(float(r["t"]) for r in rows))
     alert_times = []
     for r in rows:
@@ -123,15 +163,21 @@ def count_clip(rows: Iterable[dict], skill: str, true_ranges: Iterable[Sequence[
             c.cloud_checks += 1
         if r.get("alert"):
             c.alerts += 1
-            c.false_alarms += not truth
+            due = any(a + hold_s <= t <= b for a, b in ranges)
+            c.false_alarms += not due
+            c.early_alerts += truth and not due
             alert_times.append(t)
     for start, end in ranges:
+        due = start + hold_s
+        if end < due:
+            c.short_events += 1
+            continue
         c.events += 1
-        hits = [t for t in alert_times if start <= t <= end]
+        hits = [t for t in alert_times if due <= t <= end]
         if hits:
             c.caught += 1
-            c.delays.append(hits[0] - start)
-            c.caught_in_window += hits[0] - start <= window_s
+            c.delays.append(hits[0] - due)
+            c.caught_in_window += hits[0] - due <= window_s
     return c
 
 
@@ -154,10 +200,11 @@ def summarize(counts: Iterable[ClipCounts]) -> dict:
         "precision": _ratio(c.tp, c.tp + c.fp), "recall": _ratio(c.tp, c.tp + c.fn),
         "f1": _ratio(2 * c.tp, 2 * c.tp + c.fp + c.fn),
         "accuracy": _ratio(c.tp + c.tn, c.frames),
-        "events": c.events, "caught_in_window": c.caught_in_window, "caught": c.caught,
+        "events": c.events, "short_events": c.short_events,
+        "caught_in_window": c.caught_in_window, "caught": c.caught,
         "event_recall_in_window": _ratio(c.caught_in_window, c.events),
         "event_recall_any": _ratio(c.caught, c.events),
-        "alerts": c.alerts, "false_alarms": c.false_alarms,
+        "alerts": c.alerts, "false_alarms": c.false_alarms, "early_alerts": c.early_alerts,
         "false_alarms_per_hour": _ratio(c.false_alarms, hours),
         "time_to_alert_median_s": _round(statistics.median(c.delays)) if c.delays else None,
         "time_to_alert_mean_s": _round(statistics.mean(c.delays)) if c.delays else None,

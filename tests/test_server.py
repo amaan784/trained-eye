@@ -246,11 +246,11 @@ def test_skills_lists_taught_skills_for_the_app(tmp_path):
         listed = c.get("/skills").json()["skills"]
     untrained = {"training": None, "served": None}  # no deploy recorded: unknown
     assert listed == [
-        {"name": "hot_pan", "alert": "Laundry's done.", "cooldown_s": 600, "dataset": False,
+        {"name": "hot_pan", "alert": "Laundry's done.", "cooldown_s": 600, "hold_s": 0, "dataset": False,
          "calibrated": False, "threshold": None, **untrained},
-        {"name": "pot_boils", "alert": "Laundry's done.", "cooldown_s": 600, "dataset": False,
+        {"name": "pot_boils", "alert": "Laundry's done.", "cooldown_s": 600, "hold_s": 0, "dataset": False,
          "calibrated": False, "threshold": None, **untrained},
-        {"name": "washer_done", "alert": "Laundry's done.", "cooldown_s": 600, "dataset": True,
+        {"name": "washer_done", "alert": "Laundry's done.", "cooldown_s": 600, "hold_s": 0, "dataset": True,
          "calibrated": True, "threshold": 0.82, **untrained},
     ]
 

@@ -63,11 +63,14 @@ def table(header: list[str], rows: list[list[str]]) -> list[str]:
             *("| " + " | ".join(_cell(c) for c in row) + " |" for row in rows)]
 
 
-def header(experiment: int, window_s: float) -> list[str]:
+ON_TIME = "Events caught on time"
+
+
+def header(experiment: int) -> list[str]:
     extra = {3: ["Synthetic images", "Generation cost"], 4: ["Frame accuracy"]}
     return ["Run", "Variant", "Skill", "Clips", "Footage", "Frames", "Precision", "Recall",
-            "F1", f"Events caught within {window_s:g} s", "Events caught at all",
-            "False alarms per hour", "Time to alert, median (mean)", "Threshold (from)",
+            "F1", ON_TIME, "Events caught at all",
+            "False alarms per hour", "Time to alert after the hold, median (mean)", "Threshold (from)",
             *extra.get(experiment, [])]
 
 
@@ -128,9 +131,9 @@ def judge_label(judge: dict) -> str:
         f"{total} skills)"
 
 
-def pooled_header(window_s: float) -> list[str]:
-    return ["Judge", "Skills", "Frames", "F1", "Frame accuracy",
-            f"Events caught within {window_s:g} s", "False alarms per hour", "Dollars per hour"]
+def pooled_header() -> list[str]:
+    return ["Judge", "Skills", "Frames", "F1", "Frame accuracy", ON_TIME,
+            "False alarms per hour", "Dollars per hour"]
 
 
 def pooled_rows(judges: list[dict]) -> list[list[str]]:
@@ -182,13 +185,13 @@ def write_charts(results: dict, base: Path, out_dir: Path) -> dict[str, list[str
         (out_dir / name).write_text(svg, encoding="utf-8")
         charts.setdefault(key, []).append(name)
 
-    evals, window = results["evaluations"], results["window_s"]
+    evals = results["evaluations"]
     for exp in (1, 2):
         runs = [e for e in evals if e["experiment"] == exp]
         if any(e["status"] == "scored" for e in runs):
             several = len({e["skill"] for e in runs}) > 1
             groups = [f"{e['variant']} ({e['skill']})" if several else e["variant"] for e in runs]
-            recall = f"events caught within {window:g} s"
+            recall = ON_TIME[0].lower() + ON_TIME[1:]
             save(str(exp), f"exp{exp}_bars.svg", grouped_bars(
                 EXPERIMENTS[exp], f"Frame F1 and {recall}, on the labelled test clips", groups,
                 [("frame F1", [_value(e, "f1") for e in runs]),
@@ -224,13 +227,26 @@ def extra_lines(exp: int, results: dict) -> list[str]:
     if exp == 2 and (rows := spark_rows(results)):
         return [SPARK_NOTE, "", *table(SPARK_HEADER, rows), ""]
     if exp == 4 and (rows := pooled_rows(results.get("experiment4") or [])):
-        return [POOLED_NOTE, "", *table(pooled_header(results["window_s"]), rows), ""]
+        return [POOLED_NOTE, "", *table(pooled_header(), rows), ""]
     return []
+
+
+def _seconds(values: list[float]) -> str:
+    return " or ".join(f"{v:g}" for v in values) + " s"
+
+
+def on_time_text(results: dict) -> str:
+    """How each plan skill's events are timed: its hold (from the logs) and window."""
+    parts = []
+    for skill, t in sorted((results.get("on_time") or {}).items()):
+        hold = (f"a {_seconds(t['hold_s'])} hold" if t["hold_s"] else
+                "the hold its logs record")
+        parts.append(f"{skill}, {hold} and a {t['window_s']:g} s window")
+    return "; ".join(parts) + "." if parts else "no skills in the plan yet."
 
 
 def render(results: dict) -> str:
     """The whole results.md for the dict run_eval returns."""
-    window = results["window_s"]
     lines = [
         "# Evaluation results", "",
         (f"Computed by `te eval` from the plan {results['plan']}: the frame logs of `te watch` "
@@ -240,11 +256,14 @@ def render(results: dict) -> str:
         ("How to read the tables: a frame counts as yes when the student's probability is at "
          "or over the skill's threshold, shown with where it came from (run: the run's own "
          "calibration on its validation clips; skill: the skill-wide one; flag: given by "
-         "hand; default: 0.5, not calibrated; spark: only a yes). An event is one labelled "
-         f"true range; it is caught within {window:g} s when its first alert comes at most "
-         f"{window:g} s after it starts. False alarms are alerts on frames labelled false. Dollars per hour add the student's "
-         "GPU (nothing on the Mac), the Muse Spark checks and any per-frame scorer, at the "
-         "prices in the plan."), ""]
+         "hand; default: 0.5, not calibrated; spark: only a yes). A skill alerts only once "
+         "its condition has stayed true for the skill's hold, so an event is one labelled "
+         "true range that lasts at least the hold, and its alert is due when the hold ends. "
+         "It is caught on time when its first alert after that comes within the skill's "
+         f"on-time window: {on_time_text(results)} False alarms are alerts no event "
+         "explains: on frames labelled false, or before the hold ended. Dollars per hour add "
+         "the student's GPU (nothing on the Mac), the Muse Spark checks and any per-frame "
+         "scorer, at the prices in the plan."), ""]
     for exp, title in EXPERIMENTS.items():
         runs = [e for e in results["evaluations"] if e["experiment"] == exp]
         scored = [e for e in runs if e["status"] == "scored"]
@@ -256,7 +275,7 @@ def render(results: dict) -> str:
             continue
         lines += [f"![{title}]({name})\n" for name in results["charts"].get(str(exp), [])]
         if scored:
-            lines += [*table(header(exp, window), [accuracy_row(e) for e in scored]), "",
+            lines += [*table(header(exp), [accuracy_row(e) for e in scored]), "",
                       "Speed and cost:", "", *table(COST_HEADER, [cost_row(e) for e in scored]),
                       ""]
         else:

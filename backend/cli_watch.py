@@ -152,7 +152,7 @@ def cmd_calibrate(args) -> int:
             clips.append(frames)
             sources.append({"log": Path(log).name, "labels": Path(labels).name,
                             "frames": len(frames)})
-        result = calibrate(clips, float(spec.cooldown_s))
+        result = calibrate(clips, float(spec.cooldown_s), hold_s=float(spec.hold_s))
     except (OSError, ValueError, KeyError, TypeError) as err:
         print(f"te: {err}", file=sys.stderr)
         return 2
@@ -169,7 +169,8 @@ def cmd_calibrate(args) -> int:
     print(f"{args.skill}{for_run}: threshold {result['threshold']:.3f} on {minutes:.0f} minutes of "
           f"footage: {result['false_alarms']} false alarms, {result['caught']} of "
           f"{result['events']} events caught"
-          + (f", median delay {delay:.0f} s" if delay is not None else ""))
+          + (f", median delay {delay:.0f} s" if delay is not None else "")
+          + (f" (after the {spec.hold_s} s hold)" if spec.hold_s and delay is not None else ""))
     print(f"saved: {shown_path(target)}")
     if note := served_run_note(settings, args.skill, args.run):
         print(note)
@@ -180,7 +181,7 @@ def cmd_calibrate(args) -> int:
 
 def add_parsers(sub) -> None:
     watch = sub.add_parser("watch", help="replay a clip through watch mode")
-    watch.add_argument("--skills", required=True, help="comma-separated, e.g. washer_done")
+    watch.add_argument("--skills", required=True, help="comma-separated, e.g. burner_left_on")
     watch.add_argument("--clip", required=True, help="video file or folder of frames")
     watch.add_argument("--fps", type=float, default=1.0, help="frames scored per second")
     watch.add_argument("--no-cloud", action="store_true", help="skip the Muse Spark check")

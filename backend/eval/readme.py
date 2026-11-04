@@ -42,10 +42,9 @@ def _table(header: list[str], rows: list[list[str]]) -> list[str]:
 
 
 def headline(exp: int, results: dict) -> list[str]:
-    """One experiment's table: frame F1, events caught in the window, false alarms per
+    """One experiment's table: frame F1, events caught on time, false alarms per
     hour and dollars per hour (Experiment 3 adds the images, 4 is pooled over skills)."""
-    window = results.get("window_s", 5)
-    caught = f"Events caught within {window:g} s"
+    caught = "Events caught on time"
     if exp == 4 and any(j.get("metrics") for j in results.get("experiment4") or []):
         rows = [[judge_label(j), _num(j["metrics"]["f1"]), _num(j["metrics"]["accuracy"]),
                  _num(j["metrics"]["event_recall_in_window"]),

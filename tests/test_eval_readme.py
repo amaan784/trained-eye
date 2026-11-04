@@ -45,7 +45,7 @@ def test_the_block_copies_results_json_and_names_its_hash(scored, tmp_path):
     digest = hashlib.sha256(scored.read_bytes()).hexdigest()
     assert f"from `eval/results.json` (SHA-256 `{digest}`): 4 of 5 evaluations scored" in text
     one = text.split("### Experiment 1")[1].split("###")[0]
-    assert "| Variant | Skill | Frame F1 | Events caught within 5 s | False alarms per hour |" \
+    assert "| Variant | Skill | Frame F1 | Events caught on time | False alarms per hour |" \
         in one
     assert "| mixed | washer_done | 1.00 | 1.00 | 0.0 | $3.95 |" in one and "| real |" not in one
     assert "| 25 images" not in text and "| 25 | 0.00 |" in text  # Experiment 3's images

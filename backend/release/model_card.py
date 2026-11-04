@@ -76,8 +76,9 @@ The training data was made through the Meta Model API:
 
 Intended: yes/no watch skills on first-person frames from smart glasses or a phone, each
 taught by its user from their own footage: the state of an object, a display, a sign or a
-vehicle (has the washer's display reached the end of the cycle?), with an alert threshold
-calibrated on the user's own validation clips.
+vehicle (has the fridge been left open? is the tap still running?), with an alert threshold
+calibrated on the user's own validation clips and a hold before each alert. An alert is a
+reminder: it never replaces a smoke alarm or turning a burner off.
 
 Out of scope: people (identifying, recognising or tracking anyone), bodies, health,
 medication and other sensitive traits, covert monitoring, sensitive places, sports analysis
@@ -87,8 +88,8 @@ or coaching, and anything where a missed or false alert could put someone at ris
 
 - Each skill comes from one user's scenes and camera; others are untested beyond the
   evaluation above. {mix}
-- It answers per frame: alerts need the watcher's smoothing, a calibrated threshold and a
-  cooldown. The vision tower stayed frozen, so small, distant or glary targets stay hard.
+- It answers per frame: alerts need the watcher's smoothing, each skill's hold, a
+  calibrated threshold and a cooldown. The vision tower stayed frozen, so small, distant or glary targets stay hard.
 - Glimmer reasons before it answers: scoring needs the server's top logprobs for yes and no.
 
 ## Privacy and provenance

@@ -1,11 +1,12 @@
 """The SVG pieces every evaluation chart shares: palette, style, escaping, axes, marks.
 
-One look for every chart (HANDOVER.md, "Visual design"): flat marks with no gradients,
-Inter with the system sans as fallback, one accent colour for the series a chart is
-about and a neutral grey for the rest, values written on the marks, hairline grids. Each
-SVG carries its own <style>: light colours by default and dark ones under
-@media (prefers-color-scheme: dark), so it reads on a light or a dark page. Marks carry a
-<title>, which browsers show on hover. All text is escaped.
+One look for every chart, the contact sheet's (DESIGN.md): flat marks with no gradients,
+Archivo with the system sans as fallback, Ink for the series a chart is about and
+Graphite for the rest, Marker only for the fine-tuned model where it is the point of the
+chart, values written on the marks, hairline grids. Each SVG carries its own <style>:
+Paper by default and Film under @media (prefers-color-scheme: dark), so it reads on a
+light or a dark page. Marks carry a <title>, which browsers show on hover. All text is
+escaped.
 """
 
 from __future__ import annotations
@@ -16,24 +17,28 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-FONT = 'Inter, system-ui, -apple-system, "Segoe UI", sans-serif'
-# Surface, three inks, grid, axis, the accent (blue), the grey and the shading for ranges.
-LIGHT = {"bg": "#fcfcfb", "t1": "#0b0b0b", "t2": "#52514e", "t3": "#898781",
-         "grid": "#e1e0d9", "axis": "#c3c2b7", "acc": "#2a78d6", "neu": "#898781",
-         "wash": "#0b0b0b;fill-opacity:.08"}
-DARK = {"bg": "#1a1a19", "t1": "#f0efec", "t2": "#c3c2b7", "t3": "#898781",
-        "grid": "#2c2c2a", "axis": "#383835", "acc": "#3987e5", "neu": "#898781",
-        "wash": "#f0efec;fill-opacity:.1"}
+FONT = 'Archivo, system-ui, -apple-system, "Segoe UI", sans-serif'
+PAPER, FILM, MARKER, INK, GRAPHITE = "#F4F5F2", "#000000", "#D1332B", "#1D1E20", "#6E7176"
+# Surface, three inks, grid, axis, the series a chart is about (Ink), the rest (Graphite),
+# the fine-tuned model when it is the point (Marker) and the shading for ranges.
+LIGHT = {"bg": PAPER, "t1": INK, "t2": GRAPHITE, "t3": GRAPHITE,
+         "grid": "#DCDDD9", "axis": GRAPHITE, "acc": INK, "neu": GRAPHITE, "mark": MARKER,
+         "wash": f"{INK};fill-opacity:.08"}
+DARK = {"bg": FILM, "t1": PAPER, "t2": "#A4A7AB", "t3": "#A4A7AB",
+        "grid": "#26272A", "axis": GRAPHITE, "acc": PAPER, "neu": GRAPHITE, "mark": MARKER,
+        "wash": f"{PAPER};fill-opacity:.1"}
 
 
 def _rules(c: dict) -> str:
-    fills = "".join(f".{k}{{fill:{c[k]}}}" for k in ("bg", "t1", "t2", "t3", "acc", "neu", "wash"))
-    lines = "".join(f".{k}-s{{stroke:{c[k]}}}" for k in ("t1", "t2", "grid", "axis", "acc", "neu"))
+    fills = "".join(f".{k}{{fill:{c[k]}}}"
+                    for k in ("bg", "t1", "t2", "t3", "acc", "neu", "mark", "wash"))
+    lines = "".join(f".{k}-s{{stroke:{c[k]}}}"
+                    for k in ("t1", "t2", "grid", "axis", "acc", "neu", "mark"))
     return fills + lines + f".ring{{stroke:{c['bg']}}}"
 
 
-STYLE = (f"text{{font-family:{FONT};font-size:12px}}.title{{font-size:15px;font-weight:600}}"
-         ".small{font-size:11px}.strong{font-weight:600}" + _rules(LIGHT)
+STYLE = (f"text{{font-family:{FONT};font-size:12px}}.title{{font-size:15px;font-weight:650}}"
+         ".small{font-size:11px}.strong{font-weight:650}" + _rules(LIGHT)
          + "@media (prefers-color-scheme: dark){" + _rules(DARK) + "}")
 TICKS_01 = [0.0, 0.25, 0.5, 0.75, 1.0]
 _NOT_XML = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]")
@@ -49,7 +54,7 @@ def usd(value: float) -> str:
 
 
 def text_width(value: str, size: float = 12) -> float:
-    return 0.6 * size * len(value)  # a safe guess for Inter and the system sans
+    return 0.6 * size * len(value)  # a safe guess for Archivo and the system sans
 
 
 def text(x: float, y: float, value: object, cls: str = "t2", anchor: str = "start") -> str:

@@ -86,7 +86,8 @@ def line_chart(title: str, subtitle: str, points: Sequence[tuple[float, float | 
 
 def scatter(title: str, subtitle: str, points: Sequence[dict], y_name: str = "F1") -> str:
     """Points {"label", "x": dollars per hour, "y": 0 to 1, "highlight"}, each labelled
-    with its name and both values. Highlighted points take the accent colour."""
+    with its name and both values. Highlighted points (the fine-tuned model, the point of
+    the chart) take the marker colour."""
     shown = [p for p in points if p.get("x") is not None and p.get("y") is not None]
     missing = [str(p["label"]) for p in points if p not in shown]
     box = Box(56, 80, 544, 240)
@@ -104,7 +105,7 @@ def scatter(title: str, subtitle: str, points: Sequence[dict], y_name: str = "F1
         placed.append((lx, ly))
         on = bool(p.get("highlight"))
         value = f"{y_name} {p['y']:.2f}, {usd(p['x'])} per hour"
-        body.append(dot(cx, cy, "acc" if on else "neu", f"{p['label']}: {value}", 6 if on else 5))
+        body.append(dot(cx, cy, "mark" if on else "neu", f"{p['label']}: {value}", 6 if on else 5))
         anchor = "start" if right else "end"
         body.append(text(lx, ly, p["label"], "t1 strong" if on else "t1", anchor))
         body.append(text(lx, ly + 15, value, "t2 small", anchor))

@@ -90,8 +90,19 @@ simulator), the product model and the first results; see "Live runs, Nov 4" belo
   the fine-tuned model matches the base and Spark on frame accuracy, at half the base's
   latency and under a quarter of Spark's cost; it is not more accurate than the base
   there. The glasses footage is reported apart when it is recorded.
+- Experiment 1 on the same EPIC windows: the product model (the teaching clip and its
+  generated images) reaches frame F1 0.88; a comparison model trained only on 257 real
+  EPIC frames from five other kitchens (run exp1-epic, data/exp1-epic/, never published)
+  reaches 0.89. Taught from one 16 s clip in one kitchen, the product model does as well
+  in kitchens it never saw as a model trained on real footage from five of them.
 - The README is now a short product page with art rendered from real outputs
   (`python -m backend.art.build`); the details moved to docs/.
+- Speed, measured: Muse Image edits at reasoning_strength low took 15.6 s for 8 against
+  26.2 s at the default (Spark agreed with all 8 each way), now the default for new
+  plans; SAM runs 12 at a time (it took 37 to 58 s for 24 keyframes one by one); te
+  replay scores 8 frames at a time (24 for Spark); vLLM's compile cache on the volume took
+  a cold start from 164 s to 147 s. Training (442 s) and the merge (243 s) were already
+  short; the endpoint cold start (about 2.5 to 4 minutes) is the longest wait left.
 
 ### Failed, and fixed at the root (each with a test)
 
@@ -554,4 +565,5 @@ sources disagree with SPEC.md, the sources win.
 | M4 | $0.00 | $0.00 | built and tested offline by Nov 3; nothing deployed or published |
 | Nov 4, to 9 AM ET | $6.85 | $1.49 | `te spend`: the API smoke ($0.0013) and the fridge teach runs (Muse Image $3.36, Spark labels $2.98, Wonder $0.32, SAM $0.18, Voice $0.0003); Modal: four two-step smokes $0.48, base serving $1.01 (an upper bound: deployed time). The image builds, the CPU base download and the preflight are not in the ledger; the Modal dashboard has the bill |
 | Nov 4, 9 to 10 AM ET | $6.45 | $4.85 | `te spend`: Muse Spark judging the 1,405 EPIC test frames and a 30-frame cost check; Modal: the product training run, its export, and serving the fine-tuned and base models for the EPIC replays (an upper bound: deployed time) |
-| Total | $13.30 (the author's budget for Nov 4: $100) | $6.34 at config prices (budget for Nov 4: $100) | |
+| Nov 4, 10 to 10:15 AM ET | $0.40 | $1.45 | `te spend`: the image-speed test (16 Muse Image edits and their Spark labels); Modal: the EPIC comparison run's training, merge and serving ($1.09, in data/exp1-epic/modal_ledger.jsonl), and two timed cold starts of the base |
+| Total | $13.70 (the author's budget for Nov 4: $100) | $7.79 at config prices (budget for Nov 4: $100) | |

@@ -24,7 +24,7 @@ fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells 
 <!-- te eval: results start (written by te eval --readme; edits here are lost) -->
 ## Results
 
-Written by `te eval --readme` from `eval/results.json` (SHA-256 `b6700ca944f8fcb23ab2883625812d15848dc7442c9011f43733e5d2704e9bc5`): 3 of 3 evaluations scored. Every number here is copied from that file; n/a means there was nothing to compute it from.
+Written by `te eval --readme` from `eval/results.json` (SHA-256 `d4d8d6dff2bbbf2eef3860b0c8b28201fd4857a5f66c56843e440d59f1eb6006`): 5 of 5 evaluations scored. Every number here is copied from that file; n/a means there was nothing to compute it from.
 
 Test footage: other kitchens (EPIC-KITCHENS-100, head-mounted camera). Results on other footage are reported apart.
 
@@ -32,15 +32,22 @@ Thresholds were calibrated for frame F1 on calibration clips (this footage has t
 
 An event is caught on time when its alert comes within the skill's window after the skill's hold ends (the condition must stay true that long before it alerts): fridge_left_open, a 30 s hold and a 10 s window.
 
+### Experiment 1: real only, synthetic only, mixed
+
+| Variant | Skill | Frame F1 | Events caught on time | False alarms per hour | Dollars per hour |
+|---|---|---|---|---|---|
+| mixed | fridge_left_open | 0.88 | 0.20 | 0.0 | $3.95 |
+| real, other kitchens (EPIC, never published) | fridge_left_open | 0.89 | 0.20 | 0.0 | $3.95 |
+
 ### Experiment 4: fine-tuned Glimmer, base Glimmer, Muse Spark on every frame
 
 | Judge (all skills) | Frame F1 | Frame accuracy | Events caught on time | False alarms per hour | Dollars per hour |
 |---|---|---|---|---|---|
 | finetuned | 0.88 | 0.96 | 0.20 | 0.0 | $3.95 |
 | base | 0.89 | 0.96 | 0.20 | 0.0 | $3.95 |
-| spark | 0.86 | 0.95 | 0.20 | 0.0 | $16.32 |
+| spark | 0.86 | 0.95 | 0.20 | 0.0 | $16.53 |
 
-Charts: [Experiment 4 (cost)](eval/exp4_cost.svg).
+Charts: [Experiment 1](eval/exp1_bars.svg), [Experiment 4 (cost)](eval/exp4_cost.svg).
 
 Regression check: not run yet (te regress).
 

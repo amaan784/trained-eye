@@ -12,6 +12,272 @@
  },
  "evaluations": [
   {
+   "name": "epic-exp1-mixed-fridge_left_open",
+   "experiment": 1,
+   "skill": "fridge_left_open",
+   "variant": "mixed",
+   "clips": [
+    {
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P02_06_00294.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P02_06_00294.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P02_06_00294"
+    },
+    {
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P02_132_00000.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P02_132_00000.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P02_132_00000"
+    },
+    {
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P02_15_00010.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P02_15_00010.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P02_15_00010"
+    },
+    {
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_05_00394.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_05_00394.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_05_00394"
+    },
+    {
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_05_00570.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_05_00570.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_05_00570"
+    },
+    {
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_104_00000.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_104_00000.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_104_00000"
+    },
+    {
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_107_00046.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_107_00046.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_107_00046"
+    },
+    {
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_10_00000.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_10_00000.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_10_00000"
+    },
+    {
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_111_00000.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_111_00000.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_111_00000"
+    },
+    {
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_111_00150.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_111_00150.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_111_00150"
+    },
+    {
+     "log": "../data/watch/exp1-mixed/fridge_left_open/epic-P22_14_00099.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_14_00099.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_14_00099"
+    }
+   ],
+   "gpu": null,
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004591,
+   "scorer_usd_per_frame": 0.0,
+   "images": null,
+   "generation_usd": null,
+   "highlight": false,
+   "alert_text": "Heads up \u2014 your fridge door is open!",
+   "run": "exp1-mixed",
+   "scorer": "student",
+   "status": "scored",
+   "metrics": {
+    "clips": 11,
+    "frames": 1405,
+    "student_errors": 0,
+    "hours": 0.3903,
+    "precision": 0.9776,
+    "recall": 0.8044,
+    "f1": 0.8826,
+    "accuracy": 0.9587,
+    "events": 5,
+    "short_events": 7,
+    "caught_in_window": 1,
+    "caught": 1,
+    "event_recall_in_window": 0.2,
+    "event_recall_any": 0.2,
+    "alerts": 1,
+    "false_alarms": 0,
+    "early_alerts": 0,
+    "false_alarms_per_hour": 0.0,
+    "time_to_alert_median_s": 1.0,
+    "time_to_alert_mean_s": 1.0,
+    "latency_median_s": 0.983,
+    "latency_p90_s": 1.328,
+    "cloud_checks": 0,
+    "cloud_checks_per_hour": 0.0,
+    "frames_per_hour": 3600.0
+   },
+   "cost_per_hour": {
+    "student": "GPU",
+    "gpu_usd": 3.95,
+    "spark_checks_usd": 0.0,
+    "per_frame_scorer_usd": 0.0,
+    "total_usd": 3.95
+   },
+   "threshold": {
+    "values": [
+     0.6205
+    ],
+    "sources": [
+     "run"
+    ]
+   },
+   "on_time": {
+    "hold_s": [
+     30.0
+    ],
+    "window_s": 10.0
+   }
+  },
+  {
+   "name": "epic-exp1-epic-fridge_left_open",
+   "experiment": 1,
+   "skill": "fridge_left_open",
+   "variant": "real, other kitchens (EPIC, never published)",
+   "clips": [
+    {
+     "log": "../data/watch/exp1-epic/fridge_left_open/epic-P02_06_00294.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P02_06_00294.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P02_06_00294"
+    },
+    {
+     "log": "../data/watch/exp1-epic/fridge_left_open/epic-P02_132_00000.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P02_132_00000.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P02_132_00000"
+    },
+    {
+     "log": "../data/watch/exp1-epic/fridge_left_open/epic-P02_15_00010.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P02_15_00010.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P02_15_00010"
+    },
+    {
+     "log": "../data/watch/exp1-epic/fridge_left_open/epic-P22_05_00394.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_05_00394.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_05_00394"
+    },
+    {
+     "log": "../data/watch/exp1-epic/fridge_left_open/epic-P22_05_00570.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_05_00570.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_05_00570"
+    },
+    {
+     "log": "../data/watch/exp1-epic/fridge_left_open/epic-P22_104_00000.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_104_00000.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_104_00000"
+    },
+    {
+     "log": "../data/watch/exp1-epic/fridge_left_open/epic-P22_107_00046.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_107_00046.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_107_00046"
+    },
+    {
+     "log": "../data/watch/exp1-epic/fridge_left_open/epic-P22_10_00000.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_10_00000.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_10_00000"
+    },
+    {
+     "log": "../data/watch/exp1-epic/fridge_left_open/epic-P22_111_00000.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_111_00000.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_111_00000"
+    },
+    {
+     "log": "../data/watch/exp1-epic/fridge_left_open/epic-P22_111_00150.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_111_00150.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_111_00150"
+    },
+    {
+     "log": "../data/watch/exp1-epic/fridge_left_open/epic-P22_14_00099.jsonl",
+     "labels": "../data/epic/windows/fridge/test/P22_14_00099.labels.json",
+     "timeline": false,
+     "clip": "../data/epic/windows/fridge/test/P22_14_00099"
+    }
+   ],
+   "gpu": null,
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004591,
+   "scorer_usd_per_frame": 0.0,
+   "images": null,
+   "generation_usd": null,
+   "highlight": false,
+   "alert_text": "Heads up \u2014 your fridge door is open!",
+   "run": "exp1-epic",
+   "scorer": "student",
+   "status": "scored",
+   "metrics": {
+    "clips": 11,
+    "frames": 1405,
+    "student_errors": 0,
+    "hours": 0.3903,
+    "precision": 0.9778,
+    "recall": 0.8118,
+    "f1": 0.8871,
+    "accuracy": 0.9601,
+    "events": 5,
+    "short_events": 7,
+    "caught_in_window": 1,
+    "caught": 1,
+    "event_recall_in_window": 0.2,
+    "event_recall_any": 0.2,
+    "alerts": 1,
+    "false_alarms": 0,
+    "early_alerts": 0,
+    "false_alarms_per_hour": 0.0,
+    "time_to_alert_median_s": 1.0,
+    "time_to_alert_mean_s": 1.0,
+    "latency_median_s": 0.929,
+    "latency_p90_s": 1.1486,
+    "cloud_checks": 0,
+    "cloud_checks_per_hour": 0.0,
+    "frames_per_hour": 3600.0
+   },
+   "cost_per_hour": {
+    "student": "GPU",
+    "gpu_usd": 3.95,
+    "spark_checks_usd": 0.0,
+    "per_frame_scorer_usd": 0.0,
+    "total_usd": 3.95
+   },
+   "threshold": {
+    "values": [
+     0.8235
+    ],
+    "sources": [
+     "run"
+    ]
+   },
+   "on_time": {
+    "hold_s": [
+     30.0
+    ],
+    "window_s": 10.0
+   }
+  },
+  {
    "name": "epic-exp4-finetuned-fridge_left_open",
    "experiment": 4,
    "skill": "fridge_left_open",
@@ -86,7 +352,7 @@
    ],
    "gpu": null,
    "gpu_usd_per_hour": 3.95,
-   "spark_usd_per_check": 0.004534,
+   "spark_usd_per_check": 0.004591,
    "scorer_usd_per_frame": 0.0,
    "images": null,
    "generation_usd": null,
@@ -219,7 +485,7 @@
    ],
    "gpu": null,
    "gpu_usd_per_hour": 3.95,
-   "spark_usd_per_check": 0.004534,
+   "spark_usd_per_check": 0.004591,
    "scorer_usd_per_frame": 0.0,
    "images": null,
    "generation_usd": null,
@@ -353,7 +619,7 @@
    "gpu": null,
    "gpu_usd_per_hour": 0.0,
    "spark_usd_per_check": 0.0,
-   "scorer_usd_per_frame": 0.004534,
+   "scorer_usd_per_frame": 0.004591,
    "images": null,
    "generation_usd": null,
    "highlight": false,
@@ -392,8 +658,8 @@
     "student": "GPU",
     "gpu_usd": 0.0,
     "spark_checks_usd": 0.0,
-    "per_frame_scorer_usd": 16.3224,
-    "total_usd": 16.3224
+    "per_frame_scorer_usd": 16.5276,
+    "total_usd": 16.5276
    },
    "threshold": {
     "values": [
@@ -491,7 +757,7 @@
    ],
    "of": 1,
    "highlight": false,
-   "usd_per_hour": 16.3224,
+   "usd_per_hour": 16.5276,
    "metrics": {
     "clips": 11,
     "frames": 1405,
@@ -535,9 +801,23 @@
  },
  "regression": null,
  "charts": {
+  "1": [
+   "exp1_bars.svg"
+  ],
   "4": [
    "exp4_cost.svg"
   ]
  },
- "galleries": {}
+ "galleries": {
+  "exp1-mixed": {
+   "page": "galleries/exp1-mixed/index.html",
+   "false_alarms": 3,
+   "misses": 28
+  },
+  "exp1-epic": {
+   "page": "galleries/exp1-epic/index.html",
+   "false_alarms": 3,
+   "misses": 27
+  }
+ }
 }

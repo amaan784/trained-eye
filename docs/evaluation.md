@@ -53,7 +53,8 @@ Each plan names its footage, and its results say it in their heading.
     te replay --plan eval/plan-epic.json --run exp1-mixed      # the served fine-tuned model
     te replay --plan eval/plan-epic.json --run exp4-base --model muse-glimmer
     te replay --plan eval/plan-epic.json --run exp4-spark      # paid per frame; asks
-    te eval --plan eval/plan-epic.json --out eval
+    te replay --plan eval/plan-epic.json --run exp1-epic       # Experiment 1's comparison
+    te eval --plan eval/plan-epic.json --out eval --readme README.md
 
 `te replay` needs `TE_STUDENT_URL` for the endpoint that serves the run (`te
 serve-student` prints it). Frame logs land in `data/watch/<run>/<skill>/`.

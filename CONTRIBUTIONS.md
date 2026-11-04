@@ -58,6 +58,21 @@ bundling with software. The four static faces (Regular, Medium, SemiBold, Bold) 
 `ios/TrainedEye/Fonts/`, and the variable web font in `backend/playground/static/fonts/`
 and `backend/labeltool/static/fonts/`, each with the license as `LICENSE.txt`.
 
+## Archivo
+
+github.com/Omnibus-Type/Archivo, copyright 2020 The Archivo Project Authors, under the SIL
+Open Font License 1.1 with no Reserved Font Name. The variable web font (Latin, width 62 to
+125, weight 100 to 900) is in `backend/playground/static/fonts/` and is drawn into the
+README art. Four static instances cut from it with fontTools' instancer
+(`python -m backend.art.fonts`: Display, Text, TextSemibold and Edge) are in
+`ios/TrainedEye/Fonts/`. Each folder has the license as `Archivo-OFL.txt`.
+
+## The contact-sheet design
+
+The author's design kit: the colours, the type, the film strip and the hand-drawn ring.
+`backend/art/film.py` ports its `make_banner.py` and `make_strip.py` previews, filled from
+real runs instead of fixed frames.
+
 ## Axolotl
 
 github.com/axolotl-ai-cloud/axolotl, version 0.19.0: the fine-tuning framework that runs

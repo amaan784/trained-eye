@@ -93,6 +93,38 @@ def spark_lines(results: dict) -> list[str]:
     return out
 
 
+CLOSE_F1 = 0.05  # frame F1 within this of the others reads as "about as well"
+
+
+def summary(results: dict) -> str | None:
+    """One plain-English sentence from Experiment 4's pooled judges: how the fine-tuned
+    model's frame F1, latency and cost compare with base Glimmer's and Muse Spark's. None
+    unless all three are scored. "More accurately" or "less accurately" only when its F1
+    is at least CLOSE_F1 above or below both others."""
+    judges = {j.get("variant"): j for j in results.get("experiment4") or []}
+    if not all(v in judges for v in ("finetuned", "base", "spark")):
+        return None
+    m = {v: judges[v].get("metrics") or {} for v in judges}
+    f1 = {v: m[v].get("f1") for v in ("finetuned", "base", "spark")}
+    lat = {v: m[v].get("latency_median_s") for v in f1}
+    usd = {v: judges[v].get("usd_per_hour") for v in f1}
+    if any(x is None for d in (f1, lat, usd) for x in d.values()):
+        return None
+    others = (f1["base"], f1["spark"])
+    if f1["finetuned"] >= max(others) + CLOSE_F1:
+        how = "more accurately than"
+    elif f1["finetuned"] <= min(others) - CLOSE_F1:
+        how = "less accurately than"
+    else:
+        how = "about as accurately as"
+    where = (results.get("footage") or "the test footage").split(" (")[0]
+    return (f"on {where}, the fine-tuned model spotted the condition {how} base Glimmer and "
+            f"Muse Spark (frame F1 {f1['finetuned']:.2f}, {f1['base']:.2f} and "
+            f"{f1['spark']:.2f}), answering in {lat['finetuned']:.2f} s a frame against "
+            f"{lat['base']:.2f} s and {lat['spark']:.2f} s, at ${usd['finetuned']:.2f} an "
+            f"hour against ${usd['spark']:.2f} for Spark.")
+
+
 def block(results_path: Path, readme_path: Path) -> str:
     """The text between the markers. ValueError when no evaluation is scored."""
     body = Path(results_path).read_bytes()
@@ -110,6 +142,7 @@ def block(results_path: Path, readme_path: Path) -> str:
               "copied from that file; n/a means there was nothing to compute it from."), "",
              *([(f"Test footage: {results['footage']}. Results on other footage are reported "
                 "apart."), ""] if results.get("footage") else []),
+             *([f"In short: {line}", ""] if (line := summary(results)) else []),
              *([("Thresholds were calibrated for frame F1 on calibration clips (this footage has "
                 "too few events past the skill's hold to judge alerts), so read the frame "
                 "columns."), ""] if results.get("threshold_objective") == "frames" else []),

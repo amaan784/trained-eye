@@ -800,6 +800,26 @@
   }
  },
  "regression": null,
+ "speed": {
+  "finetuned": {
+   "model": "trained-eye",
+   "skill": "fridge_left_open",
+   "clip": "data/epic/windows/fridge/calibration/P03_19_00093",
+   "frames": 20,
+   "median_seconds": 0.9895,
+   "median_completion_tokens": 5.0,
+   "frames_with_reasoning": 0
+  },
+  "base": {
+   "model": "muse-glimmer",
+   "skill": "fridge_left_open",
+   "clip": "data/epic/windows/fridge/calibration/P03_19_00093",
+   "frames": 20,
+   "median_seconds": 1.7839999999999998,
+   "median_completion_tokens": 64.0,
+   "frames_with_reasoning": 20
+  }
+ },
  "charts": {
   "1": [
    "exp1_bars.svg"

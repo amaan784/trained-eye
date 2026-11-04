@@ -106,6 +106,32 @@ def test_the_footage_a_plan_names_heads_its_results(plan, tmp_path):
     assert "Thresholds here were calibrated for frame F1" in (out / "results.md").read_text()
 
 
+def test_the_speed_measurement_says_why_one_model_answers_faster(plan, tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+
+    def measured(model, seconds, tokens, reasoning):
+        return {"model": model, "skill": "burner_left_on", "clip": "data/x/P03_19_00093",
+                "frames": 20, "median_seconds": seconds, "median_completion_tokens": tokens,
+                "median_prompt_tokens": 474, "frames_with_reasoning": reasoning,
+                "rows": [{"t": 0.0, "seconds": seconds}]}
+
+    (out / "speed.json").write_text(json.dumps({
+        "finetuned": measured("trained-eye", 0.9895, 5.0, 0),
+        "base": measured("muse-glimmer", 1.784, 64.0, 20)}))
+    results = run_eval(plan, out)
+    assert "rows" not in results["speed"]["base"]
+    md = (out / "results.md").read_text()
+    assert "on frames of P03_19_00093" in md
+    assert "| finetuned | 5 | 0 of 20 | 0.99 s |" in md
+    assert "| base | 64 | 20 of 20 | 1.78 s |" in md
+    (out / "speed.json").write_text(json.dumps({"base": {"model": "m"}}))
+    with pytest.raises(ValueError, match="speed"):
+        run_eval(plan, out)
+    (out / "speed.json").unlink()
+    assert "speed" not in run_eval(plan, out)
+
+
 def test_bad_plans_are_refused(tmp_path):
     def check(evaluations, match):
         path = tmp_path / "plan.json"

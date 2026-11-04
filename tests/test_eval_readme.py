@@ -131,3 +131,29 @@ def test_te_eval_readme_writes_the_block_or_leaves_the_file(tmp_path, monkeypatc
     assert cli.main([*args, "--readme", str(readme)]) == 1
     assert "no scored evaluation yet" in capsys.readouterr().err
     assert readme.read_text() == text  # left as it was
+
+
+@pytest.mark.parametrize("f1, how", [(0.88, "about as accurately as"),
+                                     (0.95, "more accurately than"),
+                                     (0.80, "less accurately than")])
+def test_the_summary_says_in_one_sentence_how_the_judges_compare(f1, how):
+    from backend.eval.readme import summary
+
+    def judge(variant, f, lat, usd):
+        return {"variant": variant, "usd_per_hour": usd,
+                "metrics": {"f1": f, "latency_median_s": lat}}
+
+    results = {"footage": "other kitchens (EPIC-KITCHENS-100, head-mounted camera)",
+               "experiment4": [judge("finetuned", f1, 0.983, 3.95), judge("base", 0.89, 2.071, 3.95),
+                               judge("spark", 0.86, 11.156, 16.5276)]}
+    text = summary(results)
+    assert text == (f"on other kitchens, the fine-tuned model spotted the condition {how} base "
+                    f"Glimmer and Muse Spark (frame F1 {f1:.2f}, 0.89 and 0.86), answering in "
+                    "0.98 s a frame against 2.07 s and 11.16 s, at $3.95 an hour against "
+                    "$16.53 for Spark.")
+    assert summary({"experiment4": results["experiment4"][:2]}) is None  # Spark not scored
+
+
+def test_the_block_starts_with_the_summary_when_experiment_4_is_scored(scored, tmp_path):
+    text = block(scored, tmp_path / "README.md")
+    assert "In short:" not in text  # the fixture scores no base judge

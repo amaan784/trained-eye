@@ -1,0 +1,346 @@
+{
+ "finetuned": {
+  "model": "trained-eye",
+  "skill": "fridge_left_open",
+  "frames": 20,
+  "median_seconds": 0.9895,
+  "median_completion_tokens": 5.0,
+  "median_prompt_tokens": 474.0,
+  "frames_with_reasoning": 0,
+  "rows": [
+   {
+    "t": 0.0,
+    "seconds": 0.929,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 11.0,
+    "seconds": 0.987,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 22.0,
+    "seconds": 0.744,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 33.0,
+    "seconds": 0.989,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 44.0,
+    "seconds": 0.741,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 55.0,
+    "seconds": 1.108,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 66.0,
+    "seconds": 1.1,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 77.0,
+    "seconds": 0.993,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 88.0,
+    "seconds": 0.731,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 99.0,
+    "seconds": 0.787,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 110.0,
+    "seconds": 1.005,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 121.0,
+    "seconds": 1.016,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 132.0,
+    "seconds": 0.992,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 143.0,
+    "seconds": 0.729,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "yes"
+   },
+   {
+    "t": 154.0,
+    "seconds": 0.981,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 165.0,
+    "seconds": 0.998,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "yes"
+   },
+   {
+    "t": 176.0,
+    "seconds": 0.986,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 187.0,
+    "seconds": 0.997,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 198.0,
+    "seconds": 1.006,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   },
+   {
+    "t": 209.0,
+    "seconds": 0.99,
+    "completion_tokens": 5,
+    "prompt_tokens": 474,
+    "reasoning_chars": 0,
+    "answer": "no"
+   }
+  ],
+  "clip": "data/epic/windows/fridge/calibration/P03_19_00093"
+ },
+ "base": {
+  "model": "muse-glimmer",
+  "skill": "fridge_left_open",
+  "frames": 20,
+  "median_seconds": 1.7839999999999998,
+  "median_completion_tokens": 64.0,
+  "median_prompt_tokens": 474.0,
+  "frames_with_reasoning": 20,
+  "rows": [
+   {
+    "t": 0.0,
+    "seconds": 1.74,
+    "completion_tokens": 61,
+    "prompt_tokens": 474,
+    "reasoning_chars": 232,
+    "answer": "No"
+   },
+   {
+    "t": 11.0,
+    "seconds": 1.707,
+    "completion_tokens": 58,
+    "prompt_tokens": 474,
+    "reasoning_chars": 229,
+    "answer": "No"
+   },
+   {
+    "t": 22.0,
+    "seconds": 2.138,
+    "completion_tokens": 82,
+    "prompt_tokens": 474,
+    "reasoning_chars": 354,
+    "answer": "No"
+   },
+   {
+    "t": 33.0,
+    "seconds": 3.676,
+    "completion_tokens": 146,
+    "prompt_tokens": 474,
+    "reasoning_chars": 673,
+    "answer": "No."
+   },
+   {
+    "t": 44.0,
+    "seconds": 1.42,
+    "completion_tokens": 48,
+    "prompt_tokens": 474,
+    "reasoning_chars": 193,
+    "answer": "No"
+   },
+   {
+    "t": 55.0,
+    "seconds": 1.941,
+    "completion_tokens": 70,
+    "prompt_tokens": 474,
+    "reasoning_chars": 308,
+    "answer": "No"
+   },
+   {
+    "t": 66.0,
+    "seconds": 1.62,
+    "completion_tokens": 54,
+    "prompt_tokens": 474,
+    "reasoning_chars": 220,
+    "answer": "No"
+   },
+   {
+    "t": 77.0,
+    "seconds": 1.835,
+    "completion_tokens": 67,
+    "prompt_tokens": 474,
+    "reasoning_chars": 288,
+    "answer": "No"
+   },
+   {
+    "t": 88.0,
+    "seconds": 2.629,
+    "completion_tokens": 103,
+    "prompt_tokens": 474,
+    "reasoning_chars": 480,
+    "answer": "No"
+   },
+   {
+    "t": 99.0,
+    "seconds": 1.559,
+    "completion_tokens": 58,
+    "prompt_tokens": 474,
+    "reasoning_chars": 234,
+    "answer": "No"
+   },
+   {
+    "t": 110.0,
+    "seconds": 1.538,
+    "completion_tokens": 53,
+    "prompt_tokens": 474,
+    "reasoning_chars": 217,
+    "answer": "No"
+   },
+   {
+    "t": 121.0,
+    "seconds": 1.88,
+    "completion_tokens": 65,
+    "prompt_tokens": 474,
+    "reasoning_chars": 266,
+    "answer": "No"
+   },
+   {
+    "t": 132.0,
+    "seconds": 1.763,
+    "completion_tokens": 63,
+    "prompt_tokens": 474,
+    "reasoning_chars": 259,
+    "answer": "No"
+   },
+   {
+    "t": 143.0,
+    "seconds": 2.305,
+    "completion_tokens": 88,
+    "prompt_tokens": 474,
+    "reasoning_chars": 389,
+    "answer": "Yes"
+   },
+   {
+    "t": 154.0,
+    "seconds": 1.559,
+    "completion_tokens": 54,
+    "prompt_tokens": 474,
+    "reasoning_chars": 219,
+    "answer": "No"
+   },
+   {
+    "t": 165.0,
+    "seconds": 1.541,
+    "completion_tokens": 57,
+    "prompt_tokens": 474,
+    "reasoning_chars": 228,
+    "answer": "Yes"
+   },
+   {
+    "t": 176.0,
+    "seconds": 1.805,
+    "completion_tokens": 65,
+    "prompt_tokens": 474,
+    "reasoning_chars": 273,
+    "answer": "No"
+   },
+   {
+    "t": 187.0,
+    "seconds": 2.715,
+    "completion_tokens": 105,
+    "prompt_tokens": 474,
+    "reasoning_chars": 479,
+    "answer": "No"
+   },
+   {
+    "t": 198.0,
+    "seconds": 1.763,
+    "completion_tokens": 63,
+    "prompt_tokens": 474,
+    "reasoning_chars": 255,
+    "answer": "No"
+   },
+   {
+    "t": 209.0,
+    "seconds": 1.979,
+    "completion_tokens": 73,
+    "prompt_tokens": 474,
+    "reasoning_chars": 310,
+    "answer": "No"
+   }
+  ],
+  "clip": "data/epic/windows/fridge/calibration/P03_19_00093"
+ }
+}

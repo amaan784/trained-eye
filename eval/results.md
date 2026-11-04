@@ -64,6 +64,13 @@ Pooled over the skills (the cost chart's points; dollars per hour weighted by ho
 | base | fridge_left_open | 1405 | 0.89 | 0.96 | 1 of 5 | 0.0 | $3.95 |
 | spark | fridge_left_open | 1405 | 0.86 | 0.95 | 1 of 5 | 0.0 | $16.53 |
 
+Why the speeds differ (`python -m backend.eval.speed`, the student's own request sent one frame at a time, on frames of P03_19_00093): every token a model writes before its yes or no costs time on the GPU.
+
+| Model | Completion tokens a frame (median) | Frames with reasoning text | Seconds a frame, one at a time (median) |
+|---|---|---|---|
+| finetuned | 5 | 0 of 20 | 0.99 s |
+| base | 64 | 20 of 20 | 1.78 s |
+
 ## Regression check
 
 Not run yet: te regress writes eval/regression.json.

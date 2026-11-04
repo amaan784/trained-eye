@@ -24,9 +24,11 @@ fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells 
 <!-- te eval: results start (written by te eval --readme; edits here are lost) -->
 ## Results
 
-Written by `te eval --readme` from `eval/results.json` (SHA-256 `d4d8d6dff2bbbf2eef3860b0c8b28201fd4857a5f66c56843e440d59f1eb6006`): 5 of 5 evaluations scored. Every number here is copied from that file; n/a means there was nothing to compute it from.
+Written by `te eval --readme` from `eval/results.json` (SHA-256 `f40f0118fffc74620c4743009608774ca5f4481d65a711414b86248d967adc93`): 5 of 5 evaluations scored. Every number here is copied from that file; n/a means there was nothing to compute it from.
 
 Test footage: other kitchens (EPIC-KITCHENS-100, head-mounted camera). Results on other footage are reported apart.
+
+In short: on other kitchens, the fine-tuned model spotted the condition about as accurately as base Glimmer and Muse Spark (frame F1 0.88, 0.89 and 0.86), answering in 0.98 s a frame against 2.07 s and 11.16 s, at $3.95 an hour against $16.53 for Spark.
 
 Thresholds were calibrated for frame F1 on calibration clips (this footage has too few events past the skill's hold to judge alerts), so read the frame columns.
 

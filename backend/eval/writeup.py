@@ -226,9 +226,30 @@ def extra_lines(exp: int, results: dict) -> list[str]:
     pooled judges (4)."""
     if exp == 2 and (rows := spark_rows(results)):
         return [SPARK_NOTE, "", *table(SPARK_HEADER, rows), ""]
-    if exp == 4 and (rows := pooled_rows(results.get("experiment4") or [])):
-        return [POOLED_NOTE, "", *table(pooled_header(), rows), ""]
+    if exp == 4:
+        rows = pooled_rows(results.get("experiment4") or [])
+        return ([POOLED_NOTE, "", *table(pooled_header(), rows), ""] if rows else []) + \
+            speed_lines(results.get("speed") or {})
     return []
+
+
+SPEED_HEADER = ["Model", "Completion tokens a frame (median)", "Frames with reasoning text",
+                "Seconds a frame, one at a time (median)"]
+
+
+def speed_lines(speed: dict) -> list[str]:
+    """Why one model answers faster: the tokens each writes per frame (eval/speed.json)."""
+    if not speed:
+        return []
+    first = next(iter(speed.values()))
+    clip = Path(first["clip"]).name
+    rows = [[name, _num(m["median_completion_tokens"], "g"),
+             f"{m['frames_with_reasoning']} of {m['frames']}",
+             _num(m["median_seconds"], ".2f", " s")] for name, m in speed.items()]
+    return [("Why the speeds differ (`python -m backend.eval.speed`, the student's own request "
+             f"sent one frame at a time, on frames of {clip}): every token a model writes "
+             "before its yes or no costs time on the GPU."), "",
+            *table(SPEED_HEADER, rows), ""]
 
 
 def _seconds(values: list[float]) -> str:

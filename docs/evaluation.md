@@ -27,6 +27,19 @@ Watch mode scores one frame a second. For each skill, over a set of test clips:
 4. The fine-tuned Glimmer, base Glimmer with the same prompt, and Muse Spark judging
    every frame, on the same frames: accuracy against cost per hour.
 
+## Why the fine-tuned model answers faster
+
+Both Glimmers get the same request for each frame: the same prompt, the same image and the
+low reasoning setting. Base Glimmer still writes a short passage of reasoning before its yes
+or no, on every frame measured. The fine-tuned model answers at once, because every training
+example's answer was the bare word yes or no, so it learned to skip the reasoning. A GPU
+writes one token at a time, so the shorter reply comes back sooner. The GPU is paid for by
+the hour while watching, so dollars per hour stay the same and only the wait for each
+answer changes. The speed table under Experiment 4 in
+[../eval/results.md](../eval/results.md) has the tokens and seconds, measured by
+`python -m backend.eval.speed` (it sends the student's own request one frame at a time and
+writes `eval/speed.json`).
+
 ## Thresholds
 
 Each student run's threshold is calibrated on its own calibration clips before any test
@@ -54,6 +67,8 @@ Each plan names its footage, and its results say it in their heading.
     te replay --plan eval/plan-epic.json --run exp4-base --model muse-glimmer
     te replay --plan eval/plan-epic.json --run exp4-spark      # paid per frame; asks
     te replay --plan eval/plan-epic.json --run exp1-epic       # Experiment 1's comparison
+    python -m backend.eval.speed --url <endpoint>/v1 --model trained-eye --name finetuned \
+        --clip <clip> --skill fridge_left_open --out eval/speed.json   # and --name base
     te eval --plan eval/plan-epic.json --out eval --readme README.md
 
 `te replay` needs `TE_STUDENT_URL` for the endpoint that serves the run (`te

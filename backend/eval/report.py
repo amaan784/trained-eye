@@ -300,6 +300,22 @@ def side_results(skills: list[str], data_dir: Path | None, regression: Path | No
     return out
 
 
+SPEED_KEYS = ("model", "skill", "clip", "frames", "median_seconds",
+              "median_completion_tokens", "frames_with_reasoning")
+
+
+def read_speed(path: Path) -> dict | None:
+    """python -m backend.eval.speed's medians per model, without the per-frame rows."""
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return {name: {k: m[k] for k in SPEED_KEYS} for name, m in data.items()}
+    except (KeyError, TypeError) as err:
+        raise ValueError(f"{path} is not python -m backend.eval.speed's output "
+                         f"({type(err).__name__} {err}): measure again") from err
+
+
 def side_summary(results: dict) -> dict:
     """The W&B summary keys for Experiment 4's pooled judges, Spark's error rate, the label
     agreement and the regression check (None values left out)."""
@@ -392,6 +408,8 @@ def run_eval(plan_path: Path, out_dir: Path, *, log_wandb: bool = False,
                "experiment4": pool_judges(entries, counts),
                **side_results(sorted({e.skill for e in plan.evaluations}), data_dir,
                               regression)}
+    if speed := read_speed(out_dir / "speed.json"):
+        results["speed"] = speed
     results["charts"] = write_charts(results, base, out_dir)
     results["galleries"] = write_galleries(results, base, out_dir, size=gallery_size)
     if log_wandb:

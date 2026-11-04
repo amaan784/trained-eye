@@ -104,6 +104,25 @@ simulator), the product model and the first results; see "Live runs, Nov 4" belo
   a cold start from 164 s to 147 s. Training (442 s) and the merge (243 s) were already
   short; the endpoint cold start (about 2.5 to 4 minutes) is the longest wait left.
 
+### Afternoon, Nov 4
+
+- Why the fine-tuned model is faster: `python -m backend.eval.speed` sent the student's
+  own request for 20 frames of one EPIC calibration clip to each Glimmer, one at a time.
+  Base Glimmer wrote reasoning text before its answer on every frame; the fine-tuned model
+  never did, since every training answer was the bare word yes or no. The tokens and
+  seconds are in `eval/speed.json` and under Experiment 4 in `eval/results.md`; the reason
+  is in `docs/evaluation.md`.
+- `te eval` adds a one-sentence summary to the README's results block.
+- The Hugging Face release folder is rebuilt (`data/release/exp1-mixed`, adapter, 35 files
+  and release.json): the card shows this run and its judges only (not exp1-epic), names
+  the test footage, credits EPIC as test-only, and leaves Voice Transcribe out (the request
+  was typed). Upload waits for the author: huggingface_hub is not installed, and the repo
+  name is theirs to pick.
+- Commits are pushed to main from this Mac through the GitHub CLI's sign-in, as the author.
+- Waiting for the author's footage: the fridge glasses test clip with its labels
+  (`data/clips/fridge_left_open/`) and the burner teaching clip. The design kit restyle
+  (README art, playground, iPhone app) comes after the glasses replay.
+
 ### Failed, and fixed at the root (each with a test)
 
 1. Voice Transcribe at `/audio/transcriptions`: 404. Now `/asr/transcribe`.
@@ -131,6 +150,8 @@ simulator), the product model and the first results; see "Live runs, Nov 4" belo
 13. `te blur` failed under OpenCV 5 (no Haar cascade detector): it asks for OpenCV 4.
 14. `te replay` scored one frame at a time; it scores 8 at a time (24 for Spark) and feeds
     the trigger in order.
+15. The speed measurement on a cold endpoint: Modal answered the first request with a 303
+    to its result URL after 150 s. The student client and the speed tool follow it.
 
 ### Needed from the author
 
@@ -145,7 +166,8 @@ simulator), the product model and the first results; see "Live runs, Nov 4" belo
 - The phone screens in the README wait for screenshots from a real run on the phone.
 - Labels for the glasses test footage (`te label --clip`), and 200 generated images
   (`te label --skill fridge_left_open --sample 200`) for Spark's error rate.
-- Nothing is waiting for an approval; nothing has been published.
+- Waiting for an approval: the Hugging Face upload (installing huggingface_hub, the repo name,
+  private or public). Nothing has been published to Hugging Face.
 
 ## Status
 
@@ -567,4 +589,5 @@ sources disagree with SPEC.md, the sources win.
 | Nov 4, to 9 AM ET | $6.85 | $1.49 | `te spend`: the API smoke ($0.0013) and the fridge teach runs (Muse Image $3.36, Spark labels $2.98, Wonder $0.32, SAM $0.18, Voice $0.0003); Modal: four two-step smokes $0.48, base serving $1.01 (an upper bound: deployed time). The image builds, the CPU base download and the preflight are not in the ledger; the Modal dashboard has the bill |
 | Nov 4, 9 to 10 AM ET | $6.45 | $4.85 | `te spend`: Muse Spark judging the 1,405 EPIC test frames and a 30-frame cost check; Modal: the product training run, its export, and serving the fine-tuned and base models for the EPIC replays (an upper bound: deployed time) |
 | Nov 4, 10 to 10:15 AM ET | $0.40 | $1.45 | `te spend`: the image-speed test (16 Muse Image edits and their Spark labels); Modal: the EPIC comparison run's training, merge and serving ($1.09, in data/exp1-epic/modal_ledger.jsonl), and two timed cold starts of the base |
-| Total | $13.70 (the author's budget for Nov 4: $100) | $7.79 at config prices (budget for Nov 4: $100) | |
+| Nov 4, 1 to 1:20 PM ET | $0.00 | $0.88 | Modal: the fine-tuned and base models served for the speed measurement ($0.45 and $0.43, an upper bound: deployed time). Afternoon budget: $20 Meta, $25 Modal |
+| Total | $13.70 (the author's budget for Nov 4: $100) | $8.67 at config prices (budget for Nov 4: $100) | |

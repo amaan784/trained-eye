@@ -45,8 +45,8 @@ the Mac when the app was closed is picked up again at the next launch.
 - A Mac with Xcode 26.4 or newer (DAT 1.0.1 needs it).
 - An iPhone on iOS 17.2 or newer, with Developer Mode on (Settings, Privacy & Security,
   Developer Mode).
-- The Meta AI app with the glasses paired and Developer Mode on there (Settings, your
-  glasses, Developer Mode). `docs/glasses-check.md` walks through this with Meta's own
+- The Meta AI app with the glasses paired and Developer Mode on there (Settings, App
+  Info, tap the App version five times, then turn on Developer Mode and confirm). `docs/glasses-check.md` walks through this with Meta's own
   CameraAccess sample; do that check first. Developer Mode turns itself off after a
   firmware update.
 - The backend: `te serve` on the Mac (see the root README). Teaching also needs

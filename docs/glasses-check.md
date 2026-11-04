@@ -41,9 +41,11 @@ wearables.developer.meta.com could not be reached from the build machine.
 
 1. Update the Meta AI app from the App Store. Make sure the glasses are paired with it,
    charged, and on the latest firmware the app offers.
-2. In the Meta AI app, open Settings, select your glasses, and turn on Developer Mode.
-   The glasses may restart. A firmware update turns Developer Mode off again, so check
-   it after every update.
+2. In the Meta AI app, open Settings, then App Info, and tap the App version number five
+   times: a Developer Mode toggle appears. Turn it on and confirm with Enable (Meta's DAT
+   setup guide, wearables.developer.meta.com, checked Nov 4). Once an app has connected,
+   it is listed under Settings, App connections, Developer mode apps. A firmware update
+   can turn Developer Mode off again, so check it after every update.
 3. In the iPhone's own Settings, open Privacy & Security, then Developer Mode, and turn
    it on (the phone restarts). iOS needs this to run apps built in Xcode.
 

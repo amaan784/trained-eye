@@ -155,7 +155,7 @@ def test_serve_student_base_and_adapters_get_their_own_app_and_the_time_is_recor
     assert cli.main(["serve-student", "--runs", "exp1-real,exp1-mixed", "--yes"]) == 0
     assert calls[-1][1]["TE_SERVE_LORAS"] == "exp1-real,exp1-mixed"
     out = capsys.readouterr().out
-    assert "LoRA serving is not documented for Muse Glimmer" in out
+    assert "vLLM did not start with a Muse Glimmer adapter" in out
     assert "no finished full run of exp1-real" in out and "of exp1-mixed" not in out
     assert "TE_STUDENT_MODEL=exp1-real with te watch --run exp1-real" in out
     for bad in (["--runs", "exp1,exp1"], ["--runs", "Bad Run"], ["--runs", ","],

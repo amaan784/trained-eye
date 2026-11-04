@@ -28,11 +28,12 @@ released vLLM wheel has the model; the recipe's single-card arguments; no --chat
 as the checkpoint ships chat_template.jinja (export.py copies the base's if the save wrote
 none); parser names with underscores. vllm.md budgets 72 GB of VRAM for bf16: one 80 GB GPU.
 
-Unverified: vllm.md calls this path "unverified end to end" and has no attested image
-request; this image on Modal, and a merged fine-tune in place of Meta's checkpoint, have not
-been tried. Send one image request (te watch on a short clip) before relying on it.
-LoRA serving is not documented for Muse Glimmer at all (vllm.md has no --enable-lora), so
-the adapters on this image are untried too. vLLM serves the base in bf16 while the adapters
+Tried on Nov 4: the base model on this image on Modal answers an image request with
+logprobs and top_logprobs (te serve-student --base). The adapters with --enable-lora do not
+start: the engine fails while it profiles, with an AssertionError in vLLM's LoRA kernel
+(lora_shrink_op.py, token_lora_mapping.size(0) == M), so a run is served merged
+(te export, then te serve-student --run). LoRA serving is not documented for Muse Glimmer
+(vllm.md has no --enable-lora). vLLM serves the base in bf16 while the adapters
 were trained on the NF4 base: the same pairing as export.py's default bf16 reference (Meta
 evaluated its QLoRA adapters on an NF4 base only).
 """

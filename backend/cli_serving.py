@@ -148,8 +148,9 @@ def cmd_serve_student(args) -> int:
           f"after a few idle minutes, and te serve-student --stop{' --base' if base else ''} "
           "stops it now.")
     if names:
-        print("note: LoRA serving is not documented for Muse Glimmer (the cookbook's vllm.md), "
-              "so it is untried: send one image request per run before relying on it")
+        print("note: on Nov 4 vLLM did not start with a Muse Glimmer adapter (an AssertionError "
+              "in its LoRA kernel); serve a run merged instead: te export, then te "
+              "serve-student --run <run>")
     for name in names:
         try:
             result = json.loads((settings.data_dir / "train" / f"{name}.result.json").read_text())
@@ -201,7 +202,7 @@ def add_parsers(sub) -> None:
                                "(app trained-eye-base, model muse-glimmer); with --stop, stop "
                                "that app")
     serve_student.add_argument("--runs", help="comma-separated runs: the base with each run's "
-                               "adapter, each run a model name (vLLM --enable-lora; untried)")
+                               "adapter, each run a model name (vLLM --enable-lora; failed on Nov 4)")
     serve_student.add_argument("--stop", action="store_true", help="stop the endpoint")
     serve_student.add_argument("--yes", action="store_true", help="no question")
     serve_student.set_defaults(func=cmd_serve_student)

@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="436" viewBox="0 0 1000 436" role="img" aria-label="Where Trained Eye runs: the glasses send camera frames to the iPhone, which sends one frame a second to the Mac; the Mac calls the Meta Model API while teaching, runs training and the fine-tuned model on Modal, and sends the alert back through the iPhone to the glasses' speakers.">
+<!-- The first diagram of docs/how-it-works.html ("Five places do the work"), standalone for the README. -->
+<style>
+  svg { --bg:#f4f6f9;--surface:#ffffff;--fg:#18202d;--muted:#586378;--line:#c6cdd9;--accent:#2356d1;
+    --z-device:#e6ecfb;--z-mac:#e7f1e6;--z-cloud:#f1eafa;--z-gpu:#fbeee0;--z-other:#eceff3;
+    --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace; color: var(--fg); }
+  @media (prefers-color-scheme: dark) { svg { --bg:#0f131a;--surface:#161c26;--fg:#e5e9f0;--muted:#9aa4b6;--line:#303a4b;--accent:#7ea4ff;
+      --z-device:#1b2640;--z-mac:#1a2a1e;--z-cloud:#2a2038;--z-gpu:#33251a;--z-other:#222833; } }
+  .bg { fill: var(--surface); stroke: var(--line); }
+  .box { stroke: var(--line); stroke-width: 1; }
+  .zd { fill: var(--z-device); } .zm { fill: var(--z-mac); } .zc { fill: var(--z-cloud); }
+  .zg { fill: var(--z-gpu); } .zo { fill: var(--z-other); } .zs { fill: var(--surface); }
+  .t { font: 600 13px var(--font-body); fill: var(--fg); }
+  .s { font: 11px var(--font-mono); fill: var(--muted); }
+  .l { font: 11px var(--font-body); fill: var(--muted); }
+  .edge { stroke: currentColor; stroke-width: 1.4; fill: none; }
+  .hot { stroke: var(--accent); color: var(--accent); }
+  .dash { stroke-dasharray: 5 4; }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="999" height="435" rx="12"/>
+<g color="currentColor">
+          <defs>
+            <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+          </defs>
+          <!-- glasses -->
+          <rect class="box zd" x="20" y="110" width="160" height="120" rx="10"/>
+          <text class="t" x="100" y="140" text-anchor="middle">Meta glasses</text>
+          <text class="s" x="100" y="162" text-anchor="middle">camera · mic · speakers</text>
+          <text class="s" x="100" y="180" text-anchor="middle">Meta DAT SDK 1.0.1</text>
+          <text class="s" x="100" y="198" text-anchor="middle">capture light stays on</text>
+          <!-- iPhone -->
+          <rect class="box zd" x="280" y="110" width="170" height="120" rx="10"/>
+          <text class="t" x="365" y="140" text-anchor="middle">iPhone</text>
+          <text class="s" x="365" y="162" text-anchor="middle">Trained Eye app</text>
+          <text class="s" x="365" y="180" text-anchor="middle">SwiftUI · decodes HEVC</text>
+          <text class="s" x="365" y="198" text-anchor="middle">speaks the alerts</text>
+          <!-- Mac -->
+          <rect class="box zm" x="540" y="24" width="200" height="290" rx="12"/>
+          <text class="t" x="640" y="52" text-anchor="middle">Your Mac</text>
+          <rect class="box zs" x="556" y="68" width="168" height="38" rx="7"/>
+          <text class="s" x="640" y="92" text-anchor="middle">te serve · port 8765</text>
+          <rect class="box zs" x="556" y="114" width="168" height="38" rx="7"/>
+          <text class="s" x="640" y="138" text-anchor="middle">teach flow (te teach)</text>
+          <rect class="box zs" x="556" y="160" width="168" height="38" rx="7"/>
+          <text class="s" x="640" y="184" text-anchor="middle">watcher</text>
+          <rect class="box zs" x="556" y="206" width="168" height="38" rx="7"/>
+          <text class="s" x="640" y="230" text-anchor="middle">trigger: 3 of 4 + hold</text>
+          <rect class="box zs" x="556" y="252" width="168" height="38" rx="7"/>
+          <text class="s" x="640" y="276" text-anchor="middle">data/: logs, cache, ledger</text>
+          <!-- Meta Model API -->
+          <rect class="box zc" x="820" y="24" width="160" height="118" rx="10"/>
+          <text class="t" x="900" y="52" text-anchor="middle">Meta Model API</text>
+          <text class="s" x="900" y="74" text-anchor="middle">Voice Transcribe</text>
+          <text class="s" x="900" y="92" text-anchor="middle">Muse Wonder · SAM 3.1</text>
+          <text class="s" x="900" y="110" text-anchor="middle">Muse Image</text>
+          <text class="s" x="900" y="128" text-anchor="middle">Muse Spark</text>
+          <!-- Modal -->
+          <rect class="box zg" x="820" y="170" width="160" height="110" rx="10"/>
+          <text class="t" x="900" y="198" text-anchor="middle">Modal</text>
+          <text class="s" x="900" y="220" text-anchor="middle">1 × H100 GPU</text>
+          <text class="s" x="900" y="238" text-anchor="middle">fine-tuning (Axolotl)</text>
+          <text class="s" x="900" y="256" text-anchor="middle">student on vLLM</text>
+          <!-- W&B / HF -->
+          <rect class="box zo" x="820" y="316" width="160" height="56" rx="10"/>
+          <text class="t" x="900" y="340" text-anchor="middle">W&amp;B · Hugging Face</text>
+          <text class="s" x="900" y="358" text-anchor="middle">logs · base model</text>
+
+          <!-- glasses <-> iPhone -->
+          <line class="edge hot" x1="180" y1="150" x2="278" y2="150" marker-end="url(#a1)"/>
+          <text class="l" x="230" y="142" text-anchor="middle">camera frames</text>
+          <line class="edge" x1="280" y1="192" x2="182" y2="192" marker-end="url(#a1)"/>
+          <text class="l" x="230" y="210" text-anchor="middle">spoken alert</text>
+          <!-- iPhone <-> Mac -->
+          <line class="edge hot" x1="450" y1="150" x2="538" y2="150" marker-end="url(#a1)"/>
+          <text class="l" x="495" y="142" text-anchor="middle">1 frame / s</text>
+          <line class="edge" x1="540" y1="192" x2="452" y2="192" marker-end="url(#a1)"/>
+          <text class="l" x="495" y="210" text-anchor="middle">alert text</text>
+          <!-- Mac <-> Meta API -->
+          <line class="edge" x1="740" y1="64" x2="818" y2="64" marker-end="url(#a1)"/>
+          <text class="l" x="780" y="56" text-anchor="middle">teach calls</text>
+          <line class="edge" x1="820" y1="104" x2="742" y2="104" marker-end="url(#a1)"/>
+          <text class="l" x="780" y="122" text-anchor="middle">answers</text>
+          <!-- Mac <-> Modal -->
+          <line class="edge" x1="740" y1="200" x2="818" y2="200" marker-end="url(#a1)"/>
+          <text class="l" x="780" y="192" text-anchor="middle">train · serve</text>
+          <line class="edge hot" x1="820" y1="246" x2="742" y2="246" marker-end="url(#a1)"/>
+          <text class="l" x="780" y="264" text-anchor="middle">p(yes)</text>
+          <!-- Modal <-> W&B/HF -->
+          <line class="edge dash" x1="900" y1="280" x2="900" y2="314" marker-end="url(#a1)"/>
+          <text class="l" x="892" y="302" text-anchor="end">logs</text>
+        </g>
+<rect class="box zd" x="24" y="404" width="14" height="14" rx="3"/><text class="l" x="44" y="415">On you: glasses and iPhone</text><rect class="box zm" x="227" y="404" width="14" height="14" rx="3"/><text class="l" x="247" y="415">Your Mac</text><rect class="box zc" x="318" y="404" width="14" height="14" rx="3"/><text class="l" x="338" y="415">Meta Model API</text><rect class="box zg" x="446" y="404" width="14" height="14" rx="3"/><text class="l" x="466" y="415">Modal GPU</text><rect class="box zo" x="543" y="404" width="14" height="14" rx="3"/><text class="l" x="563" y="415">Other services</text>
+</svg>

@@ -1,9 +1,18 @@
 <p align="center"><img src="docs/img/banner.png" alt="Trained Eye: teach your glasses to notice anything" width="100%"></p>
 
-# Trained Eye
+<p align="center">
+  <b>Look at something for a few seconds, say what to watch for, and your Meta glasses speak up when it happens.</b><br>
+  <sub>Built for the Meta Global AI Developer Hackathon · October 29 to November 4, 2026</sub>
+</p>
 
-**Look at something for a few seconds, say what to watch for, and your Meta glasses speak
-up when it happens.**
+<p align="center">
+  <a href="https://aas2438--trained-eye-playground-web.us-east.modal.run"><b>Try the playground</b></a> ·
+  <a href="https://huggingface.co/amaan784/trained-eye"><b>The model</b></a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#results">Results</a> ·
+  <a href="#quick-start">Run it</a> ·
+  <a href="docs/developer-guide.md">Developer guide</a>
+</p>
 
 Meta glasses answer when you ask them something, but they can't keep an eye on anything
 for you. Trained Eye turns one sentence and a short look into a small model of your own,
@@ -21,6 +30,12 @@ fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells 
    one GPU on Modal.
 3. **Watch.** The glasses stream to your phone; the fine-tuned model scores a frame a
    second, and once the condition has lasted long enough, the glasses say so.
+
+<p align="center"><img src="docs/img/how-it-works-map.svg" alt="Where Trained Eye runs: the glasses send camera frames to the iPhone, the iPhone sends one frame a second to the Mac, the Mac calls the Meta Model API while teaching and the fine-tuned model on Modal while watching, and the alert goes back through the iPhone to the glasses' speakers" width="100%"></p>
+
+<sub>The blue arrows are the live path while watching: glasses to iPhone to Mac, the frame
+scored by the fine-tuned model on Modal, and the chance of yes back to the Mac, which decides
+whether to speak. The rest of the flow, in four diagrams: [how it works](https://aas2438--trained-eye-playground-web.us-east.modal.run/how-it-works).</sub>
 
 <p align="center"><img src="docs/img/strip.png" alt="How it learned this fridge: twelve teaching frames on film with SAM's boxes, and the four steps of the teach run with its numbers" width="100%"></p>
 

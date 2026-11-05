@@ -37,6 +37,10 @@ fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells 
 scored by the fine-tuned model on Modal, and the chance of yes back to the Mac, which decides
 whether to speak. The rest of the flow, in four diagrams: [how it works](https://aas2438--trained-eye-playground-web.us-east.modal.run/how-it-works).</sub>
 
+<p align="center"><img src="docs/img/app.png" alt="The iPhone app: Teach (say what to watch for, look at it for 10 seconds), Skills (the switches, and the model on Modal waking up) and Watch (the film strip of scored frames)" width="100%"></p>
+
+<sub>The iPhone app on Nov 4: Teach, Skills while the model on Modal wakes up, and Watch.</sub>
+
 <p align="center"><img src="docs/img/strip.png" alt="How it learned this fridge: twelve teaching frames on film with SAM's boxes, and the four steps of the teach run with its numbers" width="100%"></p>
 
 ## Links and docs

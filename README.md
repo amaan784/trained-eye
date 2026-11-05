@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=h9pek9ZLuC4"><b>Watch the demo</b></a> ·
+  <a href="https://www.youtube.com/watch?v=wJPSF9HVyUw"><b>Watch the demo</b></a> ·
   <a href="https://aas2438--trained-eye-playground-web.us-east.modal.run"><b>Try the playground</b></a> ·
   <a href="https://huggingface.co/amaan784/trained-eye"><b>The model</b></a> ·
   <a href="#how-it-works">How it works</a> ·
@@ -52,7 +52,7 @@ whether to speak. The rest of the flow, in four diagrams: [how it works](https:/
 
 | | |
 |---|---|
-| **Demo video** | [YouTube: Trained Eye live on the glasses](https://www.youtube.com/watch?v=h9pek9ZLuC4): teach, the skills, and the fridge alert spoken on the glasses |
+| **Demo video** | [YouTube: Trained Eye live on the glasses](https://www.youtube.com/watch?v=wJPSF9HVyUw): teaching, watching, the fridge and burner alerts spoken on the glasses, and a walkthrough of the code, training, results and Modal |
 | **Model** | [Hugging Face: amaan784/trained-eye](https://huggingface.co/amaan784/trained-eye), the LoRA adapter for Muse Glimmer 30B with its model card |
 | **Playground** | [Try it in a browser](https://aas2438--trained-eye-playground-web.us-east.modal.run): replayed clips, how each skill learned, and teaching a skill live |
 | **Training runs** | [Weights and Biases: trained-eye](https://wandb.ai/amaan784-columbia-university/trained-eye) |

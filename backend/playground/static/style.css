@@ -121,6 +121,16 @@ input[type="text"]::placeholder { color: var(--soft); }
 .status { min-height: 1.45em; margin-top: 14px; }
 .status.bad { color: var(--marker); }
 .readback { font-size: 21px; font-weight: 650; }
+/* teaching's progress: the share of variations done, or a sliding bar while it waits */
+.progress { position: relative; height: 4px; margin-top: 10px; overflow: hidden;
+            background: var(--rule); }
+.progress span { position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+                 background: var(--text); transition: width 0.4s ease; }
+.progress.waiting span { width: 30%; animation: slide 1.2s ease-in-out infinite; }
+@keyframes slide { from { left: -30%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) {
+  .progress.waiting span { animation: none; left: 0; width: 100%; opacity: 0.3; }
+}
 
 /* results and privacy */
 figure { margin: 0 0 40px; }

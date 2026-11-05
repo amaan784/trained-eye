@@ -4,7 +4,8 @@ Trained Eye has three parts: the teach flow, which turns about ten seconds of
 first-person video and one spoken or typed sentence into a training set; training and
 serving, which fine-tune Muse Glimmer on that set on Modal and serve it; and watch mode,
 which scores the glasses' frames and speaks up when the condition has lasted long enough.
-[how-it-works.html](how-it-works.html) walks through the whole flow with diagrams.
+[The flow in diagrams](https://aas2438--trained-eye-playground-web.us-east.modal.run/how-it-works) walks through the whole flow (the page's
+source is [how-it-works.html](how-it-works.html); GitHub shows it as code).
 
 ## Teach
 

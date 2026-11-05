@@ -13,6 +13,8 @@
   GET  /api/teach/{job}      the run so far; ?since=n leaves out the first n variations
   GET  /api/results          the evaluation's SVG charts and results.md
   GET  /media/...            the files those answers link to, and nothing else
+  GET  /how-it-works         docs/how-it-works.html, the flow in diagrams (GitHub shows an
+                             .html file as source), without its web fonts
 
 The public copy, create_app(public=True) (`te playground --public`, and the Modal app in
 modal_app.py), serves only what may be published: no generated image (media/skills/*/
@@ -36,7 +38,7 @@ from pathlib import Path
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, Response
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
@@ -55,6 +57,15 @@ PAGE_CSP = ("default-src 'self'; img-src 'self' data:; media-src 'self'; object-
             "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 SAME_SITE = ("same-origin", "none")  # Sec-Fetch-Site of this page's own requests
 SVG_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"  # a chart runs no code
+# The checkout (parent thrice: the container's /root has too few parents for parents[n]).
+DIAGRAMS = Path(__file__).resolve().parent.parent.parent / "docs" / "how-it-works.html"
+WEB_FONTS = re.compile(r'<link[^>]*fonts\.(?:googleapis|gstatic)\.com[^>]*>\n?')
+
+
+def diagrams_page(path: Path = DIAGRAMS) -> str | None:
+    """The diagram page as served here: its Google Fonts links left out, so it loads
+    nothing from other sites (its fonts fall back to the system's). None when missing."""
+    return WEB_FONTS.sub("", path.read_text(encoding="utf-8")) if path.is_file() else None
 
 
 async def limited_body(request: Request, limit: int = MAX_BODY) -> bytes | None:
@@ -134,6 +145,13 @@ def create_app(data_dir: Path, eval_dir: Path, client_factory: Callable[[], Meta
                                 headers={"Content-Security-Policy": PAGE_CSP,
                                          "Cache-Control": "no-cache"})
         return remember(response, request, vid, new)
+
+    async def how_it_works(request):
+        html = diagrams_page()
+        if html is None:
+            return JSONResponse({"error": "not here"}, status_code=404)
+        return HTMLResponse(html, headers={"Content-Security-Policy": SVG_CSP,
+                                           "Cache-Control": "no-cache"})
 
     async def status(request):
         vid, keys, new = visitor(request)
@@ -218,6 +236,7 @@ def create_app(data_dir: Path, eval_dir: Path, client_factory: Callable[[], Meta
         Route("/api/teach", teach, methods=["POST"]),
         Route("/api/teach/keyframes", keyframes), Route("/api/teach/{job}", job),
         Route("/api/results", results), Route("/media/{path:path}", media),
+        Route("/how-it-works", how_it_works),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),
     ])
 

@@ -60,7 +60,9 @@ image = (modal.Image.debian_slim(python_version=PYTHON).pip_install(*PACKAGES)
          .env({"TE_DATA_DIR": DATA_DIR, "PYTHONPATH": "/root",
                **{name: os.environ.get(name, "") for name in CAP_ENVS}})
          .add_local_dir(ROOT / "backend", remote_path="/root/backend",
-                        ignore=["**/__pycache__/**", "**/*.pyc"]))
+                        ignore=["**/__pycache__/**", "**/*.pyc"])
+         .add_local_file(ROOT / "docs" / "how-it-works.html",
+                         remote_path="/root/docs/how-it-works.html"))
 
 
 def state_files() -> tuple[str, ...]:

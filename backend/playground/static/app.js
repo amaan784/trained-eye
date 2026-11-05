@@ -194,11 +194,37 @@
   }
 
   // -- teach it yourself -------------------------------------------------------------
+  // the time so far, ticking once a second outside the status line (screen readers hear
+  // the status line when it changes, not every tick)
+  let teachStart = 0, teachTimer = 0;
+  const tick = () => {
+    const s = Math.floor((Date.now() - teachStart) / 1000);
+    $("teach-clock").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} so far`;
+  };
   const say = (words, bad) => {
     $("teach-status").textContent = words;
     $("teach-status").classList.toggle("bad", !!bad);
   };
-  const busy = (on) => { $("teach-go").disabled = on; };
+  // the bar: a share done (0 to 1), or null for "working, no count yet"
+  const progress = (share) => {
+    const bar = $("teach-progress");
+    bar.hidden = false;
+    bar.classList.toggle("waiting", share == null);
+    bar.firstElementChild.style.width = share == null ? "" : `${Math.round(share * 100)}%`;
+  };
+  const busy = (on) => {
+    $("teach-go").disabled = on;
+    $("teach-go").textContent = on ? "Teaching\u2026" : "Teach it";
+    clearInterval(teachTimer);
+    $("teach-clock").hidden = !on;
+    $("teach-progress").hidden = !on;
+    if (on) {
+      teachStart = Date.now();
+      tick();
+      teachTimer = setInterval(tick, 1000);
+      progress(null);
+    }
+  };
 
   async function loadStatus() {
     const s = await getJSON("api/status");
@@ -307,7 +333,11 @@
         if (v.refused) return say(`Muse Wonder refused it. It spent ${money(v.cost_usd)}.`);
         return say(`Done: ${v.count} variations, made live for ${money(v.cost_usd)}.`);
       }
-      if (v.read_back) say(`Muse Image and Muse Spark at work: ${v.count} of ${v.planned} done.`);
+      if (v.read_back) {
+        say(`Muse Image is making the variations and Muse Spark is checking them: ${v.count} ` +
+            `of ${v.planned} done.`);
+        progress(v.planned ? v.count / v.planned : null);
+      }
       await new Promise((ok) => setTimeout(ok, 1200));
     }
   }

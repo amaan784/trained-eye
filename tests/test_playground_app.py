@@ -235,3 +235,13 @@ def test_behind_proxy_takes_the_address_the_proxy_added():
     spoofed = {"X-Forwarded-For": "6.6.6.6, 203.0.113.9"}  # the visitor wrote the first
     assert client.get("/", headers=spoofed).text == "203.0.113.9"
     assert client.get("/", headers={"X-Forwarded-For": " 198.51.100.4 "}).text == "198.51.100.4"
+
+
+def test_the_diagram_page_is_served_without_web_fonts(tmp_path):
+    client, _ = make_app(tmp_path)
+    page = client.get("/how-it-works")
+    assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
+    assert "How Trained Eye Works" in page.text and "<svg" in page.text
+    assert "fonts.googleapis" not in page.text and "fonts.gstatic" not in page.text
+    assert "default-src 'none'" in page.headers["content-security-policy"]
+    assert 'href="how-it-works"' in client.get("/").text

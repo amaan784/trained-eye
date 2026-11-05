@@ -69,7 +69,11 @@ def test_the_image_has_the_projects_packages_and_backend_only():
     assert c["PYTHON"] == "3.12"
     calls = [ast.unparse(n) for n in ast.walk(TREE) if isinstance(n, ast.Call)
              and isinstance(n.func, ast.Attribute) and n.func.attr.startswith("add_local")]
-    assert len(calls) == 1 and "ROOT / 'backend'" in calls[0]  # never .env or data/
+    assert len(calls) == 2  # the backend and the diagram page; never .env or data/
+    assert any(c.endswith("add_local_dir(ROOT / 'backend', remote_path='/root/backend', "
+                          "ignore=['**/__pycache__/**', '**/*.pyc'])") for c in calls)
+    assert any(c.endswith("add_local_file(ROOT / 'docs' / 'how-it-works.html', "
+                          "remote_path='/root/docs/how-it-works.html')") for c in calls)
     assert "'TE_DATA_DIR': DATA_DIR" in ast.unparse(TREE)
     assert "parents[" not in ast.unparse(TREE)  # /root/modal_app.py has two parents
 

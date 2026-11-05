@@ -185,6 +185,24 @@ def spoken_requests(settings, run: str) -> bool:
     return False
 
 
+def skill_specs(settings, run: str) -> dict:
+    """{skill: spec.json} for the skills in the run's bundle, for the card's conditions
+    (skills without a spec.json are left out)."""
+    try:
+        skills = json.loads((settings.data_dir / "train" / run / "manifest.json").read_text())[
+            "skills"]
+    except (OSError, ValueError, KeyError):
+        return {}
+    specs = {}
+    for skill in skills:
+        try:
+            specs[skill] = json.loads((settings.data_dir / "skills" / skill / "spec.json")
+                                      .read_text())
+        except (OSError, ValueError):
+            continue
+    return specs
+
+
 def cmd_release(args) -> int:
     from backend.release.package import prepare_release, upload
     from backend.release.weights import default_dir
@@ -206,7 +224,8 @@ def cmd_release(args) -> int:
             manifests_dir=Path(args.manifests or config.PROJECT_ROOT / "manifests"),
             weights_dir=weights, keyframes=pairs(args.keyframes, "--keyframes"), kind=args.kind,
             results=Path(args.results) if args.results else None, license_id=args.license,
-            models=settings.models, max_steps=steps, spoken=spoken_requests(settings, args.run))
+            models=settings.models, max_steps=steps, spoken=spoken_requests(settings, args.run),
+            specs=skill_specs(settings, args.run), repo=args.repo)
     except (OSError, ValueError) as err:
         print(f"te: {err}", file=sys.stderr)
         return 2

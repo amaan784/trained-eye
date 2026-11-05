@@ -94,3 +94,25 @@ def test_the_card_states_fixed_steps_and_a_real_only_bundle(tmp_path):
     mixed, _, _ = inputs(tmp_path / "m")
     assert "Most training images are Muse Image edits" in model_card(
         tmp_path / "m.md", run="final", bundle_manifest=mixed).read_text()
+
+
+def test_the_card_says_what_the_repo_holds_and_how_to_prompt_it(tmp_path):
+    from backend.dataengine.dataset import SYSTEM_PROMPT
+
+    bundle, _, _ = inputs(tmp_path)
+    (tmp_path / "adapter_model.safetensors").write_bytes(b"0" * 2_000_000)
+    (tmp_path / "manifests" / "burner_left_on.jsonl").write_text('{"id": 1}\n{"id": 2}\n')
+    specs = {"burner_left_on": {"request": "Tell me when a burner is on",
+                                "positive": "a burner is lit.", "negatives": ["a pan on it."]}}
+    card = model_card(tmp_path / "README.md", run="final", bundle_manifest=bundle,
+                      specs=specs, repo="someone/trained-eye").read_text()
+    files = card.split("## What is in this repository")[1].split("## How to use it")[0]
+    assert "| `adapter_model.safetensors` |" in files and "2 MB." in files
+    assert "(2 for burner_left_on)" in files and "| `LICENSE` |" in files
+    assert "`config.json`" not in files  # only what the folder holds
+    assert "It is not a model on its own" in card and "trained on two skills" in card
+    assert SYSTEM_PROMPT in card and "512 x 512" in card
+    assert "| burner_left_on | Tell me when a burner is on | a burner is lit | a pan on it |" in card
+    assert 'PeftModel.from_pretrained(model, "someone/trained-eye")' in card
+    assert "## Citation" in card and "@software{sheikh2026trainedeye" in card
+    assert not set(card) & {chr(0x2013), chr(0x2014)}

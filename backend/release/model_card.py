@@ -19,6 +19,8 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from backend.config import DEFAULT_MODELS, STUDENT_BASE_REVISION
+from backend.dataengine.dataset import IMAGE_SIZE, SYSTEM_PROMPT
+from backend.eval.readme import summary
 from backend.eval.writeup import on_time_text
 from backend.training.axolotl import GLOBAL_BATCH, RECIPE
 
@@ -37,19 +39,108 @@ KINDS = {  # title, base_model_relation, front matter, what it is
     "merged": ("merged build", "finetune", "",
                "The final adapter merged (`merge_and_unload()`) into"),
 }
+WORDS = {1: "one", 2: "two", 3: "three", 4: "four"}
+CODE_URL = "https://github.com/amaan784/trained-eye"
+PLAYGROUND_URL = "https://aas2438--trained-eye-playground-web.us-east.modal.run"
+WANDB_URL = "https://wandb.ai/amaan784-columbia-university/trained-eye"
+JUDGES = {"finetuned": "this adapter", "base": "base Muse Glimmer 30B",
+          "spark": "Muse Spark (API)"}
+FILES = (  # (name, what it is), in the card's order; shown when the release has the file
+    ("adapter_model.safetensors", ("The LoRA weights: rank {rank} on every attention and MLP "
+     "projection of the language model's layers; the vision tower is unchanged. {size}")),
+    ("adapter_config.json", ("PEFT's settings for those weights: the base model, the rank, "
+     "alpha and the target modules.")),
+    ("config.json", "The model configuration the training run saved with the adapter."),
+    ("processor_config.json", "The image processor's settings, saved with the adapter."),
+    ("tokenizer.json", "The tokenizer, saved with the adapter."),
+    ("tokenizer_config.json", "The tokenizer's settings, saved with the adapter."),
+    ("chat_template.jinja", "The chat template the prompts were built with."),
+    ("manifests/", ("One line per generated training image ({manifests}): Muse Image's edit "
+     "prompt, the answer it was made for (yes, or no for a near-miss), and the SHA-256 of the "
+     "frame it edited and of the image. The images themselves are not here.")),
+    ("keyframes/", "Face-blurred teaching frames, for rebuilding the generated images."),
+    ("LICENSE", "The base model's license text (Apache-2.0)."),
+    ("release.json", "Every file here with its size and SHA-256."),
+    ("README.md", "This card."),
+)
 LICENSE_ID = re.compile(r"[a-z0-9][a-z0-9.+-]*")
 CARD = """\
 ---
 base_model: {base}
 base_model_relation: {relation}
-{front}pipeline_tag: image-text-to-text
-tags: [trained-eye, qlora, axolotl, smart-glasses]
+{front}language: [en]
+pipeline_tag: image-text-to-text
+tags: [trained-eye, qlora, lora, axolotl, smart-glasses, egocentric-vision]
 ---
 
-# Trained Eye watch skills ({title})
+# Trained Eye: watch skills for Muse Glimmer 30B ({title})
 
-{what} `{base}` at revision `{revision}`. It answers yes or no to one watch condition,
-given in the prompt, about a first-person camera frame. Run `{run}`; skills: {skills}.
+**What this is.** {what} `{base}` (revision `{revision}`), from
+[Trained Eye]({code}), which lets Meta glasses watch for something and say when it
+happens. Given one first-person camera frame and a condition in the prompt, it answers
+yes or no. It was trained on {n_skills} skill{plural} at once (the training run is called
+`{run}`): {skill_list}. {standalone}
+
+[Code]({code}) | [Playground]({playground}) | [Training runs (W&B)]({wandb}) |
+[How it works]({playground}/how-it-works)
+
+## What is in this repository
+
+| File | What it is |
+|---|---|
+{files}
+
+Not in this repository:
+
+- {base_note}
+- The training images. The generated images are never published (they keep Muse Image's
+  provenance and stay with the author), and neither are the teaching frames they were
+  edited from. `manifests/` says how each generated image was made.
+- The test clips and their labels, and the training code, which is on [GitHub]({code}).
+
+## How to use it
+
+Send each frame the way the training examples were built:
+
+- System message: `{system}`
+- User message: the frame, padded (not cropped) to {size} x {size} pixels with black
+  bars, then this text: `Condition: <what to watch for>. Not: <a near-miss>; <another>.
+  Is the condition true in this frame?`
+
+{conditions}
+
+Glimmer writes a short reasoning before it answers, so read the last `yes` or `no` token it
+generates, and take the chance of yes from that token's top logprobs (yes over yes plus
+no). An alert should wait until that chance has stayed over a threshold, calibrated on
+your own labelled clips, for the skill's hold (Trained Eye's watcher does this).
+
+What ran on Nov 4: the adapter merged into the bf16 base with PEFT's
+`merge_and_unload()` on one 80 GB H100, then served with vLLM's
+`vllm/vllm-openai:muse-glimmer` image, each request with `logprobs` on, `top_logprobs`
+10, up to 512 new tokens and `chat_template_kwargs` `{{"reasoning_strength": "low"}}`.
+Loading the adapter with vLLM's `--enable-lora` did not start for this model on that
+image. The merge, as the project's `te export` runs it:
+
+```python
+import torch
+from peft import PeftModel
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
+base, revision = "{base}", "{revision}"
+model = AutoModelForImageTextToText.from_pretrained(
+    base, revision=revision, torch_dtype=torch.bfloat16, device_map="auto")
+model = PeftModel.from_pretrained(model, "{repo}").merge_and_unload()
+model.save_pretrained("trained-eye-merged")
+AutoProcessor.from_pretrained(base, revision=revision).save_pretrained("trained-eye-merged")
+```
+
+## Results
+
+{results}
+
+The full tables, the EPIC-KITCHENS-100 results and how it was measured are on GitHub:
+[results]({code}/blob/main/eval/results.md), [EPIC-KITCHENS]({code}/blob/main/eval/epic/results.md),
+[method]({code}/blob/main/docs/evaluation.md).
 
 ## Training
 
@@ -68,10 +159,6 @@ The training data was made through the Meta Model API:
 {data}
 
 {generated}
-
-## Evaluation
-
-{results}
 
 ## Uses
 
@@ -103,6 +190,18 @@ or coaching, and anything where a missed or false alert could put someone at ris
 ## License
 
 {license}
+
+## Citation
+
+```bibtex
+@software{{sheikh2026trainedeye,
+  author = {{Sheikh, Amaan}},
+  title  = {{Trained Eye: Teach Your Glasses to Notice Anything}},
+  year   = {{2026}},
+  month  = nov,
+  url    = {{{code}}}
+}}
+```
 """
 
 
@@ -216,18 +315,45 @@ def results_section(results: Path | None, run: str | None = None) -> str:
     rows = [[e["name"], e["experiment"], e["skill"], e["variant"],
              *(e["metrics"].get(k) for k in METRICS), e["cost_per_hour"].get("total_usd")]
             for e in scored]
-    return "\n".join([source, "", "| " + " | ".join(columns) + " |", "|---" * len(columns) + "|"]
+    full = "\n".join(["| " + " | ".join(columns) + " |", "|---" * len(columns) + "|"]
                      + ["| " + " | ".join(_cell(v) for v in row) + " |" for row in rows])
+    short = summary(data)
+    return "\n".join([*([f"In short: {short}", ""] if short else []),
+                      plain_table(scored), "", source, "",
+                      "<details><summary>Every scored evaluation</summary>", "", full, "",
+                      "</details>"])
+
+
+def plain_table(scored: list[dict]) -> str:
+    """Per skill and model: frame precision, recall, F1 and accuracy, the median seconds a
+    frame and the dollars an hour, copied from results.json."""
+    def num(value, spec=".2f"):
+        return "n/a" if value is None else f"{value:{spec}}"
+
+    rows = [("| Skill | Model | Frame precision | Frame recall | Frame F1 | Frame accuracy | "
+            "Seconds per frame | Dollars per hour |"), "|---|---|---|---|---|---|---|---|"]
+    order = list(JUDGES)
+    for e in sorted(scored, key=lambda e: (e["skill"], order.index(e["variant"])
+                                           if e["variant"] in order else len(order))):
+        m, usd = e["metrics"], e["cost_per_hour"].get("total_usd")
+        rows.append(f"| {e['skill']} | {_cell(JUDGES.get(e['variant'], e['variant']))} | "
+                    f"{num(m.get('precision'))} | {num(m.get('recall'))} | {num(m.get('f1'))} | "
+                    f"{num(m.get('accuracy'))} | {num(m.get('latency_median_s'))} | "
+                    f"{'n/a' if usd is None else f'${usd:.2f}'} |")
+    return "\n".join(rows)
 
 
 def model_card(out_path: Path, *, run: str, bundle_manifest: Path, kind: str = "adapter",
                results: Path | None = None, license_id: str = BASE_LICENSE,
                models: Mapping[str, str] = DEFAULT_MODELS, max_steps: int | None = None,
-               keyframes: Iterable[str] = (), spoken: bool = True) -> Path:
+               keyframes: Iterable[str] = (), spoken: bool = True,
+               specs: Mapping[str, dict] | None = None, repo: str | None = None) -> Path:
     """Write the model card (README.md with YAML front matter) to out_path. `max_steps` is
     the run's fixed step count (te train --max-steps), if it had one; `keyframes` are the
     skills whose face-blurred keyframes the release holds; `spoken` False leaves Voice
-    Transcribe out of the models that made the data (every request was typed)."""
+    Transcribe out of the models that made the data (every request was typed); `specs`
+    are the skills' spec.json ({skill: spec}), for the conditions word for word; `repo` is
+    the Hugging Face repo, for the merge example."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
     if not LICENSE_ID.fullmatch(license_id or ""):
@@ -243,10 +369,24 @@ def model_card(out_path: Path, *, run: str, bundle_manifest: Path, kind: str = "
         rows.append(f"| `max_steps` | `{max_steps}` |")
         steps = (f", and a fixed {max_steps} optimizer steps in place of one epoch (the "
                  "experiments keep the steps the same for every run)")
+    skills = sorted(manifest["skills"])
+    asked = {k: (v or {}).get("request") for k, v in (specs or {}).items()}
+    skill_list = ", ".join(f"`{k}`" + (f" (\"{asked[k]}\")" if asked.get(k) else "")
+                           for k in skills)
+    standalone = ("It is not a model on its own: it needs the base model's weights."
+                  if kind == "adapter" else "The adapter is already merged into the base.")
+    base_note = (f"The base model's weights: get `{base}` at revision `{STUDENT_BASE_REVISION}` "
+                 "from Hugging Face, under its own terms." if kind == "adapter" else
+                 "The adapter on its own: this is the merged build.")
     Path(out_path).write_text(CARD.format(
+        code=CODE_URL, playground=PLAYGROUND_URL, wandb=WANDB_URL,
+        n_skills=WORDS.get(len(skills), str(len(skills))), plural="" if len(skills) == 1 else "s", skill_list=skill_list,
+        standalone=standalone, base_note=base_note, files=files_table(Path(out_path).parent),
+        system=SYSTEM_PROMPT, size=IMAGE_SIZE, conditions=conditions_text(specs or {}),
+        repo=repo or "<owner>/<repo>",
         base=base, relation=relation, title=title, what=what,
         front=front + f"license: {license_id}\n",
-        revision=STUDENT_BASE_REVISION, run=run, skills=", ".join(sorted(manifest["skills"])),
+        revision=STUDENT_BASE_REVISION, run=run,
         batch=GLOBAL_BATCH, models=", ".join(f"{job} `{models[job]}`" for job in DATA_JOBS
                                              if spoken or job != "transcribe"),
         recipe="\n".join(rows), steps=steps, generated=generated, mix=mix,
@@ -254,6 +394,37 @@ def model_card(out_path: Path, *, run: str, bundle_manifest: Path, kind: str = "
         license=license_text(license_id, base)),
         encoding="utf-8")
     return Path(out_path)
+
+
+def files_table(folder: Path) -> str:
+    """The card's file table: each known file the release folder has (LICENSE, release.json
+    and README.md always, as prepare_release writes them)."""
+    rows = []
+    adapter = folder / "adapter_model.safetensors"
+    size = f"{adapter.stat().st_size / 1e6:,.0f} MB." if adapter.is_file() else ""
+    counts = [f"{len(p.read_text().splitlines())} for {p.stem}"
+              for p in sorted((folder / "manifests").glob("*.jsonl"))]
+    always = ("LICENSE", "release.json", "README.md")
+    for name, what in FILES:
+        if name in always or (folder / name.rstrip("/")).exists():
+            text = what.format(rank=RECIPE["lora_r"], size=size,
+                               manifests=", ".join(counts) or "none")
+            shown = f"`{name}<skill>.jsonl`" if name == "manifests/" else f"`{name}`"
+            rows.append(f"| {shown} | {text.strip()} |")
+    return "\n".join(rows)
+
+
+def conditions_text(specs: Mapping[str, dict]) -> str:
+    """The conditions each skill was trained with, word for word, from its spec.json."""
+    if not specs:
+        return "The skills' own conditions are in each skill's spec.json from te teach."
+    rows = ["The conditions it was trained with, word for word:", "",
+            "| Skill | Asked as | Condition | Not |", "|---|---|---|---|"]
+    for skill, spec in sorted(specs.items()):
+        nots = "; ".join(n.strip().rstrip(".") for n in spec.get("negatives") or [])
+        rows.append(f"| {skill} | {_cell(spec.get('request') or '')} | "
+                    f"{_cell(spec['positive'].strip().rstrip('.'))} | {_cell(nots)} |")
+    return "\n".join(rows)
 
 
 def license_text(license_id: str, base: str) -> str:

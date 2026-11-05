@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use Trained Eye, its code or its model, please cite it as below."
+title: "Trained Eye: Teach Your Glasses to Notice Anything"
+type: software
+authors:
+  - family-names: Sheikh
+    given-names: Amaan
+repository-code: "https://github.com/amaan784/trained-eye"
+identifiers:
+  - type: url
+    value: "https://huggingface.co/amaan784/trained-eye"
+    description: "The fine-tuned LoRA adapter for Muse Glimmer 30B, with its model card"
+license: MIT
+date-released: 2026-11-04
+abstract: >-
+  Look at something for a few seconds, say what to watch for, and your Meta glasses speak
+  up when it happens. Trained Eye turns one sentence and a short look into a small model,
+  fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells you.
+keywords:
+  - smart glasses
+  - vision language model
+  - fine-tuning
+  - LoRA
+  - Muse Glimmer

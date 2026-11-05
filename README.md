@@ -9,25 +9,6 @@ Meta glasses answer when you ask them something, but they can't keep an eye on a
 for you. Trained Eye turns one sentence and a short look into a small model of your own,
 fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells you.
 
-## Links and docs
-
-| | |
-|---|---|
-| **Model** | [Hugging Face: amaan784/trained-eye](https://huggingface.co/amaan784/trained-eye), the LoRA adapter for Muse Glimmer 30B with its model card |
-| **Playground** | [Try it in a browser](https://aas2438--trained-eye-playground-web.us-east.modal.run): replayed clips, how each skill learned, and teaching a skill live |
-| **Training runs** | [Weights and Biases: trained-eye](https://wandb.ai/amaan784-columbia-university/trained-eye) |
-| **Code** | [github.com/amaan784/trained-eye](https://github.com/amaan784/trained-eye) |
-| **Results** | [phone clips, the main test](eval/results.md), [EPIC-KITCHENS](eval/epic/results.md) |
-| **Developer guide** | [docs/developer-guide.md](docs/developer-guide.md): devices, keys, teach, train, serve, the iPhone app, the glasses |
-| **How it works** | [Architecture](docs/architecture.md) and [diagrams](docs/how-it-works.html) |
-| **Evaluation method** | [docs/evaluation.md](docs/evaluation.md) |
-| **Privacy and policy** | [docs/privacy-and-policy.md](docs/privacy-and-policy.md) |
-| **Data and licenses** | [docs/data-and-licenses.md](docs/data-and-licenses.md), with the EPIC-KITCHENS-100 credit |
-| **iPhone app** | [ios/README.md](ios/README.md) and the [glasses check](docs/glasses-check.md) |
-| **Setup and keys** | [docs/setup.md](docs/setup.md) and [SETUP.md](SETUP.md) |
-| **Recording protocol** | [docs/recording-protocol.md](docs/recording-protocol.md) |
-| **Credits and notes** | [credits](CONTRIBUTIONS.md), [progress](PROGRESS.md), [handover](HANDOVER.md) |
-
 ## How it works
 
 1. **Teach.** Look at the thing and say what to watch for ("tell me when the fridge door
@@ -42,6 +23,25 @@ fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells 
    second, and once the condition has lasted long enough, the glasses say so.
 
 <p align="center"><img src="docs/img/strip.png" alt="How it learned this fridge: twelve teaching frames on film with SAM's boxes, and the four steps of the teach run with its numbers" width="100%"></p>
+
+## Links and docs
+
+| | |
+|---|---|
+| **Model** | [Hugging Face: amaan784/trained-eye](https://huggingface.co/amaan784/trained-eye), the LoRA adapter for Muse Glimmer 30B with its model card |
+| **Playground** | [Try it in a browser](https://aas2438--trained-eye-playground-web.us-east.modal.run): replayed clips, how each skill learned, and teaching a skill live |
+| **Training runs** | [Weights and Biases: trained-eye](https://wandb.ai/amaan784-columbia-university/trained-eye) |
+| **Code** | [github.com/amaan784/trained-eye](https://github.com/amaan784/trained-eye) |
+| **Results** | [phone clips, the main test](eval/results.md), [EPIC-KITCHENS](eval/epic/results.md) |
+| **Developer guide** | [docs/developer-guide.md](docs/developer-guide.md): devices, keys, teach, train, serve, the iPhone app, the glasses |
+| **How it works** | [Architecture](docs/architecture.md) and [the flow in diagrams](https://aas2438--trained-eye-playground-web.us-east.modal.run/how-it-works) (source: [docs/how-it-works.html](docs/how-it-works.html)) |
+| **Evaluation method** | [docs/evaluation.md](docs/evaluation.md) |
+| **Privacy and policy** | [docs/privacy-and-policy.md](docs/privacy-and-policy.md) |
+| **Data and licenses** | [docs/data-and-licenses.md](docs/data-and-licenses.md), with the EPIC-KITCHENS-100 credit |
+| **iPhone app** | [ios/README.md](ios/README.md) and the [glasses check](docs/glasses-check.md) |
+| **Setup and keys** | [docs/setup.md](docs/setup.md) and [SETUP.md](SETUP.md) |
+| **Recording protocol** | [docs/recording-protocol.md](docs/recording-protocol.md) |
+| **Credits and notes** | [credits](CONTRIBUTIONS.md), [progress](PROGRESS.md), [handover](HANDOVER.md) |
 
 <!-- te eval: results start (written by te eval --readme; edits here are lost) -->
 ## Results
@@ -73,6 +73,46 @@ Muse Spark's label error rate against hand labels (Experiment 2):
 - burner_left_on: not measured yet (te spark-errors)
 - fridge_left_open: not measured yet (te spark-errors)
 <!-- te eval: results end -->
+
+Of the four planned experiments, two ran: Experiment 1 (trained on the teaching clip's frames and generated images, against a model trained on EPIC's own frames) and Experiment 4 (the fine-tuned model against base Glimmer and Muse Spark on every frame). Experiment 2 (keeping only the generated images Muse Spark agreed with, or all of them) and Experiment 3 (how many generated images a skill needs) were not run in time. On EPIC-KITCHENS below, the fine-tuned model is the morning's fridge-only model, `exp1-mixed`, apart from the one `product` row.
+
+<!-- te eval: results start: Results on EPIC-KITCHENS-100 (written by te eval --readme; edits here are lost) -->
+## Results on EPIC-KITCHENS-100
+
+Every number below comes from the evaluation scripts; the full tables are in [eval/epic/results.md](eval/epic/results.md). n/a means there was nothing to compute it from.
+
+Test footage: other kitchens (EPIC-KITCHENS-100, head-mounted camera). Results on other footage are reported apart.
+
+In short: on other kitchens, the fine-tuned model spotted the condition about as accurately as base Glimmer and Muse Spark (frame F1 0.88, 0.89 and 0.86), answering in 0.98 s a frame against 2.07 s and 11.16 s, at $3.95 an hour against $16.53 for Spark.
+
+Thresholds were calibrated for frame F1 on calibration clips (this footage has too few events past the skill's hold to judge alerts), so read the frame columns.
+
+An event is caught on time when its alert comes within the skill's window after the skill's hold ends (the condition must stay true that long before it alerts): fridge_left_open, a 20 or 30 s hold and a 10 s window.
+
+### Experiment 1: real frames only, generated images only, or both
+
+| Variant | Skill | Frame F1 | Events caught on time | False alarms per hour | Dollars per hour |
+|---|---|---|---|---|---|
+| mixed | fridge_left_open | 0.88 | 0.20 | 0.0 | $3.95 |
+| real, other kitchens (EPIC, never published) | fridge_left_open | 0.89 | 0.20 | 0.0 | $3.95 |
+| mixed, three fridges and two stoves | fridge_left_open | 0.75 | 0.00 | 0.0 | $3.95 |
+
+### Experiment 4: fine-tuned Glimmer, base Glimmer, Muse Spark on every frame
+
+| Judge (all skills) | Frame F1 | Frame accuracy | Events caught on time | False alarms per hour | Dollars per hour |
+|---|---|---|---|---|---|
+| finetuned | 0.88 | 0.96 | 0.20 | 0.0 | $3.95 |
+| base | 0.89 | 0.96 | 0.20 | 0.0 | $3.95 |
+| spark | 0.86 | 0.95 | 0.20 | 0.0 | $16.53 |
+
+Charts: [Experiment 1](eval/epic/exp1_bars.svg), [Experiment 4 (cost)](eval/epic/exp4_cost.svg).
+
+Regression check: not run yet (te regress).
+
+Muse Spark's label error rate against hand labels (Experiment 2):
+
+- fridge_left_open: not measured yet (te spark-errors)
+<!-- te eval: results end: Results on EPIC-KITCHENS-100 -->
 
 <!-- art: models start (written by python -m backend.art.build; edits here are lost) -->
 ## Meta models, each with a job
@@ -119,3 +159,22 @@ walks the whole path, from a fresh Mac to an alert spoken on your glasses;
 
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026). All
 code here was written during the event. MIT license, see [LICENSE](LICENSE); the base model is under its own (Apache-2.0).
+
+## Citation
+
+If you use Trained Eye, its code or its model, please cite it. GitHub's "Cite this
+repository" button gives the same from [CITATION.cff](CITATION.cff).
+
+```bibtex
+@software{sheikh2026trainedeye,
+  author = {Sheikh, Amaan},
+  title  = {Trained Eye: Teach Your Glasses to Notice Anything},
+  year   = {2026},
+  month  = nov,
+  url    = {https://github.com/amaan784/trained-eye},
+  note   = {Model: https://huggingface.co/amaan784/trained-eye. Built for the Meta Global AI Developer Hackathon}
+}
+```
+
+Amaan Sheikh. *Trained Eye: Teach Your Glasses to Notice Anything.* 2026.
+https://github.com/amaan784/trained-eye

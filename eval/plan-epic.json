@@ -347,6 +347,75 @@
    "highlight": false,
    "alert_text": "Heads up \u2014 your fridge door is open!",
    "scorer_usd_per_frame": 0.004591
+  },
+  {
+   "name": "epic-product-fridge_left_open",
+   "experiment": 1,
+   "skill": "fridge_left_open",
+   "variant": "mixed, three fridges and two stoves",
+   "run": "product",
+   "scorer": "student",
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004591,
+   "highlight": true,
+   "alert_text": "Hey, the fridge door is still open!",
+   "clips": [
+    {
+     "clip": "../data/epic/windows/fridge/test/P02_06_00294",
+     "labels": "../data/epic/windows/fridge/test/P02_06_00294.labels.json",
+     "log": "../data/watch/product/fridge_left_open/epic-P02_06_00294.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P02_132_00000",
+     "labels": "../data/epic/windows/fridge/test/P02_132_00000.labels.json",
+     "log": "../data/watch/product/fridge_left_open/epic-P02_132_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P02_15_00010",
+     "labels": "../data/epic/windows/fridge/test/P02_15_00010.labels.json",
+     "log": "../data/watch/product/fridge_left_open/epic-P02_15_00010.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_05_00394",
+     "labels": "../data/epic/windows/fridge/test/P22_05_00394.labels.json",
+     "log": "../data/watch/product/fridge_left_open/epic-P22_05_00394.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_05_00570",
+     "labels": "../data/epic/windows/fridge/test/P22_05_00570.labels.json",
+     "log": "../data/watch/product/fridge_left_open/epic-P22_05_00570.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_104_00000",
+     "labels": "../data/epic/windows/fridge/test/P22_104_00000.labels.json",
+     "log": "../data/watch/product/fridge_left_open/epic-P22_104_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_107_00046",
+     "labels": "../data/epic/windows/fridge/test/P22_107_00046.labels.json",
+     "log": "../data/watch/product/fridge_left_open/epic-P22_107_00046.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_10_00000",
+     "labels": "../data/epic/windows/fridge/test/P22_10_00000.labels.json",
+     "log": "../data/watch/product/fridge_left_open/epic-P22_10_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_111_00000",
+     "labels": "../data/epic/windows/fridge/test/P22_111_00000.labels.json",
+     "log": "../data/watch/product/fridge_left_open/epic-P22_111_00000.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_111_00150",
+     "labels": "../data/epic/windows/fridge/test/P22_111_00150.labels.json",
+     "log": "../data/watch/product/fridge_left_open/epic-P22_111_00150.jsonl"
+    },
+    {
+     "clip": "../data/epic/windows/fridge/test/P22_14_00099",
+     "labels": "../data/epic/windows/fridge/test/P22_14_00099.labels.json",
+     "log": "../data/watch/product/fridge_left_open/epic-P22_14_00099.jsonl"
+    }
+   ]
   }
  ],
  "calibration": [

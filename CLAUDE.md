@@ -25,7 +25,7 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
                                      # teach flow; prints a cost estimate and asks first
                                      # --correct "<fix>" after a wrong read-back,
                                      # --labels <json> with names from keyframes/
-    te train --skills burner_left_on --run exp1-mixed --smoke
+    te train --skills fridge_left_open,burner_left_on --run product --smoke
                                      # the recipe's two-step smoke on Modal; asks first.
                                      # Without --smoke: the real run, priced from the smoke.
                                      # --preflight renders examples with the pinned processor
@@ -48,6 +48,8 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
     te watch ... --scorer spark      # Experiment 4: Muse Spark on every frame (paid; asks)
     te regress                       # the regression check on general questions
     make eval                        # te eval: eval/results.md and the SVG charts
+                                     # (phone clips: eval/plan.json -> eval/; EPIC:
+                                     # eval/plan-epic.json -> eval/epic/)
     te manifests / te regenerate / te blur / te release   # M4 release (upload asks)
     te fetch-weights --run <run>     # a run's adapter from the Modal volume into data/weights/
     te release-test-set / te release-collection / te wandb-report   # more releases (all ask)
@@ -65,7 +67,8 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
 - Local data (footage, cache, ledger, generated images, weights) lives in data/ and is gitignored.
 - Packages under backend/ are namespace packages (no __init__.py files).
 - Ask before any job over $15, before publishing anything, and before anything physical.
-- Skills: burner_left_on, fridge_left_open, tap_left_running (egg_whisked if recorded). Each
+- Skills: burner_left_on, fridge_left_open, tap_left_running (egg_whisked if recorded); the
+  product model `product` is one run trained on fridge and burner together. Each
   alerts only after its hold (SKILL_HOLDS in backend/skills/spec.py: 10, 20, 20, 0 s) and
   repeats while it stays true (SKILL_REPEATS: burner 20 s, fridge and tap 30 s), and
   the evaluation's on-time window per skill (ON_TIME_S in backend/eval/metrics.py) counts

@@ -1,0 +1,206 @@
+{
+ "footage": "other kitchens filmed first-person on phones (handheld; four fridges and two stoves the model was not taught on; labels drafted by an AI assistant, see docs/evaluation.md)",
+ "threshold_objective": "frames",
+ "calibration": [
+  {
+   "run": "product",
+   "skill": "fridge_left_open",
+   "clips": [
+    {
+     "clip": "../data/clips/fridge_left_open/session2_e112a621.mov",
+     "labels": "../data/clips/fridge_left_open/session2_e112a621.mov.labels.json",
+     "log": "../data/watch/product/fridge_left_open/phone-session2_e112a621.jsonl"
+    }
+   ]
+  },
+  {
+   "run": "exp4-base",
+   "skill": "fridge_left_open",
+   "clips": [
+    {
+     "clip": "../data/clips/fridge_left_open/session2_e112a621.mov",
+     "labels": "../data/clips/fridge_left_open/session2_e112a621.mov.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/phone-session2_e112a621.jsonl"
+    }
+   ]
+  }
+ ],
+ "evaluations": [
+  {
+   "name": "phone-exp4-finetuned-fridge_left_open",
+   "experiment": 4,
+   "skill": "fridge_left_open",
+   "variant": "finetuned",
+   "run": "product",
+   "scorer": "student",
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004591,
+   "highlight": true,
+   "alert_text": "Hey, the fridge door is still open!",
+   "clips": [
+    {
+     "clip": "../data/clips/fridge_left_open/session3_test_441375e7.mp4",
+     "labels": "../data/clips/fridge_left_open/session3_test_441375e7.mp4.labels.json",
+     "log": "../data/watch/product/fridge_left_open/phone-session3_test_441375e7.jsonl"
+    },
+    {
+     "clip": "../data/clips/fridge_left_open/session3_test_5c3a970d.mp4",
+     "labels": "../data/clips/fridge_left_open/session3_test_5c3a970d.mp4.labels.json",
+     "log": "../data/watch/product/fridge_left_open/phone-session3_test_5c3a970d.jsonl"
+    },
+    {
+     "clip": "../data/clips/fridge_left_open/session3_test_a5be4214.mp4",
+     "labels": "../data/clips/fridge_left_open/session3_test_a5be4214.mp4.labels.json",
+     "log": "../data/watch/product/fridge_left_open/phone-session3_test_a5be4214.jsonl"
+    },
+    {
+     "clip": "../data/clips/fridge_left_open/session3_test_f8c5ba22.mov",
+     "labels": "../data/clips/fridge_left_open/session3_test_f8c5ba22.mov.labels.json",
+     "log": "../data/watch/product/fridge_left_open/phone-session3_test_f8c5ba22.jsonl"
+    }
+   ]
+  },
+  {
+   "name": "phone-exp4-base-fridge_left_open",
+   "experiment": 4,
+   "skill": "fridge_left_open",
+   "variant": "base",
+   "run": "exp4-base",
+   "scorer": "student",
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004591,
+   "highlight": false,
+   "alert_text": "Hey, the fridge door is still open!",
+   "clips": [
+    {
+     "clip": "../data/clips/fridge_left_open/session3_test_441375e7.mp4",
+     "labels": "../data/clips/fridge_left_open/session3_test_441375e7.mp4.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/phone-session3_test_441375e7.jsonl"
+    },
+    {
+     "clip": "../data/clips/fridge_left_open/session3_test_5c3a970d.mp4",
+     "labels": "../data/clips/fridge_left_open/session3_test_5c3a970d.mp4.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/phone-session3_test_5c3a970d.jsonl"
+    },
+    {
+     "clip": "../data/clips/fridge_left_open/session3_test_a5be4214.mp4",
+     "labels": "../data/clips/fridge_left_open/session3_test_a5be4214.mp4.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/phone-session3_test_a5be4214.jsonl"
+    },
+    {
+     "clip": "../data/clips/fridge_left_open/session3_test_f8c5ba22.mov",
+     "labels": "../data/clips/fridge_left_open/session3_test_f8c5ba22.mov.labels.json",
+     "log": "../data/watch/exp4-base/fridge_left_open/phone-session3_test_f8c5ba22.jsonl"
+    }
+   ]
+  },
+  {
+   "name": "phone-exp4-spark-fridge_left_open",
+   "experiment": 4,
+   "skill": "fridge_left_open",
+   "variant": "spark",
+   "run": "exp4-spark",
+   "scorer": "spark",
+   "gpu_usd_per_hour": 0.0,
+   "spark_usd_per_check": 0.0,
+   "highlight": false,
+   "alert_text": "Hey, the fridge door is still open!",
+   "clips": [
+    {
+     "clip": "../data/clips/fridge_left_open/session3_test_441375e7.mp4",
+     "labels": "../data/clips/fridge_left_open/session3_test_441375e7.mp4.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/phone-session3_test_441375e7.jsonl"
+    },
+    {
+     "clip": "../data/clips/fridge_left_open/session3_test_5c3a970d.mp4",
+     "labels": "../data/clips/fridge_left_open/session3_test_5c3a970d.mp4.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/phone-session3_test_5c3a970d.jsonl"
+    },
+    {
+     "clip": "../data/clips/fridge_left_open/session3_test_a5be4214.mp4",
+     "labels": "../data/clips/fridge_left_open/session3_test_a5be4214.mp4.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/phone-session3_test_a5be4214.jsonl"
+    },
+    {
+     "clip": "../data/clips/fridge_left_open/session3_test_f8c5ba22.mov",
+     "labels": "../data/clips/fridge_left_open/session3_test_f8c5ba22.mov.labels.json",
+     "log": "../data/watch/exp4-spark/fridge_left_open/phone-session3_test_f8c5ba22.jsonl"
+    }
+   ],
+   "scorer_usd_per_frame": 0.004591
+  },
+  {
+   "name": "phone-exp4-finetuned-burner_left_on",
+   "experiment": 4,
+   "skill": "burner_left_on",
+   "variant": "finetuned",
+   "run": "product",
+   "scorer": "student",
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004591,
+   "highlight": true,
+   "alert_text": "Heads up, a burner is still on!",
+   "clips": [
+    {
+     "clip": "../data/clips/burner_left_on/session3_test_93d7cd0e.mov",
+     "labels": "../data/clips/burner_left_on/session3_test_93d7cd0e.mov.labels.json",
+     "log": "../data/watch/product/burner_left_on/phone-session3_test_93d7cd0e.jsonl"
+    },
+    {
+     "clip": "../data/clips/burner_left_on/session3_test_f53b7aaf.mp4",
+     "labels": "../data/clips/burner_left_on/session3_test_f53b7aaf.mp4.labels.json",
+     "log": "../data/watch/product/burner_left_on/phone-session3_test_f53b7aaf.jsonl"
+    }
+   ]
+  },
+  {
+   "name": "phone-exp4-base-burner_left_on",
+   "experiment": 4,
+   "skill": "burner_left_on",
+   "variant": "base",
+   "run": "exp4-base",
+   "scorer": "student",
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004591,
+   "highlight": false,
+   "alert_text": "Heads up, a burner is still on!",
+   "clips": [
+    {
+     "clip": "../data/clips/burner_left_on/session3_test_93d7cd0e.mov",
+     "labels": "../data/clips/burner_left_on/session3_test_93d7cd0e.mov.labels.json",
+     "log": "../data/watch/exp4-base/burner_left_on/phone-session3_test_93d7cd0e.jsonl"
+    },
+    {
+     "clip": "../data/clips/burner_left_on/session3_test_f53b7aaf.mp4",
+     "labels": "../data/clips/burner_left_on/session3_test_f53b7aaf.mp4.labels.json",
+     "log": "../data/watch/exp4-base/burner_left_on/phone-session3_test_f53b7aaf.jsonl"
+    }
+   ]
+  },
+  {
+   "name": "phone-exp4-spark-burner_left_on",
+   "experiment": 4,
+   "skill": "burner_left_on",
+   "variant": "spark",
+   "run": "exp4-spark",
+   "scorer": "spark",
+   "gpu_usd_per_hour": 0.0,
+   "spark_usd_per_check": 0.0,
+   "highlight": false,
+   "alert_text": "Heads up, a burner is still on!",
+   "clips": [
+    {
+     "clip": "../data/clips/burner_left_on/session3_test_93d7cd0e.mov",
+     "labels": "../data/clips/burner_left_on/session3_test_93d7cd0e.mov.labels.json",
+     "log": "../data/watch/exp4-spark/burner_left_on/phone-session3_test_93d7cd0e.jsonl"
+    },
+    {
+     "clip": "../data/clips/burner_left_on/session3_test_f53b7aaf.mp4",
+     "labels": "../data/clips/burner_left_on/session3_test_f53b7aaf.mp4.labels.json",
+     "log": "../data/watch/exp4-spark/burner_left_on/phone-session3_test_f53b7aaf.jsonl"
+    }
+   ],
+   "scorer_usd_per_frame": 0.004591
+  }
+ ]
+}

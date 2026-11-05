@@ -136,6 +136,31 @@ simulator), the product model and the first results; see "Live runs, Nov 4" belo
   fridge door is open!" with a dash after "Heads up"); the banner and the playground quote it
   as it is spoken.
 
+### Evening, Nov 4: one model for the fridge and the burner, tested on phone clips
+
+- The author recorded phone clips of other kitchens: 7 fridges, 4 stoves and 4 sinks.
+  The fridge was taught again from three fridges (the morning's look plus 12 s from each
+  of two more; 341 examples, Spark kept 295 of 300 images) and the burner from two stoves,
+  gas and electric (287 kept). The tap was left for a live teach from the phone.
+- One model, `product`, trained on both skills from the base (603 training and 65
+  validation examples; 489 s on one H100), merged (50 of 50 answers matched) and served.
+  The phone watches both skills with it.
+- The main test set (`eval/plan.json`): 4 fridges and 2 stoves never taught on, filmed on
+  phones. The labels were drafted by Claude from one frame a second at the author's request,
+  and each label file says so. The fridge's threshold, 0.826, is calibrated on a fifth
+  fridge's clip; the burner uses the default, 0.5 (EPIC's burner windows, mostly burner-on,
+  calibrated "always yes"). EPIC calibration was kept off `product`, since a run has one
+  threshold per skill. The results are in `eval/results.md`; EPIC's moved to
+  `eval/epic/`.
+- The EPIC burner test set was built (test kitchens P02 and P22, 1,061 frames; calibration
+  P03, 583), test only, never published.
+- Holds and repeats: the fridge alerts after 20 s, then every 30 s; the burner after 10 s,
+  then every 20 s.
+- The app: a high-contrast watch switch, the model's wake-up shown on Skills and Watch
+  (`GET /model`, `POST /model/wake`), the hold as a bar, the audio session set before the
+  stream (an alert had come 16 s late). `SERVER_TOKEN` was empty in `.env`; it is set now.
+- `docs/developer-guide.md`: the whole path from a fresh Mac, with the devices needed.
+
 ### Failed, and fixed at the root (each with a test)
 
 1. Voice Transcribe at `/audio/transcriptions`: 404. Now `/asr/transcribe`.

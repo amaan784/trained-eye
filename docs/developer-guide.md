@@ -5,13 +5,24 @@ train a skill, serve it, build the iPhone app onto a phone, connect the Meta gla
 watch. Every step that costs money prints its price and asks first (`--yes` skips the
 question). [setup.md](setup.md) and [../SETUP.md](../SETUP.md) have more on accounts.
 
-What you need:
+## What you need before you start
 
-- A Mac with Python 3.12, ffmpeg, Xcode 26.4 or newer (this was built with Xcode 27.2) and
-  XcodeGen.
-- An iPhone on iOS 17.2 or newer and Meta glasses paired with the Meta AI app.
-- Accounts: a Meta Model API key (dev.meta.ai), Modal, Hugging Face (with access to
-  `meta-models/Muse-Glimmer-30B`) and, optionally, Weights and Biases.
+Devices:
+
+| Device | What for | Needs | Tested on Nov 4 |
+|---|---|---|---|
+| **A Mac** | the backend (`te serve`), teaching, training from the terminal, building the iPhone app | macOS with Xcode 26.4 or newer, Python 3.12, ffmpeg, XcodeGen | Xcode 27.2 |
+| **An iPhone** | the app: the glasses' camera stream, Teach, Skills, Watch | iOS 17.2 or newer, Developer Mode on (step 7), a USB cable for the first install | the author's iPhone (and the iOS 27.2 simulator) |
+| **Meta AI glasses** | the camera that watches, the microphone for the request, the speakers for the alert | glasses supported by Meta's Wearables Device Access Toolkit (DAT 1.0.1), paired with the Meta AI app, Developer Mode on (step 8) | Meta glasses, software version 122.0, Meta AI app 297.0 |
+| **One Wi-Fi network** | the phone sends frames to the Mac | the iPhone and the Mac on the same network | |
+
+No glasses? The app can watch with the iPhone's own camera (Connect, Camera, iPhone), and
+Debug builds have mock glasses for the simulator.
+
+Accounts: a Meta Model API key (dev.meta.ai), Modal (for training and serving on an H100),
+Hugging Face (a token that can read `meta-models/Muse-Glimmer-30B`) and, optionally,
+Weights and Biases. A free Apple ID (a Personal Team in Xcode) is enough to install on
+your own iPhone.
 
 Budget, roughly: a skill costs about $5 to $7 of Meta API calls to teach; training costs
 $1 to $2 of H100 time; a served model costs about $4 an hour while a container is up (it

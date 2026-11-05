@@ -13,7 +13,10 @@ fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells 
 
 1. **Teach.** Look at the thing and say what to watch for ("tell me when the fridge door
    is left open"). Muse Wonder turns the sentence into a skill, SAM 3.1 finds the target,
-   Muse Image makes variations of what you showed, and Muse Spark labels every one.
+   and Muse Image generates about 300 variations by editing your own teaching frames: the
+   condition, near-misses, other light and angles. Muse Spark checks every generated image
+   and keeps only those that show what they were made to show. No outside images are used:
+   the generated images all start from the frames you filmed.
 2. **Train.** Muse Glimmer is fine-tuned on those examples with Meta's QLoRA recipe, on
    one GPU on Modal.
 3. **Watch.** The glasses stream to your phone; the fine-tuned model scores a frame a
@@ -24,37 +27,31 @@ fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells 
 <!-- te eval: results start (written by te eval --readme; edits here are lost) -->
 ## Results
 
-Written by `te eval --readme` from `eval/results.json` (SHA-256 `f40f0118fffc74620c4743009608774ca5f4481d65a711414b86248d967adc93`): 5 of 5 evaluations scored. Every number here is copied from that file; n/a means there was nothing to compute it from.
+Written by `te eval --readme` from `eval/results.json` (SHA-256 `6704865a78632b3e1d28aa5b50c1f56ca68537b9307949ead80969b32ecb1d8a`): 6 of 6 evaluations scored. Every number here is copied from that file; n/a means there was nothing to compute it from.
 
-Test footage: other kitchens (EPIC-KITCHENS-100, head-mounted camera). Results on other footage are reported apart.
+Test footage: other kitchens filmed first-person on phones (handheld; four fridges and two stoves the model was not taught on; labels drafted by an AI assistant, see docs/evaluation.md). Results on other footage are reported apart.
 
-In short: on other kitchens, the fine-tuned model spotted the condition about as accurately as base Glimmer and Muse Spark (frame F1 0.88, 0.89 and 0.86), answering in 0.98 s a frame against 2.07 s and 11.16 s, at $3.95 an hour against $16.53 for Spark.
+In short: on other kitchens filmed first-person on phones, the fine-tuned model spotted the condition about as accurately as base Glimmer and less accurately than Muse Spark (frame F1 0.87, 0.88 and 0.94), answering in 1.64 s a frame against 2.53 s and 11.80 s, at $4.00 an hour against $16.53 for Spark.
 
 Thresholds were calibrated for frame F1 on calibration clips (this footage has too few events past the skill's hold to judge alerts), so read the frame columns.
 
-An event is caught on time when its alert comes within the skill's window after the skill's hold ends (the condition must stay true that long before it alerts): fridge_left_open, a 30 s hold and a 10 s window.
-
-### Experiment 1: real only, synthetic only, mixed
-
-| Variant | Skill | Frame F1 | Events caught on time | False alarms per hour | Dollars per hour |
-|---|---|---|---|---|---|
-| mixed | fridge_left_open | 0.88 | 0.20 | 0.0 | $3.95 |
-| real, other kitchens (EPIC, never published) | fridge_left_open | 0.89 | 0.20 | 0.0 | $3.95 |
+An event is caught on time when its alert comes within the skill's window after the skill's hold ends (the condition must stay true that long before it alerts): burner_left_on, a 10 s hold and a 5 s window; fridge_left_open, a 20 s hold and a 10 s window.
 
 ### Experiment 4: fine-tuned Glimmer, base Glimmer, Muse Spark on every frame
 
 | Judge (all skills) | Frame F1 | Frame accuracy | Events caught on time | False alarms per hour | Dollars per hour |
 |---|---|---|---|---|---|
-| finetuned | 0.88 | 0.96 | 0.20 | 0.0 | $3.95 |
-| base | 0.89 | 0.96 | 0.20 | 0.0 | $3.95 |
-| spark | 0.86 | 0.95 | 0.20 | 0.0 | $16.53 |
+| finetuned | 0.87 | 0.87 | 0.40 | 5.2 | $4.00 |
+| base | 0.88 | 0.87 | 0.60 | 5.2 | $4.05 |
+| spark | 0.94 | 0.93 | 0.60 | 10.4 | $16.53 |
 
-Charts: [Experiment 1](eval/exp1_bars.svg), [Experiment 4 (cost)](eval/exp4_cost.svg).
+Charts: [Experiment 4 (cost)](eval/exp4_cost.svg).
 
 Regression check: not run yet (te regress).
 
 Muse Spark's label error rate against hand labels (Experiment 2):
 
+- burner_left_on: not measured yet (te spark-errors)
 - fridge_left_open: not measured yet (te spark-errors)
 <!-- te eval: results end -->
 
@@ -64,10 +61,10 @@ Muse Spark's label error rate against hand labels (Experiment 2):
 | Model | Its job | In this run |
 |---|---|---|
 | Muse Wonder (`muse-wonder-1.0`) | Turns the request into a skill: what to watch, what counts, what does not. | 1 skill from 1 sentence |
-| SAM 3.1 (`sam-3.1`) | Finds the target in the teaching frames. | 22 of 24 teaching frames boxed |
+| SAM 3.1 (`sam-3.1`) | Finds the target in the teaching frames. | 23 of 24 teaching frames boxed |
 | Muse Image (`muse-image-1.0`) | Makes the variations: the condition, near-misses, other light and angles. | 300 variations made |
-| Muse Spark (`muse-spark-1.3`) | Labels every image and keeps the ones it agrees with. | 324 images labelled, 299 variations kept |
-| **Muse Glimmer 30B** (`meta-models/Muse-Glimmer-30B`), fine-tuned | Fine-tuned, open weights: watches every frame. | 316 training examples, one epoch |
+| Muse Spark (`muse-spark-1.3`) | Labels every image and keeps the ones it agrees with. | 324 images labelled, 295 variations kept |
+| **Muse Glimmer 30B** (`meta-models/Muse-Glimmer-30B`), fine-tuned | Fine-tuned, open weights: watches every frame. | 603 training examples, one epoch |
 <!-- art: models end -->
 
 ## Quick start
@@ -89,9 +86,12 @@ walks the whole path, from a fresh Mac to an alert spoken on your glasses;
 
 - **In a browser:** the playground replays recorded clips with the model's scores, shows
   how a skill was learned, and lets you teach one live.
-- **On your own glasses:** the iPhone app is a developer build for now. It needs Xcode,
-  your own keys and Modal, a Mac running `te serve`, and Developer Mode in the Meta AI app
-  ([docs/developer-guide.md](docs/developer-guide.md)).
+- **On your own glasses:** the iPhone app is a developer build for now. You need a Mac
+  (Xcode 26.4 or newer), an iPhone (iOS 17.2 or newer), Meta AI glasses with Developer Mode
+  on in the Meta AI app, all on one Wi-Fi network, plus your own Meta API key and Modal
+  account ([docs/developer-guide.md](docs/developer-guide.md)).
+- **Training runs:** every run, with its loss curves, is in the
+  [Weights and Biases project](https://wandb.ai/amaan784-columbia-university/trained-eye).
 
 ## Documentation
 

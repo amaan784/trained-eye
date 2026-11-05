@@ -78,7 +78,9 @@ threshold for the skill's hold, then waits for its cooldown (`backend/watch/`).
 - `backend/training/axolotl.py`: the Axolotl config for a training run: Meta's QLoRA
   recipe with the run's paths, W&B names and gradient accumulation for one H100.
 - `backend/training/prepare.py`: bundles taught skills into one training set for Modal
-  (real, synthetic or mixed, with a validation split and volume paths).
+  (real, generated or mixed, with a validation split and volume paths). One run trains
+  every skill it is given into one model, from the base each time, so one served model
+  watches them all.
 - `backend/training/modal_train.py`: the Modal app that trains on one H100 with the
   recipe's pins, the trained-eye volume and the wandb and huggingface Secrets.
 - `backend/training/export.py`: the Modal app that merges a trained adapter and checks

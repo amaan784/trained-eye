@@ -1,0 +1,671 @@
+{
+ "plan": "plan.json",
+ "footage": "other kitchens filmed first-person on phones (handheld; four fridges and two stoves the model was not taught on; labels drafted by an AI assistant, see docs/evaluation.md)",
+ "threshold_objective": "frames",
+ "on_time": {
+  "burner_left_on": {
+   "window_s": 5.0,
+   "hold_s": [
+    10.0
+   ]
+  },
+  "fridge_left_open": {
+   "window_s": 10.0,
+   "hold_s": [
+    20.0
+   ]
+  }
+ },
+ "evaluations": [
+  {
+   "name": "phone-exp4-finetuned-fridge_left_open",
+   "experiment": 4,
+   "skill": "fridge_left_open",
+   "variant": "finetuned",
+   "clips": [
+    {
+     "log": "../data/watch/product/fridge_left_open/phone-session3_test_441375e7.jsonl",
+     "labels": "../data/clips/fridge_left_open/session3_test_441375e7.mp4.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/fridge_left_open/session3_test_441375e7.mp4"
+    },
+    {
+     "log": "../data/watch/product/fridge_left_open/phone-session3_test_5c3a970d.jsonl",
+     "labels": "../data/clips/fridge_left_open/session3_test_5c3a970d.mp4.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/fridge_left_open/session3_test_5c3a970d.mp4"
+    },
+    {
+     "log": "../data/watch/product/fridge_left_open/phone-session3_test_a5be4214.jsonl",
+     "labels": "../data/clips/fridge_left_open/session3_test_a5be4214.mp4.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/fridge_left_open/session3_test_a5be4214.mp4"
+    },
+    {
+     "log": "../data/watch/product/fridge_left_open/phone-session3_test_f8c5ba22.jsonl",
+     "labels": "../data/clips/fridge_left_open/session3_test_f8c5ba22.mov.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/fridge_left_open/session3_test_f8c5ba22.mov"
+    }
+   ],
+   "gpu": null,
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004591,
+   "scorer_usd_per_frame": 0.0,
+   "images": null,
+   "generation_usd": null,
+   "highlight": true,
+   "alert_text": "Hey, the fridge door is still open!",
+   "run": "product",
+   "scorer": "student",
+   "status": "scored",
+   "metrics": {
+    "clips": 4,
+    "frames": 476,
+    "student_errors": 0,
+    "hours": 0.1322,
+    "precision": 0.9328,
+    "recall": 0.9633,
+    "f1": 0.9478,
+    "accuracy": 0.9454,
+    "events": 3,
+    "short_events": 14,
+    "caught_in_window": 2,
+    "caught": 2,
+    "event_recall_in_window": 0.6667,
+    "event_recall_any": 0.6667,
+    "alerts": 5,
+    "false_alarms": 1,
+    "early_alerts": 1,
+    "false_alarms_per_hour": 7.563,
+    "time_to_alert_median_s": 0.0,
+    "time_to_alert_mean_s": 0.0,
+    "latency_median_s": 1.5845,
+    "latency_p90_s": 2.518,
+    "cloud_checks": 0,
+    "cloud_checks_per_hour": 0.0,
+    "frames_per_hour": 3600.0
+   },
+   "cost_per_hour": {
+    "student": "GPU",
+    "gpu_usd": 3.95,
+    "spark_checks_usd": 0.0,
+    "per_frame_scorer_usd": 0.0,
+    "total_usd": 3.95
+   },
+   "threshold": {
+    "values": [
+     0.826
+    ],
+    "sources": [
+     "run"
+    ]
+   },
+   "on_time": {
+    "hold_s": [
+     20.0
+    ],
+    "window_s": 10.0
+   }
+  },
+  {
+   "name": "phone-exp4-base-fridge_left_open",
+   "experiment": 4,
+   "skill": "fridge_left_open",
+   "variant": "base",
+   "clips": [
+    {
+     "log": "../data/watch/exp4-base/fridge_left_open/phone-session3_test_441375e7.jsonl",
+     "labels": "../data/clips/fridge_left_open/session3_test_441375e7.mp4.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/fridge_left_open/session3_test_441375e7.mp4"
+    },
+    {
+     "log": "../data/watch/exp4-base/fridge_left_open/phone-session3_test_5c3a970d.jsonl",
+     "labels": "../data/clips/fridge_left_open/session3_test_5c3a970d.mp4.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/fridge_left_open/session3_test_5c3a970d.mp4"
+    },
+    {
+     "log": "../data/watch/exp4-base/fridge_left_open/phone-session3_test_a5be4214.jsonl",
+     "labels": "../data/clips/fridge_left_open/session3_test_a5be4214.mp4.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/fridge_left_open/session3_test_a5be4214.mp4"
+    },
+    {
+     "log": "../data/watch/exp4-base/fridge_left_open/phone-session3_test_f8c5ba22.jsonl",
+     "labels": "../data/clips/fridge_left_open/session3_test_f8c5ba22.mov.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/fridge_left_open/session3_test_f8c5ba22.mov"
+    }
+   ],
+   "gpu": null,
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004591,
+   "scorer_usd_per_frame": 0.0,
+   "images": null,
+   "generation_usd": null,
+   "highlight": false,
+   "alert_text": "Hey, the fridge door is still open!",
+   "run": "exp4-base",
+   "scorer": "student",
+   "status": "scored",
+   "metrics": {
+    "clips": 4,
+    "frames": 464,
+    "student_errors": 12,
+    "hours": 0.1322,
+    "precision": 0.8614,
+    "recall": 0.9746,
+    "f1": 0.9145,
+    "accuracy": 0.9073,
+    "events": 3,
+    "short_events": 14,
+    "caught_in_window": 2,
+    "caught": 2,
+    "event_recall_in_window": 0.6667,
+    "event_recall_any": 0.6667,
+    "alerts": 5,
+    "false_alarms": 1,
+    "early_alerts": 1,
+    "false_alarms_per_hour": 7.563,
+    "time_to_alert_median_s": 0.0,
+    "time_to_alert_mean_s": 0.0,
+    "latency_median_s": 2.341,
+    "latency_p90_s": 4.1459,
+    "cloud_checks": 0,
+    "cloud_checks_per_hour": 0.0,
+    "frames_per_hour": 3509.2437
+   },
+   "cost_per_hour": {
+    "student": "GPU",
+    "gpu_usd": 3.95,
+    "spark_checks_usd": 0.0,
+    "per_frame_scorer_usd": 0.0,
+    "total_usd": 3.95
+   },
+   "threshold": {
+    "values": [
+     0.5
+    ],
+    "sources": [
+     "run"
+    ]
+   },
+   "on_time": {
+    "hold_s": [
+     20.0
+    ],
+    "window_s": 10.0
+   }
+  },
+  {
+   "name": "phone-exp4-spark-fridge_left_open",
+   "experiment": 4,
+   "skill": "fridge_left_open",
+   "variant": "spark",
+   "clips": [
+    {
+     "log": "../data/watch/exp4-spark/fridge_left_open/phone-session3_test_441375e7.jsonl",
+     "labels": "../data/clips/fridge_left_open/session3_test_441375e7.mp4.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/fridge_left_open/session3_test_441375e7.mp4"
+    },
+    {
+     "log": "../data/watch/exp4-spark/fridge_left_open/phone-session3_test_5c3a970d.jsonl",
+     "labels": "../data/clips/fridge_left_open/session3_test_5c3a970d.mp4.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/fridge_left_open/session3_test_5c3a970d.mp4"
+    },
+    {
+     "log": "../data/watch/exp4-spark/fridge_left_open/phone-session3_test_a5be4214.jsonl",
+     "labels": "../data/clips/fridge_left_open/session3_test_a5be4214.mp4.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/fridge_left_open/session3_test_a5be4214.mp4"
+    },
+    {
+     "log": "../data/watch/exp4-spark/fridge_left_open/phone-session3_test_f8c5ba22.jsonl",
+     "labels": "../data/clips/fridge_left_open/session3_test_f8c5ba22.mov.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/fridge_left_open/session3_test_f8c5ba22.mov"
+    }
+   ],
+   "gpu": null,
+   "gpu_usd_per_hour": 0.0,
+   "spark_usd_per_check": 0.0,
+   "scorer_usd_per_frame": 0.004591,
+   "images": null,
+   "generation_usd": null,
+   "highlight": false,
+   "alert_text": "Hey, the fridge door is still open!",
+   "run": "exp4-spark",
+   "scorer": "spark",
+   "status": "scored",
+   "metrics": {
+    "clips": 4,
+    "frames": 476,
+    "student_errors": 0,
+    "hours": 0.1322,
+    "precision": 0.8723,
+    "recall": 0.9755,
+    "f1": 0.921,
+    "accuracy": 0.9139,
+    "events": 3,
+    "short_events": 14,
+    "caught_in_window": 2,
+    "caught": 2,
+    "event_recall_in_window": 0.6667,
+    "event_recall_any": 0.6667,
+    "alerts": 5,
+    "false_alarms": 1,
+    "early_alerts": 1,
+    "false_alarms_per_hour": 7.563,
+    "time_to_alert_median_s": 0.0,
+    "time_to_alert_mean_s": 0.0,
+    "latency_median_s": 11.6665,
+    "latency_p90_s": 17.2995,
+    "cloud_checks": 0,
+    "cloud_checks_per_hour": 0.0,
+    "frames_per_hour": 3600.0
+   },
+   "cost_per_hour": {
+    "student": "GPU",
+    "gpu_usd": 0.0,
+    "spark_checks_usd": 0.0,
+    "per_frame_scorer_usd": 16.5276,
+    "total_usd": 16.5276
+   },
+   "threshold": {
+    "values": [
+     1.0
+    ],
+    "sources": [
+     "spark"
+    ]
+   },
+   "on_time": {
+    "hold_s": [
+     20.0
+    ],
+    "window_s": 10.0
+   }
+  },
+  {
+   "name": "phone-exp4-finetuned-burner_left_on",
+   "experiment": 4,
+   "skill": "burner_left_on",
+   "variant": "finetuned",
+   "clips": [
+    {
+     "log": "../data/watch/product/burner_left_on/phone-session3_test_93d7cd0e.jsonl",
+     "labels": "../data/clips/burner_left_on/session3_test_93d7cd0e.mov.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/burner_left_on/session3_test_93d7cd0e.mov"
+    },
+    {
+     "log": "../data/watch/product/burner_left_on/phone-session3_test_f53b7aaf.jsonl",
+     "labels": "../data/clips/burner_left_on/session3_test_f53b7aaf.mp4.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/burner_left_on/session3_test_f53b7aaf.mp4"
+    }
+   ],
+   "gpu": null,
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004591,
+   "scorer_usd_per_frame": 0.0,
+   "images": null,
+   "generation_usd": null,
+   "highlight": true,
+   "alert_text": "Heads up, a burner is still on!",
+   "run": "product",
+   "scorer": "student",
+   "status": "scored",
+   "metrics": {
+    "clips": 2,
+    "frames": 214,
+    "student_errors": 0,
+    "hours": 0.0594,
+    "precision": 1.0,
+    "recall": 0.4667,
+    "f1": 0.6364,
+    "accuracy": 0.7009,
+    "events": 2,
+    "short_events": 3,
+    "caught_in_window": 0,
+    "caught": 1,
+    "event_recall_in_window": 0.0,
+    "event_recall_any": 0.5,
+    "alerts": 2,
+    "false_alarms": 0,
+    "early_alerts": 0,
+    "false_alarms_per_hour": 0.0,
+    "time_to_alert_median_s": 13.0,
+    "time_to_alert_mean_s": 13.0,
+    "latency_median_s": 1.689,
+    "latency_p90_s": 2.1932,
+    "cloud_checks": 2,
+    "cloud_checks_per_hour": 33.6449,
+    "frames_per_hour": 3600.0
+   },
+   "cost_per_hour": {
+    "student": "GPU",
+    "gpu_usd": 3.95,
+    "spark_checks_usd": 0.1545,
+    "per_frame_scorer_usd": 0.0,
+    "total_usd": 4.1045
+   },
+   "threshold": {
+    "values": [
+     0.5
+    ],
+    "sources": [
+     "default"
+    ]
+   },
+   "on_time": {
+    "hold_s": [
+     10.0
+    ],
+    "window_s": 5.0
+   }
+  },
+  {
+   "name": "phone-exp4-base-burner_left_on",
+   "experiment": 4,
+   "skill": "burner_left_on",
+   "variant": "base",
+   "clips": [
+    {
+     "log": "../data/watch/exp4-base/burner_left_on/phone-session3_test_93d7cd0e.jsonl",
+     "labels": "../data/clips/burner_left_on/session3_test_93d7cd0e.mov.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/burner_left_on/session3_test_93d7cd0e.mov"
+    },
+    {
+     "log": "../data/watch/exp4-base/burner_left_on/phone-session3_test_f53b7aaf.jsonl",
+     "labels": "../data/clips/burner_left_on/session3_test_f53b7aaf.mp4.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/burner_left_on/session3_test_f53b7aaf.mp4"
+    }
+   ],
+   "gpu": null,
+   "gpu_usd_per_hour": 3.95,
+   "spark_usd_per_check": 0.004591,
+   "scorer_usd_per_frame": 0.0,
+   "images": null,
+   "generation_usd": null,
+   "highlight": false,
+   "alert_text": "Heads up, a burner is still on!",
+   "run": "exp4-base",
+   "scorer": "student",
+   "status": "scored",
+   "metrics": {
+    "clips": 2,
+    "frames": 214,
+    "student_errors": 0,
+    "hours": 0.0594,
+    "precision": 1.0,
+    "recall": 0.65,
+    "f1": 0.7879,
+    "accuracy": 0.8037,
+    "events": 2,
+    "short_events": 3,
+    "caught_in_window": 1,
+    "caught": 1,
+    "event_recall_in_window": 0.5,
+    "event_recall_any": 0.5,
+    "alerts": 4,
+    "false_alarms": 0,
+    "early_alerts": 0,
+    "false_alarms_per_hour": 0.0,
+    "time_to_alert_median_s": 0.0,
+    "time_to_alert_mean_s": 0.0,
+    "latency_median_s": 3.2215,
+    "latency_p90_s": 4.6503,
+    "cloud_checks": 4,
+    "cloud_checks_per_hour": 67.2897,
+    "frames_per_hour": 3600.0
+   },
+   "cost_per_hour": {
+    "student": "GPU",
+    "gpu_usd": 3.95,
+    "spark_checks_usd": 0.3089,
+    "per_frame_scorer_usd": 0.0,
+    "total_usd": 4.2589
+   },
+   "threshold": {
+    "values": [
+     0.5
+    ],
+    "sources": [
+     "default"
+    ]
+   },
+   "on_time": {
+    "hold_s": [
+     10.0
+    ],
+    "window_s": 5.0
+   }
+  },
+  {
+   "name": "phone-exp4-spark-burner_left_on",
+   "experiment": 4,
+   "skill": "burner_left_on",
+   "variant": "spark",
+   "clips": [
+    {
+     "log": "../data/watch/exp4-spark/burner_left_on/phone-session3_test_93d7cd0e.jsonl",
+     "labels": "../data/clips/burner_left_on/session3_test_93d7cd0e.mov.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/burner_left_on/session3_test_93d7cd0e.mov"
+    },
+    {
+     "log": "../data/watch/exp4-spark/burner_left_on/phone-session3_test_f53b7aaf.jsonl",
+     "labels": "../data/clips/burner_left_on/session3_test_f53b7aaf.mp4.labels.json",
+     "timeline": false,
+     "clip": "../data/clips/burner_left_on/session3_test_f53b7aaf.mp4"
+    }
+   ],
+   "gpu": null,
+   "gpu_usd_per_hour": 0.0,
+   "spark_usd_per_check": 0.0,
+   "scorer_usd_per_frame": 0.004591,
+   "images": null,
+   "generation_usd": null,
+   "highlight": false,
+   "alert_text": "Heads up, a burner is still on!",
+   "run": "exp4-spark",
+   "scorer": "spark",
+   "status": "scored",
+   "metrics": {
+    "clips": 2,
+    "frames": 214,
+    "student_errors": 0,
+    "hours": 0.0594,
+    "precision": 0.9829,
+    "recall": 0.9583,
+    "f1": 0.9705,
+    "accuracy": 0.9673,
+    "events": 2,
+    "short_events": 3,
+    "caught_in_window": 1,
+    "caught": 2,
+    "event_recall_in_window": 0.5,
+    "event_recall_any": 1.0,
+    "alerts": 5,
+    "false_alarms": 1,
+    "early_alerts": 1,
+    "false_alarms_per_hour": 16.8224,
+    "time_to_alert_median_s": 9.5,
+    "time_to_alert_mean_s": 9.5,
+    "latency_median_s": 11.9315,
+    "latency_p90_s": 13.8263,
+    "cloud_checks": 5,
+    "cloud_checks_per_hour": 84.1121,
+    "frames_per_hour": 3600.0
+   },
+   "cost_per_hour": {
+    "student": "GPU",
+    "gpu_usd": 0.0,
+    "spark_checks_usd": 0.0,
+    "per_frame_scorer_usd": 16.5276,
+    "total_usd": 16.5276
+   },
+   "threshold": {
+    "values": [
+     1.0
+    ],
+    "sources": [
+     "spark"
+    ]
+   },
+   "on_time": {
+    "hold_s": [
+     10.0
+    ],
+    "window_s": 5.0
+   }
+  }
+ ],
+ "experiment4": [
+  {
+   "variant": "finetuned",
+   "skills": [
+    "fridge_left_open",
+    "burner_left_on"
+   ],
+   "of": 2,
+   "highlight": true,
+   "usd_per_hour": 3.9979,
+   "metrics": {
+    "clips": 6,
+    "frames": 690,
+    "student_errors": 0,
+    "hours": 0.1917,
+    "precision": 0.945,
+    "recall": 0.8,
+    "f1": 0.8665,
+    "accuracy": 0.8696,
+    "events": 5,
+    "short_events": 17,
+    "caught_in_window": 2,
+    "caught": 3,
+    "event_recall_in_window": 0.4,
+    "event_recall_any": 0.6,
+    "alerts": 7,
+    "false_alarms": 1,
+    "early_alerts": 1,
+    "false_alarms_per_hour": 5.2174,
+    "time_to_alert_median_s": 0.0,
+    "time_to_alert_mean_s": 4.3333,
+    "latency_median_s": 1.642,
+    "latency_p90_s": 2.4014,
+    "cloud_checks": 2,
+    "cloud_checks_per_hour": 10.4348,
+    "frames_per_hour": 3600.0
+   }
+  },
+  {
+   "variant": "base",
+   "skills": [
+    "fridge_left_open",
+    "burner_left_on"
+   ],
+   "of": 2,
+   "highlight": false,
+   "usd_per_hour": 4.0458,
+   "metrics": {
+    "clips": 6,
+    "frames": 678,
+    "student_errors": 12,
+    "hours": 0.1917,
+    "precision": 0.8928,
+    "recall": 0.8652,
+    "f1": 0.8787,
+    "accuracy": 0.8746,
+    "events": 5,
+    "short_events": 17,
+    "caught_in_window": 3,
+    "caught": 3,
+    "event_recall_in_window": 0.6,
+    "event_recall_any": 0.6,
+    "alerts": 9,
+    "false_alarms": 1,
+    "early_alerts": 1,
+    "false_alarms_per_hour": 5.2174,
+    "time_to_alert_median_s": 0.0,
+    "time_to_alert_mean_s": 0.0,
+    "latency_median_s": 2.529,
+    "latency_p90_s": 4.3646,
+    "cloud_checks": 4,
+    "cloud_checks_per_hour": 20.8696,
+    "frames_per_hour": 3537.3913
+   }
+  },
+  {
+   "variant": "spark",
+   "skills": [
+    "fridge_left_open",
+    "burner_left_on"
+   ],
+   "of": 2,
+   "highlight": false,
+   "usd_per_hour": 16.5276,
+   "metrics": {
+    "clips": 6,
+    "frames": 690,
+    "student_errors": 0,
+    "hours": 0.1917,
+    "precision": 0.9054,
+    "recall": 0.9699,
+    "f1": 0.9365,
+    "accuracy": 0.9304,
+    "events": 5,
+    "short_events": 17,
+    "caught_in_window": 3,
+    "caught": 4,
+    "event_recall_in_window": 0.6,
+    "event_recall_any": 0.8,
+    "alerts": 10,
+    "false_alarms": 2,
+    "early_alerts": 2,
+    "false_alarms_per_hour": 10.4348,
+    "time_to_alert_median_s": 0.0,
+    "time_to_alert_mean_s": 4.75,
+    "latency_median_s": 11.797,
+    "latency_p90_s": 15.8996,
+    "cloud_checks": 5,
+    "cloud_checks_per_hour": 26.087,
+    "frames_per_hour": 3600.0
+   }
+  }
+ ],
+ "spark_errors": {
+  "burner_left_on": null,
+  "fridge_left_open": null
+ },
+ "label_stats": {
+  "burner_left_on": {
+   "total": 289,
+   "kept": 287,
+   "unsure": 2,
+   "disagree": 0,
+   "agreement": 0.9931
+  },
+  "fridge_left_open": {
+   "total": 300,
+   "kept": 295,
+   "unsure": 0,
+   "disagree": 5,
+   "agreement": 0.9833
+  }
+ },
+ "regression": null,
+ "charts": {
+  "4": [
+   "exp4_cost.svg"
+  ]
+ },
+ "galleries": {}
+}

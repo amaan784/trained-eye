@@ -20,7 +20,7 @@ from pathlib import Path
 
 from backend.config import DEFAULT_MODELS, STUDENT_BASE_REVISION
 from backend.dataengine.dataset import IMAGE_SIZE, SYSTEM_PROMPT
-from backend.eval.readme import summary
+from backend.eval.readme import per_skill, summary
 from backend.eval.writeup import on_time_text
 from backend.training.axolotl import GLOBAL_BATCH, RECIPE
 
@@ -179,6 +179,17 @@ or coaching, and anything where a missed or false alert could put someone at ris
 - It answers per frame: alerts need the watcher's smoothing, each skill's hold, a
   calibrated threshold and a cooldown. The vision tower stayed frozen, so small, distant or glary targets stay hard.
 - Scoring reads the server's top logprobs for the yes or no token, so the server must return them.
+- In plain words: overall it is about as accurate as base Glimmer and faster; it is the best
+  of the three on the fridge and the weakest on the burner, so do not read it as an accuracy
+  gain from fine-tuning on every skill.
+- It watches only what the glasses can see: look away and it cannot tell whether the
+  condition is still true.
+- If Muse Spark's check fails outright (an error, not a no), the alert is still spoken and
+  logged as unconfirmed.
+- The test labels were drafted by an AI assistant, too few events lasted past the hold to
+  judge alerts well, and Experiments 2 and 3 did not run.
+- Validation during training was split by example, not by source frame, so related images
+  can sit on both sides; the separate test footage is not affected.
 
 ## Privacy and provenance
 
@@ -318,7 +329,9 @@ def results_section(results: Path | None, run: str | None = None) -> str:
     full = "\n".join(["| " + " | ".join(columns) + " |", "|---" * len(columns) + "|"]
                      + ["| " + " | ".join(_cell(v) for v in row) + " |" for row in rows])
     short = summary(data)
+    skills = per_skill({"evaluations": evaluations})
     return "\n".join([*([f"In short: {short}", ""] if short else []),
+                      *([skills, ""] if skills else []),
                       plain_table(scored), "", source, "",
                       "<details><summary>Every scored evaluation</summary>", "", full, "",
                       "</details>"])

@@ -207,8 +207,10 @@ def test_per_skill_shows_each_skill_and_a_default_threshold():
             row("base", "burner", 0.79, "default", 0.5),
             row("spark", "burner", 0.97, "spark", 1.0)]
     line = per_skill({"evaluations": rows})
-    assert line == ("Frame F1 per skill (fine-tuned, base Glimmer, Muse Spark): burner 0.64, "
-                    "0.79 and 0.97; fridge 0.95, 0.91 and 0.92. burner has no calibration "
-                    "clip, so the fine-tuned model runs it at the default threshold, 0.50.")
+    assert line == ("By skill, the fine-tuned model was the least accurate of the three on "
+                    "burner (frame F1 0.64, against 0.79 for base Glimmer and 0.97 for Muse "
+                    "Spark) and the most accurate of the three on fridge (frame F1 0.95, "
+                    "against 0.91 and 0.92). burner has no calibration clip, so the fine-tuned "
+                    "model runs it at the default threshold, 0.50.")
     assert per_skill({"evaluations": rows[:3]}) is None
     assert per_skill({"evaluations": rows[:5]}) is None  # burner lacks Spark

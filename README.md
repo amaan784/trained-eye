@@ -77,7 +77,7 @@ Test footage: other kitchens filmed first-person on phones (handheld; four fridg
 
 In short: on other kitchens filmed first-person on phones, the fine-tuned model spotted the condition about as accurately as base Glimmer and less accurately than Muse Spark (frame F1 0.87, 0.88 and 0.94), answering in 1.64 s a frame against 2.53 s and 11.80 s, at $4.00 an hour against $16.53 for Spark.
 
-Frame F1 per skill (fine-tuned, base Glimmer, Muse Spark): burner_left_on 0.64, 0.79 and 0.97; fridge_left_open 0.95, 0.91 and 0.92. burner_left_on has no calibration clip, so the fine-tuned model runs it at the default threshold, 0.50.
+By skill, the fine-tuned model was the least accurate of the three on burner_left_on (frame F1 0.64, against 0.79 for base Glimmer and 0.97 for Muse Spark) and the most accurate of the three on fridge_left_open (frame F1 0.95, against 0.91 and 0.92). burner_left_on has no calibration clip, so the fine-tuned model runs it at the default threshold, 0.50.
 
 Thresholds were calibrated for frame F1 on calibration clips (this footage has too few events past the skill's hold to judge alerts), so read the frame columns.
 
@@ -140,6 +140,15 @@ Muse Spark's label error rate against hand labels (Experiment 2):
 
 - fridge_left_open: not measured yet (te spark-errors)
 <!-- te eval: results end: Results on EPIC-KITCHENS-100 -->
+
+## Limitations, in plain words
+
+- **Accuracy:** overall the fine-tuned model is about as accurate as base Glimmer, and faster. It is the best of the three on the fridge and the weakest on the burner, so it is not an accuracy gain on every skill.
+- **Only what it can see:** it watches while the thing is in view. Look away and it cannot tell whether the burner is still on.
+- **Unconfirmed alerts:** if Muse Spark's check fails outright (an error, not a no), the alert is still spoken and logged as unconfirmed.
+- **Home network only:** teaching needs the `SERVER_TOKEN`, but watching and waking the model do not yet, so run `te serve` only on a network you trust.
+- **Untrained skills:** a skill the served model was not trained on can still be switched on; the server logs a warning and its scores mean little.
+- **Evidence:** the test labels were drafted by an AI assistant, too few events lasted past the hold to judge alerts well, and Experiments 2 and 3 did not run. Validation during training was split by example, not by source frame; the separate test footage is not affected.
 
 <!-- art: models start (written by python -m backend.art.build; edits here are lost) -->
 ## Meta models, each with a job

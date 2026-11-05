@@ -372,7 +372,9 @@ td .mono { color: var(--fg); }
       <h2>One alert, second by second</h2>
       <p>While you wear the glasses, every frame of the burner gets a probability from the student. Your Mac only
         speaks when three of the last four frames agree, the burner has stayed on through its 10 second hold, and
-        Muse Spark confirms the frame.</p>
+        Muse Spark confirms the frame. It watches only what the glasses can see: look away and it cannot tell
+        whether the burner is still on. If Spark's check fails outright (an error, not a no), the alert is still
+        spoken and logged as unconfirmed.</p>
     </div>
     <figure>
       <div class="scroll">
@@ -439,7 +441,7 @@ td .mono { color: var(--fg); }
       </div>
       <figcaption>Each bar is one frame (the iPhone sends one a second). A frame under the threshold never fires
         an alert, but a single dip does not restart the hold either. Had you turned the burner off at 7 seconds, nothing
-        would have been said. The fridge works the same way with a 30 second hold and the tap with 20, so opening the
+        would have been said. The fridge and the tap work the same way with a 20 second hold, so opening the
         fridge to grab milk stays silent. If Spark says no, the skill waits a minute and the hold starts again.</figcaption>
     </figure>
   </section>
@@ -462,7 +464,7 @@ td .mono { color: var(--fg); }
         <p class="how"><b>Meta Model API:</b> SAM 3.1, Muse Image and Muse Spark. <b>Mac:</b> keyframes, crops and the dataset in <code>data/skills/burner_left_on/</code>.</p></li>
       <li><p class="what">He starts training and goes back to his evening.</p>
         <p class="how"><b>Modal:</b> <code>te train</code> fine-tunes Muse Glimmer 30B on one H100, then <code>te serve-student</code> puts it online. <b>Mac:</b> <code>te calibrate</code> sets the threshold from his session 2 clips.</p></li>
-      <li><p class="what">Days later he lights the burner for tea and walks off to answer the door.</p>
+      <li><p class="what">Days later he lights the burner for tea and gets busy at the counter, the stove still in view.</p>
         <p class="how"><b>Glasses to iPhone to Mac:</b> frames stream in; the student scores each one on Modal; the trigger waits out the 10 second hold.</p></li>
       <li><p class="what">He hears "The burner is still on." in his glasses.</p>
         <p class="how"><b>Meta Model API:</b> Muse Spark confirmed the last frame. <b>iPhone:</b> speaks it through the glasses' speakers over Bluetooth. The cooldown keeps it from repeating every second.</p></li>

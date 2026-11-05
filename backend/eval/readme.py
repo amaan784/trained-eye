@@ -138,10 +138,10 @@ def summary(results: dict) -> str | None:
 
 
 def per_skill(results: dict) -> str | None:
-    """Experiment 4's frame F1 for each skill with all three judges scored, so a pooled
-    number does not hide a skill that went the other way, and which skills the fine-tuned
-    model runs at the default threshold. None with fewer than two such skills (the pooled
-    line already says it)."""
+    """Experiment 4 by skill, in plain words: where the fine-tuned model ranks among the
+    three judges on each skill with all three scored, with their frame F1, so a pooled
+    number does not hide a skill that went the other way; and which skills it runs at the
+    default threshold. None with fewer than two such skills (the pooled line says it)."""
     judges = ("finetuned", "base", "spark")
     rows: dict[str, dict] = {}
     for e in results.get("evaluations") or []:
@@ -152,14 +152,17 @@ def per_skill(results: dict) -> str | None:
         f1 = [((by.get(v) or {}).get("metrics") or {}).get("f1") for v in judges]
         if any(x is None for x in f1):
             continue
-        parts.append(f"{skill} {f1[0]:.2f}, {f1[1]:.2f} and {f1[2]:.2f}")
+        rank = ("the most accurate" if f1[0] >= max(f1) else
+                "the least accurate" if f1[0] <= min(f1) else "second")
+        against = ("against {b:.2f} for base Glimmer and {s:.2f} for Muse Spark" if not parts
+                   else "against {b:.2f} and {s:.2f}").format(b=f1[1], s=f1[2])
+        parts.append(f"{rank} of the three on {skill} (frame F1 {f1[0]:.2f}, {against})")
         threshold = by["finetuned"].get("threshold") or {}
         if "default" in (threshold.get("sources") or []):
             defaults.append((skill, (threshold.get("values") or [None])[0]))
     if len(parts) < 2:
         return None
-    line = ("Frame F1 per skill (fine-tuned, base Glimmer, Muse Spark): " + "; ".join(parts)
-            + ".")
+    line = "By skill, the fine-tuned model was " + ", ".join(parts[:-1]) + " and " + parts[-1] + "."
     for skill, value in defaults:
         line += (f" {skill} has no calibration clip, so the fine-tuned model runs it at the "
                  f"default threshold{f', {value:.2f}' if value is not None else ''}.")

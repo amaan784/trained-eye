@@ -369,8 +369,20 @@
   const status = loadStatus();
   status.catch(() => {}).finally(() => loadSkills().catch((err) => failed($("skills-empty"), err)));
   status.then((s) => {
-    if (s.live && s.visitor_left_usd >= s.estimate_usd && s.day_left_usd >= s.estimate_usd) return;
-    say((s.message || "Today's live budget is used up.") + shownBelow(), !s.live);
+    // Which limit stops a run: this visitor's for today, or the playground's for the day.
+    const limit = !s.live ? null : s.visitor_left_usd < s.estimate_usd ? "visitor"
+      : s.day_left_usd < s.estimate_usd ? "day" : null;
+    if (s.live && !limit) return;
+    const why = !s.live ? (s.message || "Live teaching is off here.")
+      : limit === "visitor"
+        ? `You have ${money(s.visitor_left_usd)} of your ${money(s.visitor_cap_usd)} left today, ` +
+          `less than the ${money(s.estimate_usd)} a run can cost, so live teaching is off for ` +
+          `you until tomorrow (the playground still has ${money(s.day_left_usd)} today).`
+        : `The playground's ${money(s.daily_cap_usd)} for today is used up: ` +
+          `${money(s.day_left_usd)} is left, less than the ${money(s.estimate_usd)} a run can ` +
+          "cost. Live teaching is back tomorrow.";
+    say(why + shownBelow(), !s.live);
+    $("teach-go").disabled = true;
     return showExamples();
   }).catch((err) => say("The playground's status did not load (" + err.message + ").", true));
 })();

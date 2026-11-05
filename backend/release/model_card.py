@@ -185,7 +185,8 @@ or coaching, and anything where a missed or false alert could put someone at ris
 - It watches only what the glasses can see: look away and it cannot tell whether the
   condition is still true.
 - If Muse Spark's check fails outright (an error, not a no), the alert is still spoken and
-  logged as unconfirmed.
+  logged as unconfirmed, on purpose, so a cloud outage never silences an alert; a no from
+  Spark holds it back.
 - The test labels were drafted by an AI assistant, too few events lasted past the hold to
   judge alerts well, and Experiments 2 and 3 did not run.
 - Validation during training was split by example, not by source frame, so related images

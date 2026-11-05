@@ -145,7 +145,7 @@ Muse Spark's label error rate against hand labels (Experiment 2):
 
 - **Accuracy:** overall the fine-tuned model is about as accurate as base Glimmer, and faster. It is the best of the three on the fridge and the weakest on the burner, so it is not an accuracy gain on every skill.
 - **Only what it can see:** it watches while the thing is in view. Look away and it cannot tell whether the burner is still on.
-- **Unconfirmed alerts:** if Muse Spark's check fails outright (an error, not a no), the alert is still spoken and logged as unconfirmed.
+- **Unconfirmed alerts, on purpose:** if Muse Spark's check fails outright (an error, not a no), the alert is still spoken and logged as unconfirmed, so a cloud outage never silences a burner alert. A no from Spark does hold the alert back.
 - **Home network only:** teaching needs the `SERVER_TOKEN`, but watching and waking the model do not yet, so run `te serve` only on a network you trust.
 - **Untrained skills:** a skill the served model was not trained on can still be switched on; the server logs a warning and its scores mean little.
 - **Evidence:** the test labels were drafted by an AI assistant, too few events lasted past the hold to judge alerts well, and Experiments 2 and 3 did not run. Validation during training was split by example, not by source frame; the separate test footage is not affected.

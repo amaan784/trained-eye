@@ -158,7 +158,10 @@
   async function loadSkills() {
     const { skills } = await getJSON("api/skills");
     $("skills-empty").hidden = skills.length > 0;
-    choices($("skill-list"), skills.map((s) => s.name), plain, openSkill);
+    // The fridge opens first: its teaching sheet is full and its results are the strongest.
+    const names = skills.map((s) => s.name)
+      .sort((a, b) => (b === "fridge_left_open") - (a === "fridge_left_open"));
+    choices($("skill-list"), names, plain, openSkill);
   }
 
   async function openSkill(name) {

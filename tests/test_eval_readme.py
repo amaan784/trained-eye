@@ -157,3 +157,20 @@ def test_the_summary_says_in_one_sentence_how_the_judges_compare(f1, how):
 def test_the_block_starts_with_the_summary_when_experiment_4_is_scored(scored, tmp_path):
     text = block(scored, tmp_path / "README.md")
     assert "In short:" not in text  # the fixture scores no base judge
+
+
+def test_the_summary_compares_with_each_judge_on_its_own():
+    from backend.eval.readme import summary
+
+    def judge(variant, f, lat, usd):
+        return {"variant": variant, "usd_per_hour": usd,
+                "metrics": {"f1": f, "latency_median_s": lat}}
+
+    # Nov 4's phone clips: close to base, well behind Spark: never "about as accurately as" both
+    text = summary({"footage": "other kitchens filmed first-person on phones (handheld)",
+                    "experiment4": [judge("finetuned", 0.87, 1.64, 4.0),
+                                    judge("base", 0.88, 2.53, 4.05),
+                                    judge("spark", 0.94, 11.8, 16.53)]})
+    assert text.startswith("on other kitchens filmed first-person on phones, the fine-tuned "
+                           "model spotted the condition about as accurately as base Glimmer "
+                           "and less accurately than Muse Spark (frame F1 0.87, 0.88 and 0.94)")

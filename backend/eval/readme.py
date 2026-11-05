@@ -99,8 +99,9 @@ CLOSE_F1 = 0.05  # frame F1 within this of the others reads as "about as well"
 def summary(results: dict) -> str | None:
     """One plain-English sentence from Experiment 4's pooled judges: how the fine-tuned
     model's frame F1, latency and cost compare with base Glimmer's and Muse Spark's. None
-    unless all three are scored. "More accurately" or "less accurately" only when its F1
-    is at least CLOSE_F1 above or below both others."""
+    unless all three are scored. Each comparison stands alone: "more accurately" or "less
+    accurately" when its F1 is at least CLOSE_F1 above or below that model's, else "about
+    as accurately"."""
     judges = {j.get("variant"): j for j in results.get("experiment4") or []}
     if not all(v in judges for v in ("finetuned", "base", "spark")):
         return None
@@ -110,19 +111,22 @@ def summary(results: dict) -> str | None:
     usd = {v: judges[v].get("usd_per_hour") for v in f1}
     if any(x is None for d in (f1, lat, usd) for x in d.values()):
         return None
-    others = (f1["base"], f1["spark"])
-    if f1["finetuned"] >= max(others) + CLOSE_F1:
-        how = "more accurately than"
-    elif f1["finetuned"] <= min(others) - CLOSE_F1:
-        how = "less accurately than"
-    else:
-        how = "about as accurately as"
+    def how(other: str) -> str:  # each comparison on its own: "about" only within CLOSE_F1
+        gap = f1["finetuned"] - f1[other]
+        return ("more accurately than" if gap >= CLOSE_F1 else
+                "less accurately than" if gap <= -CLOSE_F1 else "about as accurately as")
+
+    hows = {v: how(v) for v in ("base", "spark")}
     where = (results.get("footage") or "the test footage").split(" (")[0]
-    return (f"on {where}, the fine-tuned model spotted the condition {how} base Glimmer and "
-            f"Muse Spark (frame F1 {f1['finetuned']:.2f}, {f1['base']:.2f} and "
-            f"{f1['spark']:.2f}), answering in {lat['finetuned']:.2f} s a frame against "
-            f"{lat['base']:.2f} s and {lat['spark']:.2f} s, at ${usd['finetuned']:.2f} an "
-            f"hour against ${usd['spark']:.2f} for Spark.")
+    if hows["base"] == hows["spark"]:
+        compared = f"{hows['base']} base Glimmer and Muse Spark"
+    else:
+        compared = f"{hows['base']} base Glimmer and {hows['spark']} Muse Spark"
+    return (f"on {where}, the fine-tuned model spotted the condition {compared} (frame F1 "
+            f"{f1['finetuned']:.2f}, {f1['base']:.2f} and {f1['spark']:.2f}), answering in "
+            f"{lat['finetuned']:.2f} s a frame against {lat['base']:.2f} s and "
+            f"{lat['spark']:.2f} s, at ${usd['finetuned']:.2f} an hour against "
+            f"${usd['spark']:.2f} for Spark.")
 
 
 def block(results_path: Path, readme_path: Path) -> str:

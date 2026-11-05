@@ -125,9 +125,10 @@ def data_section(manifest: dict) -> str:
              f"SHA-256 `{manifest.get('train_sha256')}`). Real: keyframes of the user's own "
              "teaching clips, labelled by the user or else by Muse Spark.")
     if source_counts(manifest)[1]:
-        intro += (f" Synthetic: Muse Image edits of those keyframes, labelled by Muse Spark and "
+        intro += (f" Generated: images Muse Image made by editing those same keyframes (the "
+                  f"condition, near-misses, other light and angles), labelled by Muse Spark and "
                   f"{spark}.")
-    head = "| Skill | Split | Real yes | Real no | Synthetic yes | Synthetic no |"
+    head = "| Skill | Split | Real yes | Real no | Generated yes | Generated no |"
     return "\n".join([intro, "", head, "|---|---|---|---|---|---|"] + [
         f"| {skill} | {split} | " + " | ".join(str(c.get(k, 0)) for k in COLUMNS) + " |"
         for (skill, split), c in sorted(cells.items())])

@@ -88,7 +88,7 @@ def test_the_card_states_fixed_steps_and_a_real_only_bundle(tmp_path):
     card = model_card(tmp_path / "README.md", run="exp1-real", bundle_manifest=bundle,
                       max_steps=10).read_text()
     assert "| `max_steps` | `10` |" in card and "fixed 10 optimizer steps" in card
-    assert "no generated images in this bundle" in card and "Synthetic:" not in card
+    assert "no generated images in this bundle" in card and "Generated:" not in card
     assert "Muse Image edits" not in card
     (tmp_path / "m").mkdir()
     mixed, _, _ = inputs(tmp_path / "m")

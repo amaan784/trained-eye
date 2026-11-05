@@ -65,7 +65,7 @@ def test_line_chart_labels_value_and_cost_on_a_log_scale():
     points = [(300, 0.88, "$3.00"), (25, 0.42, "$0.25"), (100, None, "$1.00"),
               (50, 0.6, "$0.50")]
     root = parse(line_chart("Experiment 3", "F1 against images", points,
-                            "synthetic images per skill"))
+                            "generated images per skill"))
     labels = texts(root)
     for want in ("0.42", "0.60", "0.88", "$0.25", "$0.50", "$3.00", "n/a", "25", "300"):
         assert want in labels

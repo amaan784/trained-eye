@@ -25,9 +25,9 @@ from backend.eval.svg import usd
 from backend.eval.timeline import timeline
 
 EXPERIMENTS = {
-    1: "Experiment 1: real only, synthetic only, mixed",
+    1: "Experiment 1: real frames only, generated images only, or both",
     2: "Experiment 2: labels filtered by Muse Spark, or not",
-    3: "Experiment 3: how many synthetic images",
+    3: "Experiment 3: how many generated images",
     4: "Experiment 4: fine-tuned Glimmer, base Glimmer, Muse Spark on every frame",
 }
 COST_HEADER = ["Run", "Latency median", "Latency p90", "Student errors", "Alerts",
@@ -67,7 +67,7 @@ ON_TIME = "Events caught on time"
 
 
 def header(experiment: int) -> list[str]:
-    extra = {3: ["Synthetic images", "Generation cost"], 4: ["Frame accuracy"]}
+    extra = {3: ["Generated images", "Generation cost"], 4: ["Frame accuracy"]}
     return ["Run", "Variant", "Skill", "Clips", "Footage", "Frames", "Precision", "Recall",
             "F1", ON_TIME, "Events caught at all",
             "False alarms per hour", "Time to alert after the hold, median (mean)", "Threshold (from)",
@@ -202,7 +202,7 @@ def write_charts(results: dict, base: Path, out_dir: Path) -> dict[str, list[str
                    else usd(e["generation_usd"])) for e in runs if e["skill"] == skill]
         save("3", f"exp3_{skill}.svg", line_chart(
             f"{EXPERIMENTS[3]}: {skill}", "Frame F1, with the generation cost under each point",
-            points, "synthetic images per skill"))
+            points, "generated images per skill"))
     judges = results.get("experiment4") or []
     if any(j["metrics"] for j in judges):
         points = [{"label": judge_label(j), "x": j["usd_per_hour"],

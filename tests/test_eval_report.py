@@ -74,7 +74,7 @@ def test_run_eval_writes_results_tables_and_charts(plan, tmp_path):
     md = (out / "results.md").read_text()
     two = md.split("## Experiment 2")[1].split("## Experiment 3")[0]
     assert "No runs yet: the plan has no evaluations for this experiment." in two
-    assert "![Experiment 1: real only, synthetic only, mixed](exp1_bars.svg)" in md
+    assert "![Experiment 1: real frames only, generated images only, or both](exp1_bars.svg)" in md
     assert ("| exp1-mixed | mixed | burner_left_on | 1 | 2.0 min | 120 | 1.00 | 1.00 | 1.00 | "
             "1 of 1 | 1 of 1 | 0.0 | 2.0 s (2.0 s) |") in md
     assert "| exp1-real | real only | burner_left_on |" in md and "| 0 of 1 | 1 of 1 |" in md

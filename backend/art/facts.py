@@ -79,6 +79,7 @@ class SkillFacts:
     train_examples: int = 0
     val_examples: int = 0
     gpu: str = ""
+    bundle_skills: tuple[str, ...] = ()  # every skill the run was trained on
 
 
 def skill_facts(data_dir: Path, skill: str, run: str) -> SkillFacts:
@@ -147,7 +148,8 @@ def skill_facts(data_dir: Path, skill: str, run: str) -> SkillFacts:
         frame=by_sha[best["keyframe_sha256"]], box=tuple(best["best"]["box"]),
         frame_size=(int(best["width"]), int(best["height"])), models=models,
         train_examples=int(bundle["train_examples"]),
-        val_examples=int(bundle.get("val_examples") or 0), gpu=training_gpu(data_dir, run))
+        val_examples=int(bundle.get("val_examples") or 0), gpu=training_gpu(data_dir, run),
+        bundle_skills=tuple(sorted(bundle.get("skills") or {})))
 
 
 def teach_steps(sk: SkillFacts) -> list[dict]:
@@ -166,9 +168,17 @@ def teach_steps(sk: SkillFacts) -> list[dict]:
          "rest": (" of those frames: the condition and near-misses, in other light and "
                   f"angles. Muse Spark checks each one and keeps {sk.kept}.")},
         {"lead": f"Glimmer trains on {sk.train_examples} examples", "quote": None,
-         "rest": (f", with {sk.val_examples} held back to check it, for {epochs_text()} on "
-                  f"one {sk.gpu} on Modal.")},
+         "rest": (f"{together(sk)}, with {sk.val_examples} held back to check it, for "
+                  f"{epochs_text()} on one {sk.gpu} on Modal.")},
     ]
+
+
+def together(sk: SkillFacts) -> str:
+    """ for the fridge and the burner together", when the run learned more than this skill."""
+    others = [x.split("_")[0] for x in sk.bundle_skills]
+    if len(others) < 2:
+        return ""
+    return " for the " + " and the ".join(others) + " together"
 
 
 def trained_run(data_dir: Path, skill: str) -> str | None:

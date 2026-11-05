@@ -95,7 +95,8 @@ def pick_teaching(frames: list[F.TeachFrame], work: Path, n: int = SHEET):
     return sorted(picked, key=lambda x: x[0].t_s)
 
 
-def strip(sk: F.SkillFacts, frames: list[F.TeachFrame], out: Path, work: Path) -> Path:
+def strip(sk: F.SkillFacts, frames: list[F.TeachFrame], out: Path, work: Path,
+          own_only: bool = False) -> Path:
     picked = pick_teaching(frames, work)
     times = [f.t_s for f, _ in picked]
     tenths = len({int(t) for t in times}) < len(times)
@@ -111,7 +112,10 @@ def strip(sk: F.SkillFacts, frames: list[F.TeachFrame], out: Path, work: Path) -
     page = fill("strip.html", {
         "css": css(), "title": f"How it learned this {sk.skill.split('_')[0]}",
         "strips": rows, "steps": "".join(f"<li>{x}</li>" for x in steps),
-        "note": (f"{len(cells)} of the {len(frames)} frames kept from the teaching clip, "
+        "note": (f"{len(cells)} of the {len(frames)} frames kept from the author's own "
+                 f"{sk.skill.split('_')[0]} (the teaching look also covers others), faces "
+                 "blurred, with SAM's boxes in red." if own_only else
+                 f"{len(cells)} of the {len(frames)} frames kept from the teaching clip, "
                  "faces blurred, with SAM's boxes in red.")})
     return screenshot(page, out, (1280, 560), folder=work)
 
@@ -261,6 +265,16 @@ def hero(data_dir: Path, clip_name: str, skill: str, out_gif: Path, out_mp4: Pat
     return gif(frames, out_gif, HERO_FPS, 960, HERO_MAX_BYTES)
 
 
+def own(frames: list[F.TeachFrame], args) -> list[F.TeachFrame]:
+    """The teaching frames the art may show (--frames-before)."""
+    if args.frames_before is None:
+        return frames
+    kept = [f for f in frames if f.t_s < args.frames_before]
+    if not kept:
+        raise F.MissingFact(f"no teaching frame before {args.frames_before} s")
+    return kept
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m backend.art.build", description=__doc__.split(
         "\n\n")[0])
@@ -271,6 +285,10 @@ def main(argv: list[str] | None = None) -> int:
                    "of the author's own footage in which the alert fires")
     p.add_argument("--hero-clip", help="a playground clip name (te playground-clip)")
     p.add_argument("--readme", default=str(README), help="the README the models table goes in")
+    p.add_argument("--frames-before", type=float, default=None,
+                   help="draw only teaching frames before this time in the teaching clip "
+                        "(seconds): for a teaching look joined from several clips, the ones "
+                        "the author may publish")
     p.add_argument("--out", default=str(PROJECT_ROOT / "docs" / "img"))
     p.add_argument("--video-out", default=None, help="where the hero MP4 goes (default: "
                    "data/art/, not committed)")
@@ -293,8 +311,9 @@ def main(argv: list[str] | None = None) -> int:
             work = Path(tmp)
             try:
                 if part == "strip":
-                    frames = F.teaching_frames(settings.data_dir, args.skill)
-                    made.append(strip(sk, frames, out / "strip.png", work))
+                    frames = own(F.teaching_frames(settings.data_dir, args.skill), args)
+                    made.append(strip(sk, frames, out / "strip.png", work,
+                                      own_only=args.frames_before is not None))
                 elif part == "models":
                     made.append(write_models(Path(args.readme), sk))
                 elif part == "banner":
@@ -303,7 +322,7 @@ def main(argv: list[str] | None = None) -> int:
                         rp = F.replay(settings.data_dir, args.replay_clip, args.skill)
                         made.append(banner(sk, head, rp, out / "banner.png", work))
                     else:  # no replay of the author's footage yet: the teaching frames
-                        frames = F.teaching_frames(settings.data_dir, args.skill)
+                        frames = own(F.teaching_frames(settings.data_dir, args.skill), args)
                         made.append(banner_teaching(sk, frames, head, out / "banner.png",
                                                     work))
                 elif part == "hero":

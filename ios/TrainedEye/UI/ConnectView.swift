@@ -19,18 +19,10 @@ struct ConnectView: View {
     let glasses = app.glasses
     Screen(title: "Connect") {
       Card(title: "Backend") {
-        TextField("http://192.168.1.20:8765", text: $settings.backendURL)
-          .keyboardType(.URL)
-          .textInputAutocapitalization(.never)
-          .autocorrectionDisabled()
-          .font(Theme.data)
-          .underlinedField()
+        RevealableField(placeholder: "http://192.168.1.20:8765", text: $settings.backendURL,
+                        keyboard: .URL)
         Notice(text: settings.addressKind)
-        SecureField("Server token (SERVER_TOKEN)", text: $settings.serverToken)
-          .textInputAutocapitalization(.never)
-          .autocorrectionDisabled()
-          .font(Theme.data)
-          .underlinedField()
+        RevealableField(placeholder: "Server token (SERVER_TOKEN)", text: $settings.serverToken)
         Notice(text: "Teaching needs the SERVER_TOKEN from the Mac's .env. It is kept in the "
           + "iPhone's keychain.")
         Button(isChecking ? "Checking" : "Check the connection") {

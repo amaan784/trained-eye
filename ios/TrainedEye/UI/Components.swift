@@ -193,6 +193,40 @@ extension View {
   }
 }
 
+/// An underlined field hidden behind dots, like a password, until its eye is tapped: for
+/// the Mac's address and the server token, so a screen recording does not show them.
+struct RevealableField: View {
+  let placeholder: String
+  @Binding var text: String
+  var keyboard: UIKeyboardType = .default
+  @State private var shown = false
+
+  var body: some View {
+    HStack(spacing: 12) {
+      Group {
+        if shown {
+          TextField(placeholder, text: $text)
+        } else {
+          SecureField(placeholder, text: $text)
+        }
+      }
+      .keyboardType(keyboard)
+      .textInputAutocapitalization(.never)
+      .autocorrectionDisabled()
+      .font(Theme.data)
+      Button { shown.toggle() } label: {
+        Image(systemName: shown ? "eye.slash" : "eye")
+          .foregroundStyle(Theme.text)
+          .frame(width: 32, height: 32)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(shown ? "Hide" : "Show")
+    }
+    .underlinedField()
+  }
+}
+
 /// The newest frame, as the backend receives it, on Film.
 struct FramePreview: View {
   let jpeg: Data?

@@ -190,3 +190,25 @@ def test_a_second_footage_gets_its_own_block_and_heading(scored, tmp_path):
     assert "## Results on EPIC-KITCHENS-100" in text.split(start)[1]
     write_readme(readme, scored, section="Results on EPIC-KITCHENS-100")
     assert readme.read_text() == text  # rewriting changes nothing
+
+
+def test_per_skill_shows_each_skill_and_a_default_threshold():
+    """Experiment 4's frame F1 per skill, so a pooled number cannot hide a skill that went
+    the other way; a skill run at the default threshold says so; one skill gives None."""
+    from backend.eval.readme import per_skill
+
+    def row(variant, skill, f1, source="run", value=0.8):
+        return {"experiment": 4, "status": "scored", "variant": variant, "skill": skill,
+                "metrics": {"f1": f1}, "threshold": {"values": [value], "sources": [source]}}
+
+    rows = [row("finetuned", "fridge", 0.95), row("base", "fridge", 0.91),
+            row("spark", "fridge", 0.92, "spark", 1.0),
+            row("finetuned", "burner", 0.64, "default", 0.5),
+            row("base", "burner", 0.79, "default", 0.5),
+            row("spark", "burner", 0.97, "spark", 1.0)]
+    line = per_skill({"evaluations": rows})
+    assert line == ("Frame F1 per skill (fine-tuned, base Glimmer, Muse Spark): burner 0.64, "
+                    "0.79 and 0.97; fridge 0.95, 0.91 and 0.92. burner has no calibration "
+                    "clip, so the fine-tuned model runs it at the default threshold, 0.50.")
+    assert per_skill({"evaluations": rows[:3]}) is None
+    assert per_skill({"evaluations": rows[:5]}) is None  # burner lacks Spark

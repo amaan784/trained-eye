@@ -19,6 +19,10 @@ Meta glasses answer when you ask them something, but they can't keep an eye on a
 for you. Trained Eye turns one sentence and a short look into a small model of your own,
 fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells you.
 
+<p align="center"><img src="docs/img/watch.gif" alt="The iPhone app's Watch screen on Nov 4: frames of an open fridge scored one by one, the fridge skill's hold counting up to 20 seconds, then the alert spoken on the glasses: Hey, the fridge door is still open!" width="320"></p>
+
+<p align="center"><sub>Live on the glasses, sped up twice: the hold counts to 20 seconds, Muse Spark confirms the frame, and the glasses speak.</sub></p>
+
 ## How it works
 
 1. **Teach.** Look at the thing and say what to watch for ("tell me when the fridge door
@@ -72,6 +76,8 @@ Every number below comes from the evaluation scripts; the full tables are in [ev
 Test footage: other kitchens filmed first-person on phones (handheld; four fridges and two stoves the model was not taught on; labels drafted by an AI assistant, see docs/evaluation.md). Results on other footage are reported apart.
 
 In short: on other kitchens filmed first-person on phones, the fine-tuned model spotted the condition about as accurately as base Glimmer and less accurately than Muse Spark (frame F1 0.87, 0.88 and 0.94), answering in 1.64 s a frame against 2.53 s and 11.80 s, at $4.00 an hour against $16.53 for Spark.
+
+Frame F1 per skill (fine-tuned, base Glimmer, Muse Spark): burner_left_on 0.64, 0.79 and 0.97; fridge_left_open 0.95, 0.91 and 0.92. burner_left_on has no calibration clip, so the fine-tuned model runs it at the default threshold, 0.50.
 
 Thresholds were calibrated for frame F1 on calibration clips (this footage has too few events past the skill's hold to judge alerts), so read the frame columns.
 

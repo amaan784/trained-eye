@@ -137,6 +137,35 @@ def summary(results: dict) -> str | None:
             f"${usd['spark']:.2f} for Spark.")
 
 
+def per_skill(results: dict) -> str | None:
+    """Experiment 4's frame F1 for each skill with all three judges scored, so a pooled
+    number does not hide a skill that went the other way, and which skills the fine-tuned
+    model runs at the default threshold. None with fewer than two such skills (the pooled
+    line already says it)."""
+    judges = ("finetuned", "base", "spark")
+    rows: dict[str, dict] = {}
+    for e in results.get("evaluations") or []:
+        if e.get("experiment") == 4 and e.get("status") == "scored":
+            rows.setdefault(e.get("skill"), {})[e.get("variant")] = e
+    parts, defaults = [], []
+    for skill, by in sorted(rows.items()):
+        f1 = [((by.get(v) or {}).get("metrics") or {}).get("f1") for v in judges]
+        if any(x is None for x in f1):
+            continue
+        parts.append(f"{skill} {f1[0]:.2f}, {f1[1]:.2f} and {f1[2]:.2f}")
+        threshold = by["finetuned"].get("threshold") or {}
+        if "default" in (threshold.get("sources") or []):
+            defaults.append((skill, (threshold.get("values") or [None])[0]))
+    if len(parts) < 2:
+        return None
+    line = ("Frame F1 per skill (fine-tuned, base Glimmer, Muse Spark): " + "; ".join(parts)
+            + ".")
+    for skill, value in defaults:
+        line += (f" {skill} has no calibration clip, so the fine-tuned model runs it at the "
+                 f"default threshold{f', {value:.2f}' if value is not None else ''}.")
+    return line
+
+
 def block(results_path: Path, readme_path: Path, heading: str = "Results") -> str:
     """The text between the markers. ValueError when no evaluation is scored."""
     body = Path(results_path).read_bytes()
@@ -154,6 +183,7 @@ def block(results_path: Path, readme_path: Path, heading: str = "Results") -> st
              *([(f"Test footage: {results['footage']}. Results on other footage are reported "
                 "apart."), ""] if results.get("footage") else []),
              *([f"In short: {line}", ""] if (line := summary(results)) else []),
+             *([skills, ""] if (skills := per_skill(results)) else []),
              *([("Thresholds were calibrated for frame F1 on calibration clips (this footage has "
                 "too few events past the skill's hold to judge alerts), so read the frame "
                 "columns."), ""] if results.get("threshold_objective") == "frames" else []),

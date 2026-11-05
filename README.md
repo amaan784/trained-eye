@@ -169,9 +169,15 @@ Muse Spark's label error rate against hand labels (Experiment 2):
     pip install -e ".[dev,train]"
     cp .env.example .env        # add your Meta API key
     te teach --skill fridge_left_open --clip teach.mp4 --request "Tell me when the fridge door is left open"
-    te train --skills fridge_left_open --run exp1-mixed --smoke
-    te train --skills fridge_left_open --run exp1-mixed
-    te serve                    # then connect the iPhone app
+    te train --skills fridge_left_open --run my-fridge --smoke
+    te train --skills fridge_left_open --run my-fridge
+    te export --run my-fridge          # merge the adapter into the base on Modal
+    te serve-student --run my-fridge   # serve it on Modal; put its URL + /v1 in .env as TE_STUDENT_URL
+    te serve                           # then connect the iPhone app
+
+Before relying on alerts, calibrate the skill's threshold on a labelled clip of your own
+(`te calibrate`, in the developer guide); until then it uses 0.5. The released model,
+`product`, was made the same way from the fridge and the burner together.
 
 Every paid step prints its price and asks first. [docs/developer-guide.md](docs/developer-guide.md)
 walks the whole path, from a fresh Mac to an alert spoken on your glasses;
@@ -179,8 +185,10 @@ walks the whole path, from a fresh Mac to an alert spoken on your glasses;
 
 ## Try it
 
-- **In a browser:** the [playground](https://aas2438--trained-eye-playground-web.us-east.modal.run) replays recorded clips with the model's scores, shows
-  how a skill was learned, and lets you teach one live.
+- **In a browser:** the [playground](https://aas2438--trained-eye-playground-web.us-east.modal.run) shows how
+  each skill was learned (its teaching frames with SAM's boxes and the four steps), the
+  results, and lets you teach one live. It can also replay recorded clips with the model's
+  scores; the public copy has none published yet.
 - **On your own glasses:** the iPhone app is a developer build for now. You need a Mac
   (Xcode 26.4 or newer), an iPhone (iOS 17.2 or newer), Meta AI glasses with Developer Mode
   on in the Meta AI app, all on one Wi-Fi network, plus your own Meta API key and Modal

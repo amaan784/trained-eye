@@ -4,10 +4,11 @@ The phone half of Trained Eye. It streams the glasses' camera to the backend (`t
 the Mac), speaks alerts on the glasses, and teaches new skills: you say what to notice, show
 it for 10 seconds, agree to the cost, and confirm the read-back.
 
-**This code has not been compiled.** It was written on a machine with no Mac, Xcode or Swift
-compiler, following Meta's DAT 1.0.1 samples (CameraAccess and BirdSpotter) as closely as
-possible. Expect a first round of build fixes in Xcode. The open points are listed at the
-end, under "TODOs and unverified points".
+**Status on Nov 5, 2026:** it builds in Xcode for the simulator and for a device, and runs on
+the author's iPhone with Meta AI glasses: teaching, the Skills switches and watching, with the
+alert spoken on the glasses (the demo video). It started from Meta's DAT 1.0.1 samples
+(CameraAccess and BirdSpotter). Points not yet checked are listed at the end, under "TODOs and
+unverified points"; the first lines there predate the device test.
 
 ## What it does
 
@@ -21,7 +22,7 @@ end, under "TODOs and unverified points".
   status: Training (a `te train` run is going on Modal), Trained (a run finished), Ready (the
   model `te serve-student` deployed knows it and `te calibrate` set its threshold), else how
   far the teach flow got. Each skill also shows how long it waits before alerting (its
-  hold: the fridge 30 s, the tap 20 s, the burner 10 s) and how long it stays quiet after.
+  hold: the fridge 20 s, the tap 20 s, the burner 10 s) and how long it stays quiet after.
 - **Watch**: start and stop watching, the camera-on state, the frame the backend sees, the
   last alert (and whether it was spoken), each skill's score, the connection and the battery.
   It says when the glasses are folded or out of reach, and after a stay in the background

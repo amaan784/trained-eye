@@ -1,5 +1,11 @@
 # Handover
 
+**Current state, Nov 5 (read this before the history below):** the released model is
+`product`, one run on the fridge and the burner together ([Hugging Face](https://huggingface.co/amaan784/trained-eye));
+`exp1-mixed` is the morning's fridge-only run, kept for Experiment 1. The iPhone app runs on
+the author's iPhone with the glasses. The tap skill was taught but not trained. The rest of
+this file is the record of Nov 4 as it was planned and done; its plans are historical.
+
 Read this first when picking the project up in a new session, local or cloud. It says
 where everything is, what is done, what is not, the rules the author set, and what to
 build next. Last updated 2026-11-04: the code for M0 to M4 is written and tested offline,

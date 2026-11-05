@@ -87,6 +87,6 @@ between sessions. SETUP.md covers accounts, the Mac and cloud sessions.
 - Meta cookbook: github.com/meta-models/meta-oss-cookbook (muse-glimmer/post-training).
 - DAT iOS SDK: github.com/facebook/meta-wearables-dat-ios (samples/CameraAccess).
 - ios/README.md: how to build the iPhone app (xcodegen with ios/project.yml; it builds for the
-  simulator, not yet run on a phone). docs/how-it-works.html: the whole flow with diagrams.
+  simulator and runs on the author's iPhone with the glasses, Nov 5). docs/how-it-works.html: the whole flow with diagrams.
 - Commit straight to main with the author's identity and no attribution (HANDOVER.md, Git).
 - CONTRIBUTIONS.md: credits, licenses and the copied Meta sample files.

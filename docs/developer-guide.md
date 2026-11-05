@@ -16,8 +16,10 @@ Devices:
 | **Meta AI glasses** | the camera that watches, the microphone for the request, the speakers for the alert | glasses supported by Meta's Wearables Device Access Toolkit (DAT 1.0.1), paired with the Meta AI app, Developer Mode on (step 8) | Meta glasses, software version 122.0, Meta AI app 297.0 |
 | **One Wi-Fi network** | the phone sends frames to the Mac | the iPhone and the Mac on the same network | |
 
-No glasses? The app can watch with the iPhone's own camera (Connect, Camera, iPhone), and
-Debug builds have mock glasses for the simulator.
+No glasses? The app can watch with the iPhone's own camera (Connect, Camera, iPhone). It
+must stay open, since iOS stops the camera in the background, and alerts are spoken only
+through Bluetooth audio such as earbuds (otherwise they show on screen). Not tried on a
+phone on Nov 4. Debug builds also have mock glasses for the simulator.
 
 Accounts: a Meta Model API key (dev.meta.ai), Modal (for training and serving on an H100),
 Hugging Face (a token that can read `meta-models/Muse-Glimmer-30B`) and, optionally,

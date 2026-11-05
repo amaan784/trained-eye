@@ -90,6 +90,11 @@ walks the whole path, from a fresh Mac to an alert spoken on your glasses;
   (Xcode 26.4 or newer), an iPhone (iOS 17.2 or newer), Meta AI glasses with Developer Mode
   on in the Meta AI app, all on one Wi-Fi network, plus your own Meta API key and Modal
   account ([docs/developer-guide.md](docs/developer-guide.md)).
+- **With an iPhone only:** on the Connect screen, set Camera to iPhone and the app watches
+  with the phone's own camera. The app has to stay open (iOS stops the camera in the
+  background), and alerts are spoken only through Bluetooth audio such as earbuds;
+  otherwise they show on screen. This path is in the app but was not tried on a phone on
+  Nov 4; the glasses were.
 - **Training runs:** every run, with its loss curves, is in the
   [Weights and Biases project](https://wandb.ai/amaan784-columbia-university/trained-eye).
 

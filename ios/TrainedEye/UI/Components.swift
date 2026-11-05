@@ -25,7 +25,17 @@ struct Screen<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.gutter)
       }
+      .scrollDismissesKeyboard(.interactively)  // a drag scrolls and lowers the keyboard
       .background(Theme.ground)
+      .toolbar {
+        ToolbarItemGroup(placement: .keyboard) {  // a way out of every field
+          Spacer()
+          Button("Done") {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                            to: nil, from: nil, for: nil)
+          }
+        }
+      }
       .toolbar(.hidden, for: .navigationBar)
       .toolbarBackground(Theme.ground, for: .tabBar)
       .toolbarBackground(.visible, for: .tabBar)

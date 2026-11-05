@@ -1,7 +1,6 @@
 """te eval --readme (backend/eval/readme.py): the README's results block, from results.json
 only, between its two markers."""
 
-import hashlib
 import json
 
 import pytest
@@ -39,11 +38,12 @@ def scored(tmp_path):
     return tmp_path / "eval" / "results.json"
 
 
-def test_the_block_copies_results_json_and_names_its_hash(scored, tmp_path):
+def test_the_block_copies_results_json_and_links_the_full_results(scored, tmp_path):
     readme = tmp_path / "README.md"
     text = block(scored, readme)
-    digest = hashlib.sha256(scored.read_bytes()).hexdigest()
-    assert f"from `eval/results.json` (SHA-256 `{digest}`): 4 of 5 evaluations scored" in text
+    assert ("Every number below comes from the evaluation scripts; the full tables are in "
+            "[eval/results.md](eval/results.md)." in text)
+    assert "SHA-256" not in text  # plain words in the README; the hash stays in the model card
     one = text.split("### Experiment 1")[1].split("###")[0]
     assert "| Variant | Skill | Frame F1 | Events caught on time | False alarms per hour |" \
         in one

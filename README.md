@@ -9,6 +9,25 @@ Meta glasses answer when you ask them something, but they can't keep an eye on a
 for you. Trained Eye turns one sentence and a short look into a small model of your own,
 fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells you.
 
+## Links and docs
+
+| | |
+|---|---|
+| **Model** | [Hugging Face: amaan784/trained-eye](https://huggingface.co/amaan784/trained-eye), the LoRA adapter for Muse Glimmer 30B with its model card |
+| **Playground** | [Try it in a browser](https://aas2438--trained-eye-playground-web.us-east.modal.run): replayed clips, how each skill learned, and teaching a skill live |
+| **Training runs** | [Weights and Biases: trained-eye](https://wandb.ai/amaan784-columbia-university/trained-eye) |
+| **Code** | [github.com/amaan784/trained-eye](https://github.com/amaan784/trained-eye) |
+| **Results** | [phone clips, the main test](eval/results.md), [EPIC-KITCHENS](eval/epic/results.md) |
+| **Developer guide** | [docs/developer-guide.md](docs/developer-guide.md): devices, keys, teach, train, serve, the iPhone app, the glasses |
+| **How it works** | [Architecture](docs/architecture.md) and [diagrams](docs/how-it-works.html) |
+| **Evaluation method** | [docs/evaluation.md](docs/evaluation.md) |
+| **Privacy and policy** | [docs/privacy-and-policy.md](docs/privacy-and-policy.md) |
+| **Data and licenses** | [docs/data-and-licenses.md](docs/data-and-licenses.md), with the EPIC-KITCHENS-100 credit |
+| **iPhone app** | [ios/README.md](ios/README.md) and the [glasses check](docs/glasses-check.md) |
+| **Setup and keys** | [docs/setup.md](docs/setup.md) and [SETUP.md](SETUP.md) |
+| **Recording protocol** | [docs/recording-protocol.md](docs/recording-protocol.md) |
+| **Credits and notes** | [credits](CONTRIBUTIONS.md), [progress](PROGRESS.md), [handover](HANDOVER.md) |
+
 ## How it works
 
 1. **Teach.** Look at the thing and say what to watch for ("tell me when the fridge door
@@ -27,7 +46,7 @@ fine-tuned from Meta's open-weights Muse Glimmer, that watches for it and tells 
 <!-- te eval: results start (written by te eval --readme; edits here are lost) -->
 ## Results
 
-Written by `te eval --readme` from `eval/results.json` (SHA-256 `6704865a78632b3e1d28aa5b50c1f56ca68537b9307949ead80969b32ecb1d8a`): 6 of 6 evaluations scored. Every number here is copied from that file; n/a means there was nothing to compute it from.
+Every number below comes from the evaluation scripts; the full tables are in [eval/results.md](eval/results.md). n/a means there was nothing to compute it from.
 
 Test footage: other kitchens filmed first-person on phones (handheld; four fridges and two stoves the model was not taught on; labels drafted by an AI assistant, see docs/evaluation.md). Results on other footage are reported apart.
 
@@ -84,7 +103,7 @@ walks the whole path, from a fresh Mac to an alert spoken on your glasses;
 
 ## Try it
 
-- **In a browser:** the playground replays recorded clips with the model's scores, shows
+- **In a browser:** the [playground](https://aas2438--trained-eye-playground-web.us-east.modal.run) replays recorded clips with the model's scores, shows
   how a skill was learned, and lets you teach one live.
 - **On your own glasses:** the iPhone app is a developer build for now. You need a Mac
   (Xcode 26.4 or newer), an iPhone (iOS 17.2 or newer), Meta AI glasses with Developer Mode
@@ -97,20 +116,6 @@ walks the whole path, from a fresh Mac to an alert spoken on your glasses;
   Nov 4; the glasses were.
 - **Training runs:** every run, with its loss curves, is in the
   [Weights and Biases project](https://wandb.ai/amaan784-columbia-university/trained-eye).
-
-## Documentation
-
-- [Architecture](docs/architecture.md): the teach flow, training and serving, watch mode,
-  and every module
-- [How it works, with diagrams](docs/how-it-works.html)
-- [Setup](docs/setup.md) and [accounts and keys](SETUP.md)
-- [Evaluation method](docs/evaluation.md) and the [full results](eval/results.md)
-- [Privacy and policy](docs/privacy-and-policy.md)
-- [Data and licenses](docs/data-and-licenses.md), with the EPIC-KITCHENS-100 credit
-- [Recording protocol](docs/recording-protocol.md)
-- [Glasses check](docs/glasses-check.md)
-- [iOS app build](ios/README.md)
-- [Credits](CONTRIBUTIONS.md), [progress](PROGRESS.md) and [handover notes](HANDOVER.md)
 
 Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026). All
 code here was written during the event. MIT license, see [LICENSE](LICENSE); the base model is under its own (Apache-2.0).

@@ -8,7 +8,7 @@ Computed by `te eval` from the plan plan.json: the frame logs of `te watch` scor
 
 How to read the tables: a frame counts as yes when the student's probability is at or over the skill's threshold, shown with where it came from (run: the run's own calibration on its validation clips; skill: the skill-wide one; flag: given by hand; default: 0.5, not calibrated; spark: only a yes). A skill alerts only once its condition has stayed true for the skill's hold, so an event is one labelled true range that lasts at least the hold, and its alert is due when the hold ends. It is caught on time when its first alert after that comes within the skill's on-time window: burner_left_on, a 10 s hold and a 5 s window; fridge_left_open, a 20 s hold and a 10 s window. False alarms are alerts no event explains: on frames labelled false, or before the hold ended. Dollars per hour add the student's GPU (nothing on the Mac), the Muse Spark checks and any per-frame scorer, at the prices in the plan.
 
-## Experiment 1: real only, synthetic only, mixed
+## Experiment 1: real frames only, generated images only, or both
 
 No runs yet: the plan has no evaluations for this experiment.
 
@@ -23,7 +23,7 @@ Muse Spark's labels against your hand labels (te spark-errors, 95% Wilson interv
 | burner_left_on | not measured yet (te label --skill, then te spark-errors) | n/a | n/a | n/a | n/a | 287 of 289 kept (99.3%) |
 | fridge_left_open | not measured yet (te label --skill, then te spark-errors) | n/a | n/a | n/a | n/a | 295 of 300 kept (98.3%) |
 
-## Experiment 3: how many synthetic images
+## Experiment 3: how many generated images
 
 No runs yet: the plan has no evaluations for this experiment.
 

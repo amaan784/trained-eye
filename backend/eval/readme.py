@@ -5,14 +5,12 @@ between them (or adds both at the end of the file the first time) and leaves the
 the file alone. It holds, all copied from te eval's results.json: a headline table per
 experiment with scored evaluations (Experiment 4 pooled over the skills, as its cost
 chart), links to the charts, the regression check's line and Spark's error rate per
-skill, and the SHA-256 of that results.json as the source, so every number can be traced
-to the eval scripts. It refuses when nothing is scored, so a README never shows an empty
+skill, and a link to the full results.md. It refuses when nothing is scored, so a README never shows an empty
 or made-up result. The failure galleries are never linked: they are local only.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -138,12 +136,11 @@ def block(results_path: Path, readme_path: Path) -> str:
     if not scored:
         raise ValueError(f"{Path(results_path).name} has no scored evaluation yet, so there "
                          "is nothing to put in the README")
-    digest = hashlib.sha256(body).hexdigest()
     source = os.path.relpath(results_path, Path(readme_path).parent).replace(os.sep, "/")
+    full = str(Path(source).with_name("results.md")).replace(os.sep, "/")
     lines = ["## Results", "",
-             (f"Written by `te eval --readme` from `{source}` (SHA-256 `{digest}`): "
-              f"{len(scored)} of {len(evaluations)} evaluations scored. Every number here is "
-              "copied from that file; n/a means there was nothing to compute it from."), "",
+             (f"Every number below comes from the evaluation scripts; the full tables are in "
+              f"[{full}]({full}). n/a means there was nothing to compute it from."), "",
              *([(f"Test footage: {results['footage']}. Results on other footage are reported "
                 "apart."), ""] if results.get("footage") else []),
              *([f"In short: {line}", ""] if (line := summary(results)) else []),

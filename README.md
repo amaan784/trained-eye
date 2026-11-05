@@ -157,8 +157,7 @@ walks the whole path, from a fresh Mac to an alert spoken on your glasses;
 - **Training runs:** every run, with its loss curves, is in the
   [Weights and Biases project](https://wandb.ai/amaan784-columbia-university/trained-eye).
 
-Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026). All
-code here was written during the event. MIT license, see [LICENSE](LICENSE); the base model is under its own (Apache-2.0).
+Built for the Meta Global AI Developer Hackathon (October 29 to November 4, 2026). This project's code was written during the event, except two files in `ios/TrainedEye/Meta/` copied from Meta's CameraAccess sample (Meta Wearables Device Access Toolkit for iOS 1.0.1, under Meta's Wearables Developer Terms), and the training config, which keeps the values of Meta's QLoRA recipe for Muse Glimmer 30B from meta-oss-cookbook (Apache-2.0). [CONTRIBUTIONS.md](CONTRIBUTIONS.md) lists each one. MIT license, see [LICENSE](LICENSE); the base model is under its own (Apache-2.0).
 
 ## Citation
 

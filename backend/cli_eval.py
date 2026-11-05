@@ -37,7 +37,8 @@ def cmd_eval(args) -> int:
         print(f"W&B: {results['wandb']}")
     if args.readme:
         try:
-            write_readme(Path(args.readme), Path(args.out) / "results.json")
+            write_readme(Path(args.readme), Path(args.out) / "results.json",
+                         section=args.readme_section)
         except (OSError, ValueError) as err:
             print(f"te: --readme: {err}; {args.readme} was left as it is", file=sys.stderr)
             return 1
@@ -88,6 +89,8 @@ def add_parsers(sub) -> None:
                     "account)")
     ev.add_argument("--readme", help="also write the results block between the te eval "
                     "markers in this file, e.g. README.md (backend/eval/readme.py)")
+    ev.add_argument("--readme-section", help="with --readme: a second block under its own "
+                    "markers and this heading, e.g. \"Results on EPIC-KITCHENS-100\"")
     ev.set_defaults(func=cmd_eval)
 
     label = sub.add_parser("label", help="mark where a clip's condition is true, or label images")

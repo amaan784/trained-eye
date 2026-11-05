@@ -19,6 +19,16 @@ from backend.eval.writeup import EXPERIMENTS, judge_label, on_time_text
 
 START = "<!-- te eval: results start (written by te eval --readme; edits here are lost) -->"
 END = "<!-- te eval: results end -->"
+
+
+def markers(section: str | None = None) -> tuple[str, str]:
+    """The block's start and end comments: the main ones, or a named section's (a second
+    results block, for other footage)."""
+    if not section:
+        return START, END
+    start = (f"<!-- te eval: results start: {section} (written by te eval --readme; edits "
+             "here are lost) -->")
+    return start, f"<!-- te eval: results end: {section} -->"
 CHART_NAMES = {"1": "Experiment 1", "2": "Experiment 2", "3": "Experiment 3",
                "4": "Experiment 4 (cost)"}
 
@@ -127,7 +137,7 @@ def summary(results: dict) -> str | None:
             f"${usd['spark']:.2f} for Spark.")
 
 
-def block(results_path: Path, readme_path: Path) -> str:
+def block(results_path: Path, readme_path: Path, heading: str = "Results") -> str:
     """The text between the markers. ValueError when no evaluation is scored."""
     body = Path(results_path).read_bytes()
     results = json.loads(body)
@@ -138,7 +148,7 @@ def block(results_path: Path, readme_path: Path) -> str:
                          "is nothing to put in the README")
     source = os.path.relpath(results_path, Path(readme_path).parent).replace(os.sep, "/")
     full = str(Path(source).with_name("results.md")).replace(os.sep, "/")
-    lines = ["## Results", "",
+    lines = [f"## {heading}", "",
              (f"Every number below comes from the evaluation scripts; the full tables are in "
               f"[{full}]({full}). n/a means there was nothing to compute it from."), "",
              *([(f"Test footage: {results['footage']}. Results on other footage are reported "
@@ -171,21 +181,23 @@ def block(results_path: Path, readme_path: Path) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def write_readme(readme_path: Path, results_path: Path) -> Path:
+def write_readme(readme_path: Path, results_path: Path, section: str | None = None) -> Path:
     """Put the block between the markers in readme_path (adding them at its end the first
-    time). ValueError, leaving the file as it was, when nothing is scored or the markers
-    are broken (one without the other, twice, or in the wrong order)."""
+    time); with `section`, a second block under its own markers and heading. ValueError,
+    leaving the file as it was, when nothing is scored or the markers are broken (one
+    without the other, twice, or in the wrong order)."""
     readme_path = Path(readme_path)
     text = readme_path.read_text(encoding="utf-8")
-    new = block(results_path, readme_path)
-    starts, ends = text.count(START), text.count(END)
+    start, end = markers(section)
+    new = block(results_path, readme_path, heading=section or "Results")
+    starts, ends = text.count(start), text.count(end)
     if (starts, ends) == (0, 0):
-        text = text.rstrip("\n") + ("\n\n" if text.strip() else "") + f"{START}\n{new}{END}\n"
-    elif (starts, ends) != (1, 1) or text.index(START) > text.index(END):
+        text = text.rstrip("\n") + ("\n\n" if text.strip() else "") + f"{start}\n{new}{end}\n"
+    elif (starts, ends) != (1, 1) or text.index(start) > text.index(end):
         raise ValueError(f"{readme_path.name}: the results markers are broken; it needs "
-                         f"exactly one {START} before one {END}")
+                         f"exactly one {start} before one {end}")
     else:
-        head, rest = text.split(START, 1)
-        text = f"{head}{START}\n{new}{END}{rest.split(END, 1)[1]}"
+        head, rest = text.split(start, 1)
+        text = f"{head}{start}\n{new}{end}{rest.split(end, 1)[1]}"
     readme_path.write_text(text, encoding="utf-8")
     return readme_path

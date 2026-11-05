@@ -174,3 +174,19 @@ def test_the_summary_compares_with_each_judge_on_its_own():
     assert text.startswith("on other kitchens filmed first-person on phones, the fine-tuned "
                            "model spotted the condition about as accurately as base Glimmer "
                            "and less accurately than Muse Spark (frame F1 0.87, 0.88 and 0.94)")
+
+
+def test_a_second_footage_gets_its_own_block_and_heading(scored, tmp_path):
+    from backend.eval.readme import END, START, markers, write_readme
+
+    readme = tmp_path / "README.md"
+    readme.write_text("# Title\n")
+    write_readme(readme, scored)
+    write_readme(readme, scored, section="Results on EPIC-KITCHENS-100")
+    text = readme.read_text()
+    start, end = markers("Results on EPIC-KITCHENS-100")
+    assert text.count(START) == 1 and text.count(END) == 1  # the main block untouched
+    assert text.count(start) == 1 and text.count(end) == 1
+    assert "## Results on EPIC-KITCHENS-100" in text.split(start)[1]
+    write_readme(readme, scored, section="Results on EPIC-KITCHENS-100")
+    assert readme.read_text() == text  # rewriting changes nothing
